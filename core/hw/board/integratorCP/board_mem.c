@@ -8,6 +8,11 @@ memory_layout_entry memory_padr_layout[] = {
 	 MLT_TRUSTED_RAM, MLF_READABLE | MLF_WRITEABLE}
 	,			// hypervisor ram
 	{
+	 ADDR_TO_PAGE(0x00500000), ADDR_TO_PAGE(0x00900000),
+	 MLT_HYPER_RAM, MLF_READABLE | MLF_WRITEABLE}
+	,			// hypervisor ram
+
+	{
 	 ADDR_TO_PAGE(0x01000000), ADDR_TO_PAGE(0x08000000),
 	 MLT_USER_RAM, MLF_READABLE | MLF_WRITEABLE}
 	,			// user ram 128MB for linux
