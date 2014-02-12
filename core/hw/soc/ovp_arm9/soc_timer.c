@@ -73,6 +73,8 @@ void timer_tick_stop()
 void soc_timer_init()
 {
 
+	/*Needs to be rewritten */
+#if 0
 	memspace_t *ms =
 	    env_map_from(PROC_TYPE_HYPERVISOR, PROC_TYPE_HYPERVISOR,
 
@@ -94,4 +96,6 @@ void soc_timer_init()
 
 	timer->channels[2].idr = -1;
 
+#endif				/* 
+				 */
 }

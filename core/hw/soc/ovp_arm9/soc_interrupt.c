@@ -103,6 +103,8 @@ void cpu_irq_get_current()
 void soc_interrupt_init()
 {
 
+	/*Needs to be rewritten */
+#if 0
 	int i;
 
 	memspace_t *ms_expv, *ms_aic;
@@ -135,4 +137,6 @@ void soc_interrupt_init()
 
 	}
 
+#endif				/* 
+				 */
 }
