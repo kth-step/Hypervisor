@@ -268,6 +268,9 @@ void start_()
 	/* Setting up exception handlers and starting timer */
 	setup_handlers();
 
+	/* dmmu init */
+	dmmu_init();
+
 	/* Initialize hypervisor guest modes and data structures
 	 * according to config file in guest*/
 	guests_init();
