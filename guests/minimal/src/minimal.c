@@ -45,6 +45,33 @@ uint32_t h_l1_unnmap(uint32_t va)
 
 }
 
+uint32_t h_l1_sec_map(uint32_t va, uint32_t pa, uint32_t attrs)
+{
+
+	uint32_t res;
+
+ asm("mov  r0, %[value] \n\t":
+ :[value] "r"(va)		/*input */
+ :				/* No clobbers */ );
+
+ asm("mov  r1, %[value] \n\t":
+ :[value] "r"(pa)		/*input */
+ :				/* No clobbers */ );
+
+ asm("mov  r2, %[value] \n\t":
+ :[value] "r"(attrs)		/*input */
+ :				/* No clobbers */ );
+
+	asm("SWI #1023");
+
+ asm("mov  %[result],r0 \n\t":[result] "=r"(res)
+ :				/*input */
+ :				/* No clobbers */ );
+
+	return res;
+
+}
+
 void test_l1_unnmap()
 {
 
@@ -132,19 +159,85 @@ void test_l1_unnmap()
 		// printf("test 4: FAIL, I'm still accessing the page\n");
 
 		// Unmapping 0xc0000000 is ok, but this is the page where the guest code resides
-		printf("test 5: THIS WILL BRAKE THE GUEST\n");
+		//printf("test 5: THIS WILL BRAKE THE GUEST\n");
+		//va = 0xc0000000;
+		//res = h_l1_unnmap(va);
+		//if (res == 0)
+		//  printf("test 5: SUCCESS, add %x, res %d\n", va, res);
+		//else
+		// printf("test 5: FAIL, add %x, res %d\n", va, res);
 
-		va = 0xc0000000;
+		// I can not map 0, since it is reserved by the hypervisor to access the guest page tables
+		va = 0x0;
 
-		res = h_l1_unnmap(va);
+		uint32_t pa, attrs;
 
-		if (res == 0)
+		pa = 0x0;
 
-			printf("test 5: SUCCESS, add %x, res %d\n", va, res);
+		attrs = 0x0;
+
+		res = h_l1_sec_map(va, pa, attrs);
+
+		if (res == 1)
+
+			printf("test 6: SUCCESS, add %x, res %d\n", va, res);
 
 		else
 
-			printf("test 5: FAIL, add %x, res %d\n", va, res);
+			printf("test 6: FAIL, add %x, res %d\n", va, res);
+
+		// I can not map 0xf0000000, since it is reserved by the hypervisor code
+		va = 0xf0000000;
+
+		pa = 0x0;
+
+		attrs = 0x0;
+
+		res = h_l1_sec_map(va, pa, attrs);
+
+		if (res == 1)
+
+			printf("test 7: SUCCESS, add %x, res %d\n", va, res);
+
+		else
+
+			printf("test 7: FAIL, add %x, res %d\n", va, res);
+
+		// mapping 0xc0200000 is ok, since it is the page containing the active page table
+		// This test should fail, because we are not allowed to map in a physical address outside the guest allowed range
+		va = 0xc0200000;
+
+		pa = 0x0;
+
+		attrs = 0x0;
+
+		res = h_l1_sec_map(va, pa, attrs);
+
+		if (res == 3)
+
+			printf("test 9: SUCCESS, add %x, res %d\n", va, res);
+
+		else
+
+			printf("test 9: FAIL, add %x, res %d\n", va, res);
+
+		// mapping 0xc0000000 is ok, since it is the page containing the active page table
+		// This test should fail, because this is already mapped
+		va = 0xc0000000;
+
+		pa = 0x81000000;
+
+		attrs = 0x0;
+
+		res = h_l1_sec_map(va, pa, attrs);
+
+		if (res == 4)
+
+			printf("test 10: SUCCESS, add %x, res %d\n", va, res);
+
+		else
+
+			printf("test 10: FAIL, add %x, res %d\n", va, res);
 
 		printf("test_l1_unnmap, continued...\n");
 
