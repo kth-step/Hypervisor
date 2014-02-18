@@ -209,7 +209,11 @@ void guests_init()
 
 #else				/* 
 				 */
-#ifdef GUANCIO_BOOT_TEST
+	vm_0.config = &minimal_config;
+
+	get_guest(guest++);
+
+#if 0
 	/* GUANCIO CHANGES */
 	/* - The hypervisor must be always able to read/write the guest PTs */
 	/*   we constraint that for the minimal guests, the page tables */
@@ -286,10 +290,6 @@ void guests_init()
 
 	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
 	mem_cache_set_enable(TRUE);
-
-	vm_0.config = &minimal_config;
-
-	get_guest(guest++);
 
 	//pt_create_section(guest_pt_pa, 0xc0000000, 0x01000000 + HAL_PHYS_START, MLT_USER_RAM);
 	pt_create_section(guest_pt_va, 0xc0000000,
