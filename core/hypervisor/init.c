@@ -189,7 +189,7 @@ void guests_init()
 
 	get_guest(guest++);
 
-	/* KTH CHANGES */
+	/* GUANCIO CHANGES */
 	/* - The hypervisor must be always able to read/write the guest PTs */
 	/*   we constraint that for the minimal guests, the page tables */
 	/*   are between physical addresses 0x01000000 and 0x012FFFFF (that are the three megabytes of the guest) */
@@ -307,7 +307,7 @@ void guests_init()
 	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
 	mem_cache_set_enable(TRUE);
 
-	/* END KTH CHANGES */
+	/* END GUANCIO CHANGES */
 
 #endif				/* 
 				 */
