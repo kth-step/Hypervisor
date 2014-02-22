@@ -18,6 +18,8 @@ struct guest_binary {
 
 	uint32_t *ptr_phy_tmp;
 
+	uint32_t *ptr_va;
+
 	uint32_t size;
 
 };
