@@ -254,16 +254,7 @@ void dmmu_create_L2_pt_()
 
 	attrs = 0x32;
 
-	// TODO: system call need to be modified to hold 4 parameters. For now I am writing pga and attrs arguments manually in r4, r3.
- asm("mov  r4, %[value] \n\t":
- :[value] "r"(attrs)		/*input */
- :				/* No clobbers */ );
-
- asm("mov  r3, %[value] \n\t":
- :[value] "r"(pga)		/*input */
- :				/* No clobbers */ );
-
-	ISSUE_DMMU_HYPERCALL(CMD_MAP_L2_ENTRY, pa, idx, 0);
+	ISSUE_DMMU_HYPERCALL_(CMD_MAP_L2_ENTRY, pa, idx, pga, attrs);
 
 	// here pa is pointing to a referenced data page
 	pa = 0x81110000;
@@ -490,13 +481,17 @@ void dmmu_l2_map_entry_()
 
 	attrs = 0x32;
 
-	res = ISSUE_DMMU_HYPERCALL_(CMD_MAP_L2_ENTRY, 0x0, idx, pga, attrs);
+	pa = 0x0;
+
+	res = ISSUE_DMMU_HYPERCALL_(CMD_MAP_L2_ENTRY, pa, idx, pga, attrs);
 
 	print_3_err(t_id, "MAP L2 ENTRY", pa, pga, res);
 
 	t_id++;
 
 	// #1: L2 base address is ok, but guest can not map a page outside the allowed range into its L2 page table entries
+	pa = 0x81100000;
+
 	pga = 0x0;
 
 	idx = 0xc2;
@@ -539,7 +534,7 @@ void dmmu_l2_map_entry_()
 	// #5: this test should fail, because guest can not map any thing to an entry of a data page
 	res = ISSUE_DMMU_HYPERCALL_(CMD_MAP_L2_ENTRY, pga, idx, pga, attrs);
 
-	print_3_err(t_id, "MAP L2 ENTRY", pa, pga, res);
+	print_3_err(t_id, "MAP L2 ENTRY", pga, pga, res);
 
 	t_id++;
 
@@ -585,7 +580,7 @@ void dmmu_l2_unmap_entry_()
 	// idx is the index of a entry we want to unmap it
 	uint32_t pa, idx, res;
 
-	int t_id;
+	int t_id = 0;
 
 	// #0: L2 base address can not be 0x0, since it is reserved by the hypervisor to access the guest page tables
 	idx = 0xc2;
@@ -756,16 +751,7 @@ void dmmu_create_L1_pt_()
 
 	attrs = 0x32;
 
-	// TODO: system call need to be modified to hold 4 parameters. For now I am writing pga and attrs arguments manually in r4, r3.
- asm("mov  r4, %[value] \n\t":
- :[value] "r"(attrs)		/*input */
- :				/* No clobbers */ );
-
- asm("mov  r3, %[value] \n\t":
- :[value] "r"(pga)		/*input */
- :				/* No clobbers */ );
-
-	ISSUE_DMMU_HYPERCALL(CMD_MAP_L2_ENTRY, pa, idx, 0);
+	res = ISSUE_DMMU_HYPERCALL_(CMD_MAP_L2_ENTRY, pa, idx, pga, attrs);
 
 	// here pa is pointing to a referenced data page
 	pa = 0x81110000;
@@ -969,6 +955,15 @@ void dmmu_switch_mm_()
 
 	t_id++;
 
+	// #3: Switching from the L1 which resides in 80000000 to its copy in 0x81200000, its perfectly works :)
+	pa = 0x81200000;
+
+	res = ISSUE_DMMU_HYPERCALL(CMD_SWITCH_ACTIVE_L1, pa, 0, 0);	// just to see if it possible to switch the active L1 or not
+	print_2_err(t_id, "SWITCH ACTIVE L1", pa, res);
+
+	t_id++;
+
+	// #4 : here we guest creates a new L1 page table and switches to this L1, it will break the guest :(
 	// start: creating an L1
 	// for this test minimal_config.c has been modified and now ".pa_for_pt_access_end = HAL_PHYS_START + 0x014fffff"
 	attrs = 0xc2e;
@@ -1083,6 +1078,21 @@ void dmmu_unmap_L1_pt_()
 
 }
 
+void unit_test()
+{
+
+	uint32_t pa, va, attrs, res;
+
+	int j, t_id = 0;
+
+	pa = 0x81200000;
+
+	res = ISSUE_DMMU_HYPERCALL(CMD_FREE_L1, pa, 0, 0);
+
+	print_2_err(t_id, "FREE L1", pa, res);
+
+}
+
 void _main()
 {
 
@@ -1099,13 +1109,14 @@ void _main()
 		//dmmu_unmap_L1_pageTable_entry_();
 		//dmmu_create_L2_pt_();
 		//dmmu_l1_pt_map_();
-		dmmu_l2_map_entry_();
-
+		//dmmu_l2_map_entry_();
 		//dmmu_l2_unmap_entry_();
 		//dmmu_unmap_L2_pt_();
 		//dmmu_create_L1_pt_();
 		//dmmu_switch_mm_();
 		//dmmu_unmap_L1_pt_();
+		unit_test();
+
 		printf("running\n");
 
 	}
