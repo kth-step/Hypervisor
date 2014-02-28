@@ -236,6 +236,8 @@ void guests_init()
 	// - a 1-1 mapping to the guest memory (as defined in the board_mem.c) writable and readable by the user
 	// - THIS SETUP MUST BE FIXED, SINCE THE GUEST IS NOT ALLOWED TO WRITE IN TO ITS WHOLE MEMORY
 
+	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
+
 	/* - Create a copy of the master page table for the guest in the physical address: pa_initial_l1 */
 	uint32_t index;
 
@@ -248,8 +250,18 @@ void guests_init()
 
 	for (index = 0; index < 4096; index++) {
 
+		// Hamed Changes , Creating a valid L1 according to the verified L1_create API
 		value = *(flpt_va + index);
 
+		if ((value & 0 b1) == 1)
+
+			bft[PA_TO_PH_BLOCK(value)].type = PAGE_INFO_TYPE_L2PT;
+
+		if (((value & 0xFFFF0000) == 0x81200000))
+
+			*(guest_pt_va + index) = (value & 0xFFFFFBFF);
+
+		// END Hamed Changes
 		*(guest_pt_va + index) = value;
 
 	}
@@ -266,7 +278,6 @@ void guests_init()
 
 	// Initialize the datastructures with the type for the initial L1
 	// This should be done by MMU_CREATE_L1
-	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
 
 	bft[PA_TO_PH_BLOCK(vm_0.config->pa_initial_l1) + 0].type =
 	    PAGE_INFO_TYPE_L1PT;
