@@ -108,7 +108,8 @@ void memory_init()
 					  list->page_start) << PAGE_BITS,
 					 list->type);
 
-		else if (list->type != MLT_NONE) {
+		//  why we need to map also user memory? (list->type != MLT_USER_RAM) This is mapped into the guest memory itself
+		else if ((list->type != MLT_NONE)) {
 
 			j = (list->page_start) >> 8;	/*Get L1 Page index */
 
