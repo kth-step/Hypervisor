@@ -24,8 +24,13 @@ extern uint32_t syscall_dmmu(uint32_t r0, uint32_t r1, uint32_t r2);
 #define ISSUE_DMMU_HYPERCALL_(type, p0, p1, p2, p3) \
     syscall_dmmu((type | (p2 & 0xFFFFFFF0)), p0, ((p1 << 20) | p3));
 
-void dmmu_map_L1_section_()
+#ifdef TEST_DMMU_MAP_L1_SECTION
+void main_test_body()
 {
+
+	char *test_name = "MAP L1 SECTION";
+
+	printf("Main Test: %s\n", test_name);
 
 	uint32_t va, pa, attrs, res;
 
@@ -40,7 +45,8 @@ void dmmu_map_L1_section_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	print_2_err(t_id, "MAP L1 SECTION", va, res);
+	expect(t_id, "Map of reserved virtual address", ERR_MMU_RESERVED_VA,
+	       res);
 
 	t_id++;
 
@@ -54,7 +60,9 @@ void dmmu_map_L1_section_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	print_2_err(t_id, "MAP L1 SECTION", va, res);
+	expect(t_id,
+	       "Map a physical address outside the guest allowed range",
+	       ERR_MMU_OUT_OF_RANGE_PA, res);
 
 	t_id++;
 
@@ -68,7 +76,8 @@ void dmmu_map_L1_section_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	print_2_err(t_id, "MAP L1 SECTION", va, res);
+	expect(t_id, "Map an already mapped entry",
+	       ERR_MMU_SECTION_NOT_UNMAPPED, res);
 
 	t_id++;
 
@@ -82,7 +91,8 @@ void dmmu_map_L1_section_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	print_2_err(t_id, "MAP L1 SECTION", va, res);
+	expect(t_id, "Unsupported access permission", ERR_MMU_AP_UNSUPPORTED,
+	       res);
 
 	t_id++;
 
@@ -99,7 +109,7 @@ void dmmu_map_L1_section_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	print_2_err(t_id, "MAP L1 SECTION", va, res);
+	expect(t_id, "Mapping a valid writable page", SUCCESS, res);
 
 	t_id++;
 
@@ -113,12 +123,19 @@ void dmmu_map_L1_section_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	print_2_err(t_id, "MAP L1 SECTION", va, res);
+	expect(t_id, "Mapping a valid read/only page", 1, res);
 
 }
+#endif				/* 
+				 */
 
-void dmmu_unmap_L1_pageTable_entry_()
+#ifdef TEST_DMMU_UNMAP_L1_SECTION
+void main_test_body()
 {
+
+	char *test_name = "UNMAP L1 SECTION";
+
+	printf("Main Test: %s\n", test_name);
 
 	uint32_t va, res;
 
@@ -129,46 +146,38 @@ void dmmu_unmap_L1_pageTable_entry_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
 
-	print_2_err(t_id, "UNMAP L1 PT ENTRY", va, res);
+	expect(t_id, "Unamap of a reserved va", ERR_MMU_RESERVED_VA, res);
 
-	t_id++;
+	/*
+	   t_id++;
+	   // #1: I can not unmap 0xf0000000, since it is reserved by the hypervisor code
+	   va = 0xf0000000;
+	   res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	   print_2_err(t_id,"UNMAP L1 PT ENTRY", va, res);
+	   t_id++;
 
-	// #1: I can not unmap 0xf0000000, since it is reserved by the hypervisor code
-	va = 0xf0000000;
+	   // #2: Unmapping 0xc0300000 has no effect, since this page is unmapped
+	   va = 0xc0300000;
+	   res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	   print_2_err(t_id,"UNMAP L1 PT ENTRY", va, res);
+	   t_id++;
 
-	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	   // #3: Unmapping 0xc0200000 is ok if this test is executed after the l1_map_section test, otherwise it has no effect
+	   va = 0xc0200000;
+	   res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	   print_2_err(t_id,"UNMAP L1 PT ENTRY", va, res);
+	   t_id++;
 
-	print_2_err(t_id, "UNMAP L1 PT ENTRY", va, res);
-
-	t_id++;
-
-	// #2: Unmapping 0xc0300000 has no effect, since this page is unmapped
-	va = 0xc0300000;
-
-	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
-
-	print_2_err(t_id, "UNMAP L1 PT ENTRY", va, res);
-
-	t_id++;
-
-	// #3: Unmapping 0xc0200000 is ok if this test is executed after the l1_map_section test, otherwise it has no effect
-	va = 0xc0200000;
-
-	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
-
-	print_2_err(t_id, "UNMAP L1 PT ENTRY", va, res);
-
-	t_id++;
-
-	// #4: Unmapping 0xc0000000 is ok, but this is the page where the guest code resides
-	//printf("test 5: THIS WILL BRAKE THE GUEST\n");
-/*
-	va = 0xc0000000;
-	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
-	print_2_err(t_id,"UNMAP L1 PT ENTRY", va, res);
-*/
-
+	   // #4: Unmapping 0xc0000000 is ok, but this is the page where the guest code resides
+	   //printf("test 5: THIS WILL BRAKE THE GUEST\n");
+	   /*
+	   va = 0xc0000000;
+	   res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	   print_2_err(t_id,"UNMAP L1 PT ENTRY", va, res);
+	 */
 }
+#endif				/* 
+				 */
 
 void dmmu_create_L2_pt_()
 {
@@ -699,8 +708,13 @@ void dmmu_unmap_L2_pt_()
 
 }
 
-void dmmu_create_L1_pt_()
+#ifdef TEST_DMMU_CREATE_L1
+void main_test_body()
 {
+
+	char *test_name = "CREATE L1";
+
+	printf("Main Test: %s\n", test_name);
 
 	uint32_t pa, va, attrs, res;
 
@@ -711,7 +725,8 @@ void dmmu_create_L1_pt_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id, "Failing to create a L1 in the hypervisor memory",
+	       ERR_MMU_OUT_OF_RANGE_PA, res);
 
 	t_id++;
 
@@ -720,7 +735,8 @@ void dmmu_create_L1_pt_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id, "Failing to create a L1 no 16KB aligned",
+	       ERR_MMU_L1_BASE_IS_NOT_16KB_ALIGNED, res);
 
 	t_id++;
 
@@ -729,7 +745,8 @@ void dmmu_create_L1_pt_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id, "Failing to create a L1 on an already L1 area",
+	       ERR_MMU_ALREADY_L1_PT, res);
 
 	t_id++;
 
@@ -758,7 +775,8 @@ void dmmu_create_L1_pt_()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id, "Failing to create a L1 on a referenced data memory",
+	       ERR_MMU_REFERENCED, res);
 
 	t_id++;
 
@@ -776,7 +794,9 @@ void dmmu_create_L1_pt_()
 	pa = 0x81100000;	// L1 base address
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id,
+	       "Failing to create a L1 using an L2 that has not been validated",
+	       ERR_MMU_SANITY_CHECK_FAILED, res);
 
 	t_id++;
 
@@ -795,7 +815,8 @@ void dmmu_create_L1_pt_()
 	pa = 0x81100000;	// L1 base address
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id, "Failing to create a L1 containing a supersection",
+	       ERR_MMU_SANITY_CHECK_FAILED, res);
 
 	t_id++;
 
@@ -814,7 +835,8 @@ void dmmu_create_L1_pt_()
 	pa = 0x81100000;	// L1 base address
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id, "Failing to create a L1 containing an unsupported AP",
+	       ERR_MMU_SANITY_CHECK_FAILED, res);
 
 	t_id++;
 
@@ -833,7 +855,9 @@ void dmmu_create_L1_pt_()
 	pa = 0x81100000;	// L1 base address
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id,
+	       "Failing to create a L1 where a writable section points to an L1",
+	       ERR_MMU_SANITY_CHECK_FAILED, res);
 
 	t_id++;
 
@@ -850,7 +874,26 @@ void dmmu_create_L1_pt_()
 	pa = 0x81100000;	// L1 base address
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id,
+	       "Failing to create a L1 where a writable section points to the L1 being allocated",
+	       ERR_MMU_SANITY_CHECK_FAILED, res);
+
+}
+
+#endif				/* 
+				 */
+
+#ifdef TEST_DMMU_CREATE_L1_TMP
+void main_test_body()
+{
+
+	char *test_name = "CREATE L1 TMP";
+
+	printf("Main Test: %s\n", test_name);
+
+	uint32_t pa, va, attrs, res;
+
+	int j, t_id = 0;
 
 	t_id++;
 
@@ -863,27 +906,34 @@ void dmmu_create_L1_pt_()
 
 	pa = 0x81300000;
 
-	// after this test I changed minimal_config.c file to its previous value ".pa_for_pt_access_end = HAL_PHYS_START + 0x012fffff"
-	l1[0] = ((uint32_t) 0x81300C02);	// section descriptor with write access,  mapping of this section succeed
-	//l1[1] = ((uint32_t)0x81200802); // section descriptor with read-only access
-	l1[1] = ((uint32_t) 0x81200C02);	// section descriptor with write access , this should make the L1 invalid and it was a successful attempt
-	for (j = 2; j < 4096; j++)
+	ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, 0x81100000, attrs)
+	    // after this test I changed minimal_config.c file to its previous value ".pa_for_pt_access_end = HAL_PHYS_START + 0x012fffff"
+	    //l1[1] = ((uint32_t)0x81200802); // section descriptor with read-only access
+	    //l1[1] = ((uint32_t)0x81200C02); // section descriptor with write access , this should make the L1 invalid and it was a successful attempt
+	    for (j = 0; j < 4096; j++)
 
 		l1[j] = ((uint32_t) 0x0);
 
-	va = 0x100000;
+	l1[5] = ((uint32_t) 0x81300C02);	// section descriptor with write access,  mapping of this section succeed
+	va = 0xc0500000;
 
 	memcpy((void *)va, l1, sizeof l1);
+
+	ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
 
 	pa = 0x81100000;	// L1 base address
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L1_PT, pa, 0, 0);
 
-	print_2_err(t_id, "CREATE L1 PT", pa, res);
+	expect(t_id,
+	       "Successful creation of an L1 with only one section, writable that point to a data page",
+	       SUCCESS, res);
+
+#if 0
 
 	t_id++;
 
-	// #10 ....
-	// Creating an L2 to map
+// #10 ....
+// Creating an L2 to map
 	for (j = 0; j < 1024; j++)
 
 		l2[j] = ((uint32_t) 0x0);
@@ -892,9 +942,9 @@ void dmmu_create_L1_pt_()
 
 	memcpy((void *)va, l2, sizeof l2);
 
-	// end of L2 page table creation
+// end of L2 page table creation
 
-	// Writing content of the new L1 page table
+// Writing content of the new L1 page table
 	for (j = 0; j < 4096; j++)
 
 		l1[j] = ((uint32_t) 0x81150001);	// L2 page table descriptor
@@ -902,7 +952,7 @@ void dmmu_create_L1_pt_()
 
 	memcpy((void *)va, l1, sizeof l1);
 
-	// end of L1
+// end of L1
 
 	va = 0xc0300000;
 
@@ -918,7 +968,12 @@ void dmmu_create_L1_pt_()
 
 	print_2_err(t_id, "CREATE L1 PT", pa, res);
 
+#endif				/* 
+				 */
 }
+
+#endif				/* 
+				 */
 
 void dmmu_switch_mm_()
 {
@@ -1119,28 +1174,14 @@ void _main()
 
 	int j;
 
-	printf("starting\n");
+	printf("START TEST\n");
 
-	for (;;) {
+	for (j = 0; j < 500000; j++)
+		asm("nop");
 
-		for (j = 0; j < 500000; j++)
-			asm("nop");
+	main_test_body();
 
-		//dmmu_map_L1_section_();
-		//dmmu_unmap_L1_pageTable_entry_();
-		//dmmu_create_L2_pt_();
-		//dmmu_l1_pt_map_();
-		//dmmu_l2_map_entry_();
-		//dmmu_l2_unmap_entry_();
-		//dmmu_unmap_L2_pt_();
-		//dmmu_create_L1_pt_();
-		dmmu_switch_mm_();
-
-		//dmmu_unmap_L1_pt_();
-		//unit_test();
-		printf("running\n");
-
-	}
+	printf("TEST COMPLETED\n");
 
 }
 
