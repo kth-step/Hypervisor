@@ -14,19 +14,21 @@
 
 struct guest_binary {
 
-	uint32_t *ptr_phy;
+	addr_t pstart;
 
-	uint32_t *ptr_phy_tmp;
+	addr_t vstart;
 
-	uint32_t *ptr_va;
+	size_t psize;
 
-	uint32_t size;
+	size_t fwsize;
 
 };
 
 struct guests_database {
 
 	uint32_t count;
+
+	uint32_t pstart, pend;
 
 	struct guest_binary guests[MAX_GUESTS];
 
