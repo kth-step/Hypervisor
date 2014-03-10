@@ -270,12 +270,21 @@ void guests_init()
 	     vm_0.config->reserved_va_for_pt_access_start;
 	     va_offset += SECTION_SIZE) {
 
+		uint32_t offset, pmd;
+
 		uint32_t va =
 		    vm_0.config->reserved_va_for_pt_access_start + va_offset;
 
 		uint32_t pa = vm_0.config->pa_for_pt_access_start + va_offset;
 
 		pt_create_section(flpt_va, va, pa, MLT_HYPER_RAM);
+
+		/* Invalidate the new created entries */
+		offset = ((va >> MMU_L1_SECTION_SHIFT) * 4);
+
+		pmd = (uint32_t *) ((uint32_t) flpt_va + offset);
+
+		COP_WRITE(COP_SYSTEM, COP_DCACHE_INVALIDATE_MVA, pmd);
 
 		printf("%x -> %x\n", va, pa);	// DEBUG
 	}
@@ -308,6 +317,20 @@ void guests_init()
 
 		value = *(flpt_va + index);
 
+#if 0
+		/* reomved by Arash: what is this code?? */
+		// Hamed Changes , Creating a valid L1 according to the verified L1_create API
+		if ((value & 0 b1) == 1)
+
+			bft[PA_TO_PH_BLOCK(value)].type = PAGE_INFO_TYPE_L2PT;
+
+		if (((value & 0xFFFF0000) == 0x81200000))
+
+			*(guest_pt_va + index) = (value & 0xFFFFFBFF);
+
+		// END Hamed Changes
+#endif				/* 
+				 */
 		*(guest_pt_va + index) = value;
 
 	}
