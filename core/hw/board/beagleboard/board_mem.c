@@ -52,7 +52,8 @@ memory_layout_entry memory_padr_layout[] = {
 	 MLT_TRUSTED_RAM, MLF_READABLE | MLF_WRITEABLE}
 	,			// trusted ram
 	{
-	 ADDR_TO_PAGE(0x81000000), ADDR_TO_PAGE(0x88000000),
+	 ADDR_TO_PAGE(0x81000000),
+	 ADDR_TO_PAGE(0x81000000 + 0x00500000),
 	 MLT_USER_RAM, MLF_READABLE | MLF_WRITEABLE | MLF_LAST}
 	,			// user ram
 };
