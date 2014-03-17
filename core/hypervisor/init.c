@@ -66,7 +66,64 @@ extern hc_config minimal_config;
 
 #endif				/* 
 				 */
+
 /*****************************/
+/* DEBUG */
+void dump_mmu(addr_t adr)
+{
+
+	uint32_t *t = (uint32_t *) adr;
+
+	int i;
+
+	printf("  (L1 is at %x)\n", adr);
+
+	for (i = 0; i < 4096; i++) {
+
+		uint32_t x = t[i];
+
+		switch (x & 3) {
+
+		case 2:
+
+			printf("SEC %x -> %x : %x DOM=%d C=%d B=%d AP=%d\n",
+			       i << 20, x, (x & 0xFFF00000), (x >> 5) & 15,
+			       (x >> 3) & 1, (x >> 2) & 1, (x >> 10) & 3);
+
+			break;
+
+		case 1:
+
+			printf("COR %x -> %x : %x DOM=%d C=%d B=%d\n",
+			       i << 20, x, (x & 0xFFFFF000),
+			       (x >> 5) & 15, (x >> 3) & 1, (x >> 2) & 1);
+
+			break;
+
+		case 3:
+
+			printf("FIN %x -> %x\n", i << 20, x);
+
+			break;
+
+		}
+
+	}
+
+	printf("\n");
+
+}
+
+/*****************************/
+
+void memory_commit()
+{
+
+	mem_mmu_tlb_invalidate_all(TRUE, TRUE);
+
+	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
+}
+
 void memory_init()
 {
 
@@ -98,44 +155,50 @@ void memory_init()
 		if (!list)
 			break;
 
-		/*All IO get coarse pages */
-		if (list->type == MLT_IO_RW_REG
-		    || list->type == MLT_IO_RO_REG
-		    || list->type == MLT_IO_HYP_REG) {
+		switch (list->type) {
 
-			uint32_t l2_pa = pt_create_coarse(flpt_va,
-							  IO_VA_ADDRESS
-							  (PAGE_TO_ADDR
-							   (list->page_start)),
-							  PAGE_TO_ADDR(list->
-								       page_start),
-							  (list->page_count -
-							   list->
-							   page_start) <<
-							  PAGE_BITS,
-							  list->type);
+		case MLT_IO_RW_REG:
 
-		}
-		//  why we need to map also user memory? (list->type != MLT_USER_RAM) This is mapped into the guest memory itself
-		else if ((list->type != MLT_NONE)
-			 && (list->type != MLT_USER_RAM)) {
+		case MLT_IO_RO_REG:
 
+		case MLT_IO_HYP_REG:
+
+			/*All IO get coarse pages */
+			pt_create_coarse(flpt_va,
+					 IO_VA_ADDRESS(PAGE_TO_ADDR
+						       (list->page_start)),
+					 PAGE_TO_ADDR(list->page_start),
+					 (list->page_count -
+					  list->page_start) << PAGE_BITS,
+					 list->type);
+
+			break;
+
+		case MLT_USER_RAM:
+
+			/* do this later */
+			break;
+
+		case MLT_HYPER_RAM:
+
+		case MLT_TRUSTED_RAM:
+
+			/* own memory */
 			j = (list->page_start) >> 8;	/*Get L1 Page index */
-
-			va_offset = 0;
-
-			if (list->type == MLT_HYPER_RAM
-			    || list->type == MLT_TRUSTED_RAM)
-
-				va_offset = (uint32_t) HAL_OFFSET;
 
 			for (; j < ((list->page_count) >> 8); j++) {
 
 				pt_create_section(flpt_va,
-						  (j << 20) - va_offset,
+						  (j << 20) - HAL_OFFSET,
 						  j << 20, list->type);
 
 			}
+
+			break;
+
+		case MLT_NONE:
+
+			break;
 
 		}
 
@@ -150,9 +213,8 @@ void memory_init()
 	pt_map(0xFFFF0000, (uint32_t) GET_PHYS(&_interrupt_vector_table),
 	       0x1000, MLT_USER_ROM);
 
-	mem_mmu_tlb_invalidate_all(TRUE, TRUE);
+	memory_commit();
 
-	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
 	mem_cache_set_enable(TRUE);
 
 	mem_mmu_set_domain(0x55555555);	//Start with access to all domains
@@ -200,10 +262,27 @@ void guests_init()
 	/*Start with VM_0 as the current VM */
 	curr_vm = &vm_0;
 
+	printf("HV pagetable before guests initialization:\n");	// DEBUG
+	dump_mmu(flpt_va);	// DEBUG
+
+	/* show guest information */
+	printf("We have %d guests in physical memory area %x %x\n",
+	       guests_db.count, guests_db.pstart, guests_db.pend);
+
+	for (i = 0; i < guests_db.count; i++) {
+
+		printf("Guest_%d: PA=%x+%x VA=%x FWSIZE=%x\n",
+		       i,
+		       guests_db.guests[i].pstart,
+		       guests_db.guests[i].psize,
+		       guests_db.guests[i].vstart, guests_db.guests[i].fwsize);
+
+	}
+
 #ifdef LINUX
 	vm_0.config = &linux_config;
 
-	get_guest(guest++);
+	vm_0.config.firmware = get_guest(guest++);
 
 	linux_init();
 
@@ -211,9 +290,9 @@ void guests_init()
 				 */
 	vm_0.config = &minimal_config;
 
-	get_guest(guest++);
+	vm_0.config->firmware = get_guest(guest++);
 
-	/* GUANCIO CHANGES */
+	/* KTH CHANGES */
 	/* - The hypervisor must be always able to read/write the guest PTs */
 	/*   we constraint that for the minimal guests, the page tables */
 	/*   are between physical addresses 0x01000000 and 0x014FFFFF (that are the five megabytes of the guest) */
@@ -229,16 +308,14 @@ void guests_init()
 	     vm_0.config->reserved_va_for_pt_access_start;
 	     va_offset += SECTION_SIZE) {
 
-		uint32_t offset;
-
-		uint32_t *pmd;
+		uint32_t offset, pmd;
 
 		uint32_t va =
 		    vm_0.config->reserved_va_for_pt_access_start + va_offset;
 
-		pt_create_section(flpt_va, va,
-				  vm_0.config->pa_for_pt_access_start +
-				  va_offset, MLT_HYPER_RAM);
+		uint32_t pa = vm_0.config->pa_for_pt_access_start + va_offset;
+
+		pt_create_section(flpt_va, va, pa, MLT_HYPER_RAM);
 
 		/* Invalidate the new created entries */
 		offset = ((va >> MMU_L1_SECTION_SHIFT) * 4);
@@ -247,10 +324,13 @@ void guests_init()
 
 		COP_WRITE(COP_SYSTEM, COP_DCACHE_INVALIDATE_MVA, pmd);
 
+		printf("%x -> %x\n", va, pa);	// DEBUG
 	}
 
-	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
-	mem_mmu_tlb_invalidate_all(TRUE, TRUE);
+	memory_commit();
+
+	printf("HV pagetable after guests initialization:\n");	// DEBUG
+	dump_mmu(flpt_va);	// DEBUG
 
 	// We pin the L2s that can be created in the 32KB are of slpt_va
 	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
@@ -278,59 +358,28 @@ void guests_init()
 	// - THIS SETUP MUST BE FIXED, SINCE THE GUEST IS NOT ALLOWED TO WRITE IN TO ITS WHOLE MEMORY
 
 	/* - Create a copy of the master page table for the guest in the physical address: pa_initial_l1 */
-	uint32_t index;
-
-	uint32_t value;
 
 	uint32_t *guest_pt_va;
 
 	guest_pt_va =
 	    mmu_guest_pa_to_va(vm_0.config->pa_initial_l1, vm_0.config);
 
-	for (index = 0; index < 4096; index++) {
+	printf("COPY %x %x\n", guest_pt_va, flpt_va);
 
-		value = *(flpt_va + index);
+	memcpy(guest_pt_va, flpt_va, 1024 * 16);
 
-		*(guest_pt_va + index) = value;
-
-	}
+	printf("vm_0 pagetable:\n");	// DEBUG    
+	dump_mmu(guest_pt_va);	// DEBUG
 
 	/* activate the guest page table */
-	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
+	memory_commit();
+
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, vm_0.config->pa_initial_l1);	// Set TTB0
 	isb();
 
-	mem_mmu_tlb_invalidate_all(TRUE, TRUE);
-
-	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
-	mem_cache_set_enable(TRUE);
+	memory_commit();
 
 	// Initialize the datastructures with the type for the initial L1
-	// This should be done by MMU_CREATE_L1
-
-	bft[PA_TO_PH_BLOCK(vm_0.config->pa_initial_l1) + 0].type =
-	    PAGE_INFO_TYPE_L1PT;
-
-	bft[PA_TO_PH_BLOCK(vm_0.config->pa_initial_l1) + 1].type =
-	    PAGE_INFO_TYPE_L1PT;
-
-	bft[PA_TO_PH_BLOCK(vm_0.config->pa_initial_l1) + 2].type =
-	    PAGE_INFO_TYPE_L1PT;
-
-	bft[PA_TO_PH_BLOCK(vm_0.config->pa_initial_l1) + 3].type =
-	    PAGE_INFO_TYPE_L1PT;
-
-	// Map one section for the guest
-	// This must be changed to use the MMU_APIs
-	// This also works, but it is an error due to the guest 1-1 mapping
-	//pt_create_section(guest_pt_pa, 0xc0000000, 0x01000000 + HAL_PHYS_START, MLT_USER_RAM);
-	/*
-	   pt_create_section(guest_pt_va, 0xc0000000, HAL_PHYS_START + 0x01000000, MLT_USER_RAM);
-	   for (index=0; index<256; index++) {
-	   bft[PA_TO_PH_BLOCK(HAL_PHYS_START + 0x01000000) + index].refcnt = 1;
-	   bft[PA_TO_PH_BLOCK(HAL_PHYS_START + 0x01000000) + index].type = PAGE_INFO_TYPE_DATA;
-	   }
-	 */
 	// create the attribute that allow the guest to read/write/execute
 	uint32_t attrs;
 
@@ -358,6 +407,7 @@ void guests_init()
 #endif				/* 
 				 */
 	/* END GUANCIO CHANGES */
+	/* END KTH CHANGES */
 
 #endif				/* 
 				 */
@@ -399,7 +449,16 @@ void guests_init()
 
 		curr_vm = curr_vm->next;
 
+		// let guest know where it is located
+		curr_vm->mode_states[HC_GM_KERNEL].ctx.reg[3] =
+		    curr_vm->config->firmware->pstart;
+
+		curr_vm->mode_states[HC_GM_KERNEL].ctx.reg[4] =
+		    curr_vm->config->firmware->vstart;
+
 	} while (curr_vm != &vm_0);
+
+	memory_commit();
 
 	cpu_context_initial_set(&curr_vm->mode_states[HC_GM_KERNEL].ctx);
 
@@ -412,9 +471,6 @@ void start_guest()
 	change_guest_mode(HC_GM_KERNEL);
 
 	/*Starting Guest */
-	printf("Branching to address: %x\n",
-	       curr_vm->config->guest_entry_point);
-
 	start();
 
 }
