@@ -66,11 +66,9 @@ void test_map_l1_section()
 	expect(t_id, "Map of reserved virtual address", ERR_MMU_RESERVED_VA,
 	       res);
 
-	t_id++;
-
 	// #1: mapping 0xc0200000 is ok, since it is the page containing the active page table
 	// This test should fail, because we are not allowed to map in a physical address outside the guest allowed range
-	va = 0xc0200000;
+	va = (va_base + 0x200000);
 
 	pa = 0x0;
 
@@ -78,47 +76,41 @@ void test_map_l1_section()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	expect(t_id,
+	expect(++t_id,
 	       "Map a physical address outside the guest allowed range",
 	       ERR_MMU_OUT_OF_RANGE_PA, res);
 
-	t_id++;
-
 	// #2: mapping 0xc020000 is ok, since it is the page containing the active page table
 	// This test should fail, because this is already mapped
-	va = 0xc0000000;
+	va = (va_base + 0x000000);
 
-	pa = 0x81000000;
+	pa = va2pa(va);
 
 	attrs = 0x0;
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	expect(t_id, "Map an already mapped entry",
+	expect(++t_id, "Map an already mapped entry",
 	       ERR_MMU_SECTION_NOT_UNMAPPED, res);
-
-	t_id++;
 
 	// #3: mapping 0xc020000 is ok, since it is the page containing the active page table
 	// This test should fail, because the access permission is not supported
-	va = 0xc0200000;
+	va = (va_base + 0x200000);
 
-	pa = 0x81000000;
+	pa = va2pa(va);
 
 	attrs = 0x0;
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	expect(t_id, "Unsupported access permission", ERR_MMU_AP_UNSUPPORTED,
-	       res);
-
-	t_id++;
+	expect(++t_id, "Unsupported access permission",
+	       ERR_MMU_AP_UNSUPPORTED, res);
 
 	// #4: mapping 0xc020000 is ok, since it is the page containing the active page table
 	// This test should succeed
-	va = 0xc0200000;
+	va = (va_base + 0x200000);
 
-	pa = 0x81000000;
+	pa = va2pa(va_base + 0x000000);
 
 	//attrs = 0x12; // 0b1--10
 	//attrs |= MMU_AP_USER_RW << MMU_SECTION_AP_SHIFT;
@@ -127,21 +119,19 @@ void test_map_l1_section()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	expect(t_id, "Mapping a valid writable page", SUCCESS, res);
-
-	t_id++;
+	expect(++t_id, "Mapping a valid writable page", SUCCESS, res);
 
 	// #5: mapping 0xc030000 with read-only access permission is ok, since it is the page containing the active page table
 	// This test should succeed
-	va = 0xc0300000;
+	va = (va_base + 0x300000);
 
-	pa = 0x81000000;
+	pa = va2pa(va_base + 0x000000);
 
 	attrs = 0xb2e;
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
-	expect(t_id, "Mapping a valid read/only page", SUCCESS, res);
+	expect(++t_id, "Mapping a valid read/only page", SUCCESS, res);
 
 }
 
@@ -171,7 +161,7 @@ void test_unmap_l1_entry()
 	expect(++t_id, "Unamap of a reserved va", ERR_MMU_RESERVED_VA, res);
 
 	// #2: Unmapping 0xc0300000 has no effect, since this page is unmapped
-	va = 0xc0300000;
+	va = (va_base + 0x300000);
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
 
@@ -179,9 +169,9 @@ void test_unmap_l1_entry()
 	       ERR_MMU_ENTRY_UNMAPPED, res);
 
 	// #3: Unmapping 0xc0200000 is ok if this test is executed after the l1_map_section test, otherwise it has no effect
-	va = 0xc0200000;
+	va = (va_base + 0x200000);
 
-	pa = 0x81000000;
+	pa = va2pa(va_base);
 
 	attrs = 0x12;		// 0b1--10
 	attrs |= MMU_AP_USER_RW << MMU_SECTION_AP_SHIFT;
@@ -199,7 +189,7 @@ void test_unmap_l1_entry()
 
 /*
 	// #4: Unmapping 0xc0000000 is ok, but this is the page where the guest code resides
-	va = 0xc0000000;
+	va = va_base;
 	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
 	expect(++t_id, "Unmapping a valid writable page, which will break the guest", SUCCESS, res);
 */
@@ -237,7 +227,7 @@ void test_l2_create()
 
 	// #2: Guest can not use an address which is not 4KB aligned to create an L2
 	// this test should fail because we are only allowed to create l2 in a 4KB aligned address
-	pa = 0x81100100;	// this address is not 4KB aligned
+	pa = va2pa(va_base + 0x100100);	//0x81100100, this address is not 4KB aligned
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L2_PT, pa, 0, 0);
 
 	expect(++t_id, "Using a physical address which is not 4KB aligned",
@@ -295,7 +285,7 @@ void test_l2_create()
 	ISSUE_DMMU_HYPERCALL(CMD_CREATE_L2_PT, pa, 0, 0);
 
 	//*******************************************************//
-	uint32_t pga = 0x81110000;	// data page address
+	uint32_t pga = va2pa(va_base + 0x110000);	// 0x81110000, data page address
 	uint32_t idx = 0xc2;
 
 	ISSUE_DMMU_HYPERCALL_(CMD_MAP_L2_ENTRY, pa, idx, pga, 0x32);
@@ -1294,16 +1284,7 @@ void test_unmap_L1_pt()
 void unit_test()
 {
 
-	uint32_t pa, va, attrs, res;
-
-	int j, t_id = 0;
-
-	pa = 0x81200000;
-
-	res = ISSUE_DMMU_HYPERCALL(CMD_FREE_L1, pa, 0, 0);
-
-	print_2_err(t_id, "FREE L1", pa, res);
-
+	//############
 }
 
 void _main()
