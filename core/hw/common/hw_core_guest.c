@@ -14,7 +14,7 @@ struct guest_binary *get_guest(int index)
 
 	guest = &guests_db.guests[index];
 
-	if (guest->size <= 0)
+	if (guest->psize <= 0)
 		return NULL;
 
 	return guest;
