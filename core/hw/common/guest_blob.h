@@ -22,6 +22,8 @@ struct guest_binary {
 
 	size_t fwsize;
 
+	size_t offset;
+
 };
 
 struct guests_database {
