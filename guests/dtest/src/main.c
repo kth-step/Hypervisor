@@ -335,11 +335,15 @@ void test_l2_create()
 	ISSUE_DMMU_HYPERCALL(CMD_FREE_L2, pa, 0, 0);
 
 	// #8: Guest can not create a new L2 with an entry which point to another page table with a writable access permission
+	++t_id;
+
 	va = (va_base | (uint32_t) 0x160000);
 
 	pa = va2pa(va);
 
-	ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
+
+	expect(t_id, "allocate a writable section", SUCCESS, res);
 
 	desc = ((pstart & 0xff000000) | (1 << 23) | 0x32);
 
@@ -352,7 +356,7 @@ void test_l2_create()
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L2_PT, pa, 0, 0);
 
-	expect(++t_id,
+	expect(t_id,
 	       "create a new L2 with an entry which point to another page table with a writable  access permission",
 	       ERR_MMU_SANITY_CHECK_FAILED, res);
 
