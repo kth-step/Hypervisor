@@ -149,7 +149,7 @@ void memory_init()
 	 * Here hypervisor already runs in virtual address since boot.S, now just setup guests
 	 */
 
-	// We clear the memory are that contains the L2s that can be created in the 32KB are of slpt_va
+	// We clear the memory that contains the L2s that can be created in the 32KB of slpt_va
 	memset(slpt_va, 0, 0x8000);
 
 	memory_layout_entry *list =
@@ -356,7 +356,7 @@ void guests_init()
 	}
 
 	// END initialization of the MATER PAGE TABLE
-	// START initialization of the FIRST gest PT
+	// START initialization of the FIRST guest PT
 
 	// now the master page table is ready
 	// it contains
