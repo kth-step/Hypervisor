@@ -6,7 +6,7 @@
 #include "dmmu.h"
 
 //#define DEBUG_PG_CONTENT
-#define DEBUG_L1_PG_TYPE
+//#define DEBUG_L1_PG_TYPE
 /*
  * Function prototypes
  */
@@ -264,7 +264,7 @@ void guests_init()
 	for (i = 0; i < guests_db.count; i++) {
 
 		printf("Guest_%d: PA=%x+%x VA=%x FWSIZE=%x\n", i,
-		       // initial phisical address of the guest
+		       // initial physical address of the guest
 		       guests_db.guests[i].pstart,
 		       // size in bytes of the guest
 		       guests_db.guests[i].psize,
@@ -281,7 +281,7 @@ void guests_init()
 	vm_0.config->firmware = get_guest(guest++);
 
 	curr_vm->config->pa_initial_l2_offset +=
-	    curr_vm->config->firmware->psize;
+	    curr_vm->config->firmware->psize - 0x700000;
 
 //  linux_init();
 
@@ -343,6 +343,7 @@ void guests_init()
 //    dump_mmu(flpt_va); // DEBUG
 
 	// We pin the L2s that can be created in the 32KB are of slpt_va
+
 	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
 
 	for (i = 0; i * 4096 < 0x8000; i++) {
@@ -415,6 +416,8 @@ void guests_init()
 
 #else				/* 
 				 */
+	printf("I reached this point");
+
 	attrs = 0x12;		// 0b1--10
 	attrs |= MMU_AP_USER_RW << MMU_SECTION_AP_SHIFT;
 
