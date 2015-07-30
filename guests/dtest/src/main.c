@@ -768,11 +768,11 @@ void test_l2_unmap_pt()
 	attrs |= MMU_AP_USER_RW << MMU_PT_AP_SHIFT;
 
 	// Creating an L2 to map
-	va = (va_base | (uint32_t) 0x100000);
+	va = (va_base | (uint32_t) 0x300000);
 
 	pa = va2pa(va);
 
-	pga = va2pa(va_base | (uint32_t) 0x300000);
+	pga = va2pa(va_base | (uint32_t) 0x400000);
 
 	ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
 
