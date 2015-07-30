@@ -82,5 +82,7 @@ hc_config minimal_config = {
 
 	.reserved_va_for_pt_access_start = 0x0,
 	// Offset respect the initial pa of the guest
-	.pa_initial_l1_offset = 0x00200000	// Initial address + 2MB
+	.pa_initial_l1_offset = 0x00200000,	// Initial address + 2MB
+	.always_cached_offset = 0x00200000,
+	.always_cached_size = 0x00100000
 };
