@@ -427,11 +427,11 @@ void test_l1_pt_map()
 	attrs |= MMU_AP_USER_RW << MMU_PT_AP_SHIFT;
 
 	// Creating an L2 to map
-	va = (va_base | (uint32_t) 0x170000);
+	va = (va_base + (uint32_t) 0x300000);
 
 	pa = va2pa(va);
 
-	desc = (pa & 0xffff0000) | 0x22;	// self referencing with read-only access permission
+	desc = (pa & 0xffff0000) | 0x22 | 0x8;	// self referencing with read-only access permission
 	for (j = 0; j < 1024; j++)
 
 		l2[j] = ((uint32_t) desc);
@@ -485,7 +485,7 @@ void test_l1_pt_map()
 	// This test should fail, because PXN is enabled
 	attrs = 0x24;
 
-	va = (va_base | (uint32_t) 0x170000);
+	va = (va_base | (uint32_t) 0x300000);
 
 	pa = va2pa(va);
 
@@ -499,7 +499,7 @@ void test_l1_pt_map()
 	// This test should fail, because guest can not map an L2 in a given entry two times in row
 	attrs = 0x20;
 
-	va = (va_base | (uint32_t) 0x170000);
+	va = (va_base | (uint32_t) 0x300000);
 
 	pa = va2pa(va);
 
