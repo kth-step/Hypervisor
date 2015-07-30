@@ -129,7 +129,7 @@ void test_unmap_l1_entry()
 
 	expect(++t_id, "Unamap of a reserved va", ERR_MMU_RESERVED_VA, res);
 
-	// #3: Unmapping 0xc0200000 is ok if this test is executed after the l1_map_section test, otherwise it has no effect
+	// #2: Unmapping 0xc0200000 is ok if this test is executed after the l1_map_section test, otherwise it has no effect
 	va = (va_base + 0x200000);
 
 	pa = va2pa(va_base);
@@ -140,17 +140,21 @@ void test_unmap_l1_entry()
 	attrs =
 	    (attrs & (~0x10)) | 0xC | (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
 
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+
+	expect(++t_id, "Unmapping a valid writable page", SUCCESS, res);
+
+	// #3: Remap the section
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
 
 	expect(++t_id, "Mapping a valid writable page", SUCCESS, res);
 
+	// #4: Unmapping 0xc0200000
 	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
 
-	expect(t_id, "Unmapping a valid writable page", SUCCESS, res);
+	expect(++t_id, "Unmapping a valid writable page", SUCCESS, res);
 
-	// #2: Unmapping 0xc0200000 has no effect, since this page is unmapped
-	va = (va_base + 0x200000);
-
+	// #5: Unmapping 0xc0200000 has no effect, since this page is unmapped
 	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
 
 	expect(++t_id, "Unamaping an not mapped entry",
