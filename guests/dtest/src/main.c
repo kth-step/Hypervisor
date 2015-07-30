@@ -1061,7 +1061,7 @@ void test_l1_create_empty_l1()
 	attrs =
 	    (attrs & (~0x10)) | 0xC | (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
 
-	va = (va_base + 0x400000);
+	va = (va_base + 0x300000);
 
 	pa = va2pa(va);
 
