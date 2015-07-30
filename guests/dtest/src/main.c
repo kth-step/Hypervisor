@@ -1111,7 +1111,7 @@ void test_l1_create_and_switch_l1()
 	attrs =
 	    (attrs & (~0x10)) | 0xC | (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
 
-	va = (va_base + 0x300000);
+	va = (va_base + 0x400000);
 
 	pa = va2pa(va);
 
@@ -1128,7 +1128,7 @@ void test_l1_create_and_switch_l1()
 	attrs =
 	    (attrs & (~0x10)) | 0xC | (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
 
-	va = (va_base + 0x400000);
+	va = (va_base + 0x300000);
 
 	pa = va2pa(va);
 
@@ -1164,7 +1164,7 @@ void test_l1_create_and_switch_l1()
 	expect(++t_id, "Successful switching to the new L1", SUCCESS, res);
 
 	// trying to read the content of the modified page under the new page table
-	va = (va_base + 0x300000);
+	va = (va_base + 0x400000);
 
 	pa = va2pa(va);
 
