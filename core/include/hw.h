@@ -11,7 +11,6 @@
 /* panic */
 #define panic(msg) panic_(msg, __FILE__, __LINE__)
 extern void panic_(char *, char *, int);
-
 extern void printf();
 
-#endif	/*_HW_H_*/
+#endif /*_HW_H_*/

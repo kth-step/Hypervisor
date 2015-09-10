@@ -36,5 +36,4 @@
 #define COP_CACHE_TYPE "c0, c0, 1"
 
 #define COP_CONTEXT_ID_REGISTER			"c13, c0, 1"
-#endif				/* 
-				 */
+#endif

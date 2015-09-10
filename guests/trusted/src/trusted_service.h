@@ -9,29 +9,20 @@
 #define TRUSTED_SERVICE_H_
 
 typedef struct hyperargs_ {
-
 	char *source;
-
 	char *dest;
-
 } hyperargs;
 
 typedef struct trusted_args_contract_ {
-
 	char contract[50000];
-
 	int *success;
-
 } TrustedContractArgs;
 
 typedef struct trusted_args_sign_ {
-
 //      char signature[128];
 	char *contract;		//[50000];
 	char *modulus;
-
 	int *success;
-
 	char *signature;	//TODO remove only for testing
 } TrustedSignArgs;
 

@@ -21,15 +21,10 @@ typedef enum cpu_model_ {
 
 /* memory layout */
 typedef struct {
-
 	uint32_t page_start;
-
 	uint32_t page_count;
-
 	uint32_t type;
-
 	uint32_t flags;
-
 } memory_layout_entry;
 
 typedef enum memory_layout_type_ {
@@ -38,12 +33,10 @@ typedef enum memory_layout_type_ {
 	MLT_HYPER_ROM,
 	MLT_USER_RAM,
 	MLT_USER_ROM,
-
 	MLT_TRUSTED_RAM,
 	MLT_IO_RW_REG,
 	MLT_IO_RO_REG,
 	MLT_IO_HYP_REG,
-
 } memory_layout_type;
 
 typedef enum memory_layout_flags_ {

@@ -57,5 +57,4 @@
 #define COP_CONTEXT_ID_REGISTER			"c13, c0, 1"
 #define COP_SOFTWARE_THREAD_ID_USER_R	"c13, c0, 3"
 
-#endif				/* 
-				 */
+#endif

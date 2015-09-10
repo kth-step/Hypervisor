@@ -12,10 +12,8 @@
 void pr_hex();
 
 int aesEncrypt(char *sessionKey, char *data, char *encrypted);
-
 int aesDecrypt(unsigned char *sessionKey, unsigned char *data,
 	       char *decrypted, int nbytes);
-
 void generateAESKey(char *AES);
 
 #endif				/* AESCBC_H_ */

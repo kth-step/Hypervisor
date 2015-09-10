@@ -9,48 +9,35 @@ static return_value default_catcher(uint32_t r0, uint32_t r1, uint32_t r2);
 
 /* callback functions */
 cpu_callback family_callback_inst_abort = default_catcher;
-
 cpu_callback family_callback_data_abort = default_catcher;
 
 cpu_callback family_callback_swi = default_catcher;
-
 cpu_callback family_callback_undef = default_catcher;
 
 void cpu_get_type(cpu_type * type, cpu_model * model)
 {
-
 	*type = CT_ARM;
-
 	*model = CM_ARMv7a;
-
 }
 
 void cpu_set_abort_handler(cpu_callback inst, cpu_callback data)
 {
-
 	family_callback_inst_abort = inst;
-
 	family_callback_data_abort = data;
-
 }
 
 void cpu_set_swi_handler(cpu_callback handler)
 {
-
 	family_callback_swi = handler;
-
 }
 
 void cpu_set_undef_handler(cpu_callback handler)
 {
-
 	family_callback_undef = handler;
-
 }
 
 void cpu_break_to_debugger()
 {
-
 	/* TODO */
 }
 
@@ -60,47 +47,32 @@ void cpu_break_to_debugger()
  */
 static return_value default_catcher(uint32_t r0, uint32_t r1, uint32_t r2)
 {
-
 	uint32_t i;
-
 	context *t = cpu_context_current_get();
 
 	printf("\nDC %x_%x_%x\n", r0, r1, r2);
-
 	if (t) {
-
 		for (i = 0; i < 16; i++)
-
 			printf("R%d=%x\t", i, t->reg[i]);
-
 		printf("PSR=%x\n\n", t->psr);
-
 	}
 
 	/* no point continuing ? */
-	for (;;)
-		 ;
-
+	for (;;) ;
 	return RV_OK;
-
 }
 
 void cpu_init()
 {
-
 	/* Invalidate and enable cache */
 	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
 	mem_cache_set_enable(TRUE);
-
 #if 1
 	//Setup page table pointer 1
 	/* PTWs cacheable, inner WB not shareable, outer WB not shareable */
 	uint32_t pt = (uint32_t) GET_PHYS(__hyper_pt_start__);
-
 	uint32_t ttb_flags = (pt | TTB_IRGN_WB | TTB_RGN_OC_WB);
-
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE1, ttb_flags);
-
 	/*The following is Linux specific configuration on armV7,
 	 *These configuration are used to identify what kind of memory
 	 *the address space is by looking at the page attributes */
@@ -136,7 +108,6 @@ void cpu_init()
 	uint32_t prrr = 0xFF0a81A8;	// Primary region remap regiser
 	uint32_t nmrr = 0x40E040e0;	// Normal memory remap register
 	COP_WRITE(COP_SYSTEM, COP_MEMORY_REMAP_PRRR, prrr);
-
 	COP_WRITE(COP_SYSTEM, COP_MEMORY_REMAP_NMRR, nmrr);
 
 	/*   AT
@@ -146,23 +117,14 @@ void cpu_init()
 	 *    1    0 110       0011 1100 .111 1101 < we want
 	 */
 	uint32_t clear = 0x0120c302;
-
 	uint32_t set = 0x10c03c7d;
-
 	uint32_t mmu_config;
-
 	COP_READ(COP_SYSTEM, COP_SYSTEM_CONTROL, mmu_config);
-
 	mmu_config &= (~clear);
-
 	mmu_config |= set;
-
 	/*Setting alignment fault with beagleboard crashes it */
 	//mmu_config |= CR_A; // Set Alignment fault checking
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_CONTROL, mmu_config);
-
 	mem_cache_set_enable(TRUE);
-
-#endif				/* 
-				 */
+#endif
 }
