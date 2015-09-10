@@ -255,7 +255,7 @@ void guests_init()
 	curr_vm = &vm_0;
 
 	printf("HV pagetable before guests initialization:\n");	// DEBUG
-//    dump_mmu(flpt_va); // DEBUG
+	//    dump_mmu(flpt_va); // DEBUG
 
 	/* show guest information */
 	printf("We have %d guests in physical memory area %x %x\n",
@@ -283,7 +283,7 @@ void guests_init()
 	curr_vm->config->pa_initial_l2_offset +=
 	    curr_vm->config->firmware->psize;
 
-//  linux_init();
+	//  linux_init();
 
 #else				/* 
 				 */
@@ -340,7 +340,7 @@ void guests_init()
 	memory_commit();
 
 	printf("HV pagetable after guests initialization:\n");	// DEBUG
-//    dump_mmu(flpt_va); // DEBUG
+	//    dump_mmu(flpt_va); // DEBUG
 
 	// We pin the L2s that can be created in the 32KB are of slpt_va
 	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
@@ -381,7 +381,7 @@ void guests_init()
 	memcpy(guest_pt_va, flpt_va, 1024 * 16);
 
 	printf("vm_0 pagetable:\n");	// DEBUG    
-//    dump_mmu(guest_pt_va); // DEBUG
+	//    dump_mmu(guest_pt_va); // DEBUG
 
 	/* activate the guest page table */
 	memory_commit();
@@ -435,7 +435,7 @@ void guests_init()
 #endif				/* 
 				 */
 	printf("vm_0 pagetable after initialization:\n");	// DEBUG
-//    dump_mmu(guest_pt_va); // DEBUG
+	//    dump_mmu(guest_pt_va); // DEBUG
 
 	mem_mmu_tlb_invalidate_all(TRUE, TRUE);
 
