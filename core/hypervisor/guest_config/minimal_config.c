@@ -13,25 +13,25 @@
  * Guest mode access to certain domains
  * ********************************************************/
 
-#define HC_DOMAC_ALL \
-    ((1 << (2 * HC_DOM_DEFAULT)) | \
-     (1 << (2 * HC_DOM_TASK)) | \
-     (1 << (2 * HC_DOM_KERNEL)) | \
-(1 << (2 * HC_DOM_TRUSTED)))
+#define HC_DOMAC_ALL				\
+  ((1 << (2 * HC_DOM_DEFAULT)) |		\
+   (1 << (2 * HC_DOM_TASK)) |			\
+   (1 << (2 * HC_DOM_KERNEL)) |			\
+   (1 << (2 * HC_DOM_TRUSTED)))
 
-#define HC_DOMAC_KERNEL  \
-    ((1 << (2 * HC_DOM_DEFAULT)) | \
-(1 << (2 * HC_DOM_KERNEL)))
+#define HC_DOMAC_KERNEL				\
+  ((1 << (2 * HC_DOM_DEFAULT)) |		\
+   (1 << (2 * HC_DOM_KERNEL)))
 
-#define HC_DOMAC_TRUSTED \
-    ((1 << (2 * HC_DOM_DEFAULT)) | \
-(1 << (2 * HC_DOM_TRUSTED)))
+#define HC_DOMAC_TRUSTED			\
+  ((1 << (2 * HC_DOM_DEFAULT)) |		\
+   (1 << (2 * HC_DOM_TRUSTED)))
 
 #define HC_DOMAC_INTERRUPT HC_DOMAC_ALL
 
-#define HC_DOMAC_TASK \
-    ((1 << (2 * HC_DOM_DEFAULT)) | \
-(1 << (2 * HC_DOM_TASK)))
+#define HC_DOMAC_TASK				\
+  ((1 << (2 * HC_DOM_DEFAULT)) |		\
+   (1 << (2 * HC_DOM_TASK)))
 
 /*************************************************************/
 
@@ -40,13 +40,13 @@
  */
 #define HC_CAP_TASK 0		// No capabilities
 
-#define HC_CAP_INTERRUPT \
-    (HC_CAP_GET_MODE_CONTEXT | \
-HC_CAP_SET_MODE_CONTEXT)
+#define HC_CAP_INTERRUPT			\
+  (HC_CAP_GET_MODE_CONTEXT |			\
+   HC_CAP_SET_MODE_CONTEXT)
 
-#define HC_CAP_KERNEL \
-    (HC_CAP_SET_MODE_CONTEXT | \
-HC_CAP_GET_MODE_CONTEXT)
+#define HC_CAP_KERNEL				\
+  (HC_CAP_SET_MODE_CONTEXT |			\
+   HC_CAP_GET_MODE_CONTEXT)
 
 #define HC_CAP_TRUSTED 0	// No capabilities
 
@@ -60,11 +60,8 @@ static const hc_guest_mode gm_trusted = {
 	.name = "trusted",
 	.domain_ac = HC_DOMAC_TRUSTED,
 }, gm_kernel = {
-
 .name = "kernel",.domain_ac = HC_DOMAC_KERNEL,}, gm_task = {
-
 .name = "application",.domain_ac = HC_DOMAC_TASK,}, gm_interrupt = {
-
 .name = "interrupt",.domain_ac = HC_DOMAC_INTERRUPT,}
 
 ;
@@ -74,12 +71,9 @@ static const hc_guest_mode gm_trusted = {
  */
 
 hc_config minimal_config = {
-
 	// offset in the VA respect to the initial va of the guest
 	.guest_entry_offset = 0,
-	.guest_modes = {
-			&gm_trusted, &gm_kernel, &gm_task, &gm_interrupt},
-
+	.guest_modes = {&gm_trusted, &gm_kernel, &gm_task, &gm_interrupt},
 	.reserved_va_for_pt_access_start = 0x0,
 	// Offset respect the initial pa of the guest
 	.pa_initial_l1_offset = 0x00200000,	// Initial address + 2MB

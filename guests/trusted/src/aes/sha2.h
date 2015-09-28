@@ -45,16 +45,13 @@
 #define SHA_384
 #define SHA_512
 #define NEED_UINT_64T
-#endif				/* 
-				 */
+#endif
 
 #include "brg_types.h"
 
 #if defined(__cplusplus)
 extern "C" {
-
-#endif				/* 
-				 */
+#endif
 
 /* Note that the following function prototypes are the same */
 /* for both the bit and byte oriented implementations.  But */
@@ -72,11 +69,8 @@ extern "C" {
 
 	typedef struct {
 		uint_32t count[2];
-
 		uint_32t hash[8];
-
 		uint_32t wbuf[16];
-
 	} sha256_ctx;
 
 	typedef sha256_ctx sha224_ctx;
@@ -84,20 +78,15 @@ extern "C" {
 	VOID_RETURN sha256_compile(sha256_ctx ctx[1]);
 
 	VOID_RETURN sha224_begin(sha224_ctx ctx[1]);
-
 #define sha224_hash sha256_hash
 	VOID_RETURN sha224_end(unsigned char hval[], sha224_ctx ctx[1]);
-
 	VOID_RETURN sha224(unsigned char hval[], const unsigned char data[],
 			   unsigned long len);
 
 	VOID_RETURN sha256_begin(sha256_ctx ctx[1]);
-
-	VOID_RETURN sha256_hash(const unsigned char data[],
-				unsigned long len, sha256_ctx ctx[1]);
-
+	VOID_RETURN sha256_hash(const unsigned char data[], unsigned long len,
+				sha256_ctx ctx[1]);
 	VOID_RETURN sha256_end(unsigned char hval[], sha256_ctx ctx[1]);
-
 	VOID_RETURN sha256(unsigned char hval[], const unsigned char data[],
 			   unsigned long len);
 
@@ -106,17 +95,13 @@ extern "C" {
 	typedef struct {
 		union {
 			sha256_ctx ctx256[1];
-
 		} uu[1];
-
 		uint_32t sha2_len;
-
 	} sha2_ctx;
 
 #define SHA2_MAX_DIGEST_SIZE    SHA256_DIGEST_SIZE
 
-#else				/* 
-				 */
+#else
 
 #define SHA384_DIGEST_SIZE  48
 #define SHA384_BLOCK_SIZE  128
@@ -128,11 +113,8 @@ extern "C" {
 
 	typedef struct {
 		uint_64t count[2];
-
 		uint_64t hash[8];
-
 		uint_64t wbuf[16];
-
 	} sha512_ctx;
 
 	typedef sha512_ctx sha384_ctx;
@@ -140,51 +122,36 @@ extern "C" {
 	typedef struct {
 		union {
 			sha256_ctx ctx256[1];
-
 			sha512_ctx ctx512[1];
-
 		} uu[1];
-
 		uint_32t sha2_len;
-
 	} sha2_ctx;
 
 	VOID_RETURN sha512_compile(sha512_ctx ctx[1]);
 
 	VOID_RETURN sha384_begin(sha384_ctx ctx[1]);
-
 #define sha384_hash sha512_hash
 	VOID_RETURN sha384_end(unsigned char hval[], sha384_ctx ctx[1]);
-
 	VOID_RETURN sha384(unsigned char hval[], const unsigned char data[],
 			   unsigned long len);
 
 	VOID_RETURN sha512_begin(sha512_ctx ctx[1]);
-
-	VOID_RETURN sha512_hash(const unsigned char data[],
-				unsigned long len, sha512_ctx ctx[1]);
-
+	VOID_RETURN sha512_hash(const unsigned char data[], unsigned long len,
+				sha512_ctx ctx[1]);
 	VOID_RETURN sha512_end(unsigned char hval[], sha512_ctx ctx[1]);
-
 	VOID_RETURN sha512(unsigned char hval[], const unsigned char data[],
 			   unsigned long len);
 
 	INT_RETURN sha2_begin(unsigned long size, sha2_ctx ctx[1]);
-
 	VOID_RETURN sha2_hash(const unsigned char data[], unsigned long len,
 			      sha2_ctx ctx[1]);
-
 	VOID_RETURN sha2_end(unsigned char hval[], sha2_ctx ctx[1]);
-
 	INT_RETURN sha2(unsigned char hval[], unsigned long size,
 			const unsigned char data[], unsigned long len);
 
-#endif				/* 
-				 */
+#endif
 
 #if defined(__cplusplus)
 }
-#endif				/* 
-				 */
-#endif				/* 
-				 */
+#endif
+#endif

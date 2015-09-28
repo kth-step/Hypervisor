@@ -12,13 +12,11 @@
 
 #ifndef HAL_PHYS_START
 #error "HAL_PHYS_START was not defined"
-#endif				/* 
-				 */
+#endif
 
 #ifndef HAL_VIRT_START
 #error "HAL_VIRT_START was not defined"
-#endif				/* 
-				 */
+#endif
 
 #define HAL_OFFSET ((HAL_PHYS_START)-(HAL_VIRT_START))
 
@@ -49,26 +47,24 @@
 /*	asm volatile("mrc " cop ", 0 , %0, " func : "=r" (reg)) */
 
 /* these also set op1 which is otherwise 0 */
-#define COP_WRITE2(cop, op1, func, reg) \
-asm volatile ("mcr " cop "," op1 ", %0," func::"r"(reg))
+#define COP_WRITE2(cop, op1, func, reg)				\
+  asm volatile("mcr " cop "," op1 ", %0," func :: "r" (reg))
 
-#define COP_READ2(cop, op1, func, reg) \
- asm volatile ("mrc " cop "," op1 ", %0, " func:"=r"(reg))
+#define COP_READ2(cop, op1, func, reg)				\
+  asm volatile("mrc " cop "," op1 ", %0, " func : "=r" (reg))
 
 #if ARM_ARCH >= 7
 #define isb() __asm__ __volatile__ ("isb" : : : "memory")
 #define dsb() __asm__ __volatile__ ("dsb" : : : "memory")
 #define dmb() __asm__ __volatile__ ("dmb" : : : "memory")
 
-#else				/* 
-				 */
+#else
 #define dmb()			/* empty */
 #define isb()			/* empty */
-#define dsb() __asm__ __volatile__ ("mcr p15, 0, %0, c7, c10, 4" \
-::"r"(0):"memory")
+#define dsb() __asm__ __volatile__ ("mcr p15, 0, %0, c7, c10, 4"	\
+				    : : "r" (0) : "memory")
 
-#endif				/* 
-				 */
+#endif
 
 #ifndef __ASSEMBLER__
 
@@ -87,28 +83,20 @@ typedef enum {
 	V_PREFETCH_ABORT,
 	V_DATA_ABORT,
 	V_NONE,
-
 	V_IRQ,
 	V_FIQ,
 	V_ARM_SYSCALL,
 	V_RET_FAST_SYSCALL,
-
 	V_RET_FROM_EXCEPTION,
 } interrupt_vector;
 
 /* CPU context */
 typedef struct context_ {
-
 	uint32_t reg[13];
-
 	uint32_t sp;
-
 	uint32_t lr;
-
 	uint32_t pc;
-
 	uint32_t psr;
-
 } context;
 
 #endif				/* ! __ASSEMBLER__ */

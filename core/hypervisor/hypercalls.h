@@ -3,63 +3,55 @@
 
 #ifndef __ASSEMBLER__
 #include "hyper.h"
-#endif				/* 
-				 */
+#endif
 
 /*Function prototypes*/
 
 void hyper_panic(char *msg, uint32_t exit_code);
-
 void hypercall_num_error(uint32_t hypercall_num);
 
 void change_guest_mode(uint32_t mode);
 
 void hypercall_guest_init();
-
 void hypercall_interrupt_set(uint32_t interrupt, uint32_t op);
-
 void hypercall_end_interrupt();
 
 void hypercall_set_tls(uint32_t thread_id);
 
 void hypercall_restore_linux_regs(uint32_t return_value, BOOL syscall);
-
 void hypercall_restore_regs(uint32_t * regs);
 
 #include "hyp_cache.h"
 #include "hyp_mmu.h"
 
 void hypercall_rpc(uint32_t rpc_op, void *arg);
-
 void hypercall_end_rpc();
-
 /***************************/
 
 /**************
-// ASM macros
-**************/
+ // ASM macros
+ **************/
 
 #define STR(x) #x
 #define HYPERCALL_NUM(n) "#"STR(n)
 
-#define ISSUE_HYPERCALL(num) \
-asm volatile (\
- "SWI " HYPERCALL_NUM((num)) "         \n\t" \
-);
+#define ISSUE_HYPERCALL(num)					\
+  asm volatile (						\
+		"SWI " HYPERCALL_NUM((num)) "         \n\t"	\
+		 );
 
-#define ISSUE_HYPERCALL_REG1(num, reg0) \
-asm volatile ("mov R0, %0 			\n\t" \
-	      "SWI " HYPERCALL_NUM((num)) "\n\t" \
-	      :: "r"(reg0):"memory", "r0" \
-);
+#define ISSUE_HYPERCALL_REG1(num, reg0)			\
+  asm volatile ("mov R0, %0 			\n\t"  	\
+		"SWI " HYPERCALL_NUM((num)) "\n\t"	\
+		::"r" (reg0) : "memory", "r0"		\
+		);
 
-#define ISSUE_HYPERCALL_REG2(num, reg0, reg1) \
-asm volatile ("mov R0, %0 			\n\t" \
-	      "mov R1, %1			\n\t" \
-	      "SWI " HYPERCALL_NUM((num)) \
-	      "\n\t" \
-::"r"(reg0), "r"(reg1):"memory", "r0", "r1" \
-);
+#define ISSUE_HYPERCALL_REG2(num, reg0, reg1)			\
+  asm volatile ("mov R0, %0 			\n\t"		\
+		"mov R1, %1			\n\t"		\
+		"SWI " HYPERCALL_NUM((num)) "\n\t"		\
+		::"r" (reg0), "r" (reg1) : "memory", "r0", "r1" \
+		);
 
 /*
  * Hypercalls

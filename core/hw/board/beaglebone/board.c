@@ -5,5 +5,4 @@
 
 void board_init()
 {
-
 }

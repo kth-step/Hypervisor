@@ -7,22 +7,21 @@
 #define HYPERCALL_NUM(n) "#"STR(n)
 
 #define ISSUE_HYPERCALL(num) \
-asm volatile (\
- "SWI " HYPERCALL_NUM((num)) "         \n\t" \
-);
+	asm volatile ( \
+		"SWI " HYPERCALL_NUM((num)) "         \n\t" \
+	);
 
 #define ISSUE_HYPERCALL_REG1(num, reg0) \
-asm volatile ("mov R0, %0 			\n\t" \
-	      "SWI " HYPERCALL_NUM((num)) "\n\t" \
-	      :: "r"(reg0):"memory", "r0" \
+		asm volatile ("mov R0, %0 			\n\t"  	\
+					  "SWI " HYPERCALL_NUM((num)) "\n\t" \
+					  ::"r" (reg0) : "memory", "r0" \
 );
 
 #define ISSUE_HYPERCALL_REG2(num, reg0, reg1) \
-asm volatile ("mov R0, %0 			\n\t" \
-	      "mov R1, %1			\n\t" \
-	      "SWI " HYPERCALL_NUM((num)) \
-	      "\n\t" \
-::"r"(reg0), "r"(reg1):"memory", "r0", "r1" \
+		asm volatile ("mov R0, %0 			\n\t"  	\
+					  "mov R1, %1			\n\t"   \
+					  "SWI " HYPERCALL_NUM((num)) "\n\t" \
+					  ::"r" (reg0), "r" (reg1) : "memory", "r0", "r1" \
 );
 
 /*

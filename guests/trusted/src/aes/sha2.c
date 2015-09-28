@@ -770,4 +770,3 @@ INT_RETURN sha2(unsigned char hval[], unsigned long size,
 #if defined(__cplusplus)
 }
 #endif
-

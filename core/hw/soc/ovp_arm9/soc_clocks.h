@@ -5,15 +5,10 @@
 #define POWERSAVING_BASE 0xffff4000
 
 typedef struct {
-
 	uint32_t cr;
-
 	uint32_t pcer;
-
 	uint32_t pcdr;
-
 	uint32_t pcsr;
-
 } volatile powersaving_registers;
 
 extern void soc_clocks_init();

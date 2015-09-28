@@ -20,37 +20,21 @@
 #define AIC_IRQ_NUM_IRQ2 18
 
 typedef struct {
-
 	uint32_t smr[32];
-
 	uint32_t svr[32];
-
 	uint32_t ivr;
-
 	uint32_t fvr;
-
 	uint32_t isr;
-
 	uint32_t ipr;
-
 	uint32_t imr;
-
 	uint32_t cisr;
-
 	uint32_t unused2[2];
-
 	uint32_t iecr;
-
 	uint32_t idcr;
-
 	uint32_t iccr;
-
 	uint32_t iscr;
-
 	uint32_t eoicr;
-
 	uint32_t spu;
-
 } volatile aic_registers;
 
 extern void soc_interrupt_set_configuration(int number, int priority,

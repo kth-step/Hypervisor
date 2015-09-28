@@ -136,43 +136,23 @@
 void pr_hex(const unsigned char *bytes, int nbytes, int compact)
 /* Print bytes in hex format + newline */
 {
-
 	int i;
-
 	int k = 0;
-
 	if (compact) {
-
 		for (i = 0; i < nbytes; i++) {
-
 			printf("%2", bytes[i]);
-
 		}
-
-	}
-
-	else {
-
+	} else {
 		for (i = 0; i < nbytes; i++) {
-
 			printf("%2 ", bytes[i]);
-
 			k++;
-
 			if (k >= 16) {
-
 				printf("\n");
-
 				k = 0;
-
 			}
-
 		}
-
 	}
-
 	printf("\n");
-
 }
 
 //  A Pseudo Random Number Generator (PRNG) used for the
@@ -185,65 +165,43 @@ void pr_hex(const unsigned char *bytes, int nbytes, int compact)
 //      overkill for IV?
 void fillrand(unsigned char *buf, const int len)
 {
-
 //XXX   srand(0);
 	srand_mwc();		// Automatically generates a seed, must be called once before calling rand_mwc()
 	int i;
-
 	for (i = 0; i < len; i++) {
-
 		buf[i] = (rand_mwc() % 256);
-
 	}
-
 	printf("\nRandom generated IV for AES128-CBC:\n");
-
 	pr_hex(buf, len, 0);
 
 }
 
 void generateAESKey(char *AES)
 {
-
 //XXX   srand(0);
 	int i;
-
 	int tmp = 0;
-
 	for (i = 0; i < 32; i++) {
-
 		tmp = rand_mwc() % 16;
-
 		if (tmp < 10) {
-
 			AES[i] = tmp + 48;	//ascii table numbers
-		}
-
-		else {
-
+		} else {
 			AES[i] = tmp + 55;
-
 		}
-
 	}
 
 	pr_hex(AES, 32, 0);
-
 //      AES[32] = '\0';
 }
 
 int encfile(aes_encrypt_ctx ctx[1], unsigned char *encrypted,
 	    unsigned char *message, unsigned int nbytes)
 {
-
 	unsigned char dbuf[3 * BLOCK_LEN];
-
 	unsigned long i, len, wlen = BLOCK_LEN;
 
 	int readBlockPointer = 0;
-
 	int writeBlockPointer = 0;
-
 	// When ciphertext stealing is used, we three ciphertext blocks so
 	// we use a buffer that is three times the block length.  The buffer
 	// pointers b1, b2 and b3 point to the buffer positions of three
@@ -257,42 +215,30 @@ int encfile(aes_encrypt_ctx ctx[1], unsigned char *encrypted,
 
 	// read the first file block
 	if (BLOCK_LEN > nbytes)
-
 		len = nbytes;
-
 	else
-
 		len = BLOCK_LEN;
 
 	memcpy((char *)dbuf + BLOCK_LEN, message, len);	//read
 	readBlockPointer += BLOCK_LEN;
 
-	if (len < BLOCK_LEN)
-	{			// if the file length is less than one block
+	if (len < BLOCK_LEN) {	// if the file length is less than one block
 
 		// xor the file bytes with the IV bytes
 		for (i = 0; i < len; ++i)
-
 			dbuf[i + BLOCK_LEN] ^= dbuf[i];
 
 		// encrypt the top 16 bytes of the buffer
 		aes_encrypt(dbuf + len, dbuf + len, ctx);
 
 		len += BLOCK_LEN;
-
 		// write the IV and the encrypted file bytes
 
 		memcpy(encrypted, dbuf, len);
-
 		writeBlockPointer += BLOCK_LEN;
-
 		return OK;
-
-	}
-
-	else			// if the file length is more 16 bytes
+	} else			// if the file length is more 16 bytes
 	{
-
 		unsigned char *b1 = dbuf, *b2 = b1 + BLOCK_LEN, *b3 =
 		    b2 + BLOCK_LEN, *bt;
 
@@ -301,17 +247,13 @@ int encfile(aes_encrypt_ctx ctx[1], unsigned char *encrypted,
 		memcpy(encrypted, dbuf, BLOCK_LEN);	//write
 		writeBlockPointer += BLOCK_LEN;
 
-		for (;;)
-		{
-
+		for (;;) {
 			// read the next block to see if ciphertext stealing is needed
 			//      len = (unsigned long)fread((char*)b3, 1, BLOCK_LEN, fin);
 
 			if (BLOCK_LEN > (nbytes - readBlockPointer))	//strlen(dragons2 + readBlockPointer))
 				len = nbytes - readBlockPointer;
-
 			else
-
 				len = BLOCK_LEN;
 
 			memcpy(b3, message + readBlockPointer, len);	//read
@@ -319,7 +261,6 @@ int encfile(aes_encrypt_ctx ctx[1], unsigned char *encrypted,
 
 			// do CBC chaining prior to encryption for current block (in b2)
 			for (i = 0; i < BLOCK_LEN; ++i)
-
 				b1[i] ^= b2[i];
 
 			// encrypt the block (now in b1)
@@ -333,12 +274,10 @@ int encfile(aes_encrypt_ctx ctx[1], unsigned char *encrypted,
 
 				// xor ciphertext into last block
 				for (i = 0; i < len; ++i)
-
 					b3[i] ^= b1[i];
 
 				// move 'stolen' ciphertext into last block
 				for (i = len; i < BLOCK_LEN; ++i)
-
 					b3[i] = b1[i];
 
 				// encrypt this block
@@ -348,26 +287,19 @@ int encfile(aes_encrypt_ctx ctx[1], unsigned char *encrypted,
 
 				memcpy(encrypted + writeBlockPointer, b3, BLOCK_LEN);	//write
 				writeBlockPointer += BLOCK_LEN;
-
 			}
-
 			// write the encrypted block
 
 			memcpy(encrypted + writeBlockPointer, b1, wlen);
-
 			writeBlockPointer += BLOCK_LEN;
 
 			if (len != BLOCK_LEN)
-
 				return OK;
 
 			// advance the buffer pointers
 			bt = b3, b3 = b2, b2 = b1, b1 = bt;
-
 		}
-
 	}
-
 }
 
 //TODO check if the memcopy is correct here, mistake before that i forgot that string one extra byte to hold null termination of the string
@@ -376,11 +308,8 @@ int decfile(aes_decrypt_ctx ctx[1], unsigned char *encrypted, char *decrypted,
 {
 
 	unsigned char dbuf[3 * BLOCK_LEN], buf[BLOCK_LEN];
-
 	unsigned long i, len, wlen = BLOCK_LEN;
-
 	int readBlockPointer = 0;
-
 	int writeBlockPointer = 0;
 
 	// When ciphertext stealing is used, we three ciphertext blocks so
@@ -391,61 +320,43 @@ int decfile(aes_decrypt_ctx ctx[1], unsigned char *encrypted, char *decrypted,
 	// in b2.
 
 	if (BLOCK_LEN > nbytes)
-
 		len = nbytes + BLOCK_LEN;
-
 	else
-
 		len = 2 * BLOCK_LEN;
 
 	memcpy((char *)dbuf, encrypted, len);
-
 	readBlockPointer += BLOCK_LEN * 2;
 
 	if (len < 2 * BLOCK_LEN)	// the original file is less than one block in length
 	{
-
 		len -= BLOCK_LEN;
-
 		// decrypt from position len to position len + BLOCK_LEN
 		aes_decrypt(dbuf + len, dbuf + len, ctx);
 
 		// undo the CBC chaining
 		for (i = 0; i < len; ++i)
-
 			dbuf[i] ^= dbuf[i + BLOCK_LEN];
 
 		// output the decrypted bytes
 
 		memcpy(decrypted, dbuf, len);
-
 		return OK;
-
-	}
-
-	else
-	{
+	} else {
 		unsigned char *b1 = dbuf, *b2 = b1 + BLOCK_LEN, *b3 =
 		    b2 + BLOCK_LEN, *bt;
 
 		for (;;)	// while some ciphertext remains, prepare to decrypt block b2
 		{
-
 			int nBytesLeft =
 			    nbytes - readBlockPointer - BLOCK_LEN +
 			    (BLOCK_LEN * 2);
-
 			if (nBytesLeft < BLOCK_LEN)
-
 				len = nBytesLeft;
-
 			else
-
 				len = BLOCK_LEN;
 
 			// read in the next block to see if ciphertext stealing is needed
 			memcpy(b3, encrypted + readBlockPointer, len);
-
 			readBlockPointer += BLOCK_LEN;
 
 			// decrypt the b2 block
@@ -453,29 +364,21 @@ int decfile(aes_decrypt_ctx ctx[1], unsigned char *encrypted, char *decrypted,
 
 			if (len == 0 || len == BLOCK_LEN)	// no ciphertext stealing
 			{
-
 				// unchain CBC using the previous ciphertext block in b1
 				for (i = 0; i < BLOCK_LEN; ++i)
-
 					buf[i] ^= b1[i];
-
-			}
-
-			else	// partial last block - use ciphertext stealing
+			} else	// partial last block - use ciphertext stealing
 			{
-
 				wlen = len;
 
 				// produce last 'len' bytes of plaintext by xoring with
 				// the lowest 'len' bytes of next block b3 - C[N-1]
 				for (i = 0; i < len; ++i)
-
 					buf[i] ^= b3[i];
 
 				// reconstruct the C[N-1] block in b3 by adding in the
 				// last (BLOCK_LEN - len) bytes of C[N-2] in b2
 				for (i = len; i < BLOCK_LEN; ++i)
-
 					b3[i] = buf[i];
 
 				// decrypt the C[N-1] block in b3
@@ -484,55 +387,43 @@ int decfile(aes_decrypt_ctx ctx[1], unsigned char *encrypted, char *decrypted,
 				// produce the last but one plaintext block by xoring with
 				// the last but two ciphertext block
 				for (i = 0; i < BLOCK_LEN; ++i)
-
 					b3[i] ^= b1[i];
 
 				// write decrypted plaintext blocks
 
 				memcpy(decrypted + writeBlockPointer, b3,
 				       BLOCK_LEN);
-
 				writeBlockPointer += BLOCK_LEN;
-
 			}
 
 			// write the decrypted plaintext block
 
 			memcpy(decrypted + writeBlockPointer, buf, wlen);
-
 			writeBlockPointer += BLOCK_LEN;
 
 			if (len != BLOCK_LEN)
-
 				return OK;
 
 			// advance the buffer pointers
 			bt = b1, b1 = b2, b2 = b3, b3 = bt;
-
 		}
-
 	}
-
 }
 
 int aesEncrypt(char *sessionKey, char *data, char *encrypted)
 {
 
 	char ch, key[32];
-
 	int i, by = 0, key_len, err = 0;
 
     /**The input to an encryption process must be binary data so we must convert the
      * string into bytes. After decryption we convert it back into a string*/
 
 	static unsigned char *message;
-
 	unsigned int nbytes = strlen(data);	//is this needed?
 
 	message = (unsigned char *)data;
-
 	message = malloc(nbytes);
-
 	memcpy(message, (unsigned char *)data, nbytes);
 
 	aes_init();
@@ -545,56 +436,33 @@ int aesEncrypt(char *sessionKey, char *data, char *encrypted)
 	{			// hence at most 64 hexadecimal digits
 		ch = toupper(*sessionKey++);	// process a hexadecimal digit
 		if (ch >= '0' && ch <= '9')
-
 			by = (by << 4) + ch - '0';
-
 		else if (ch >= 'A' && ch <= 'F')
-
 			by = (by << 4) + ch - 'A' + 10;
-
 		else		// error if not hexadecimal
 		{
-
 			printf("key must be in hexadecimal notation\n");
-
 			err = -1;
-
 			return err;
-
 		}
 
 		// store a key byte for each pair of hexadecimal digits
 		if (i++ & 1)
-
 			key[i / 2 - 1] = by & 0xff;
-
 	}
 
-	if (*sessionKey)
-	{
-
+	if (*sessionKey) {
 		printf("The key value is too long\n");
-
 		err = -2;
-
 		return err;
-
-	}
-
-	else if (i < 32 || (i & 15))
-	{
-
+	} else if (i < 32 || (i & 15)) {
 		printf
 		    ("The key length must be 32, 48 or 64 hexadecimal digits\n");
-
 		err = -3;
-
 		return err;
-
 	}
 
 	key_len = i / 2;
-
 	aes_encrypt_ctx ctx[1];
 
 	aes_encrypt_key((unsigned char *)key, key_len, ctx);
@@ -602,13 +470,9 @@ int aesEncrypt(char *sessionKey, char *data, char *encrypted)
 	err = encfile(ctx, encrypted, message, nbytes);
 
 	printf("\nHere is encrypted message in bytes:\n");
-
 	pr_hex(encrypted, nbytes, 0);
-
 	free(message);
-
 	return err;
-
 }
 
 //TODO compute nbytes urself
@@ -617,7 +481,6 @@ int aesDecrypt(unsigned char *sessionKey, unsigned char *data,
 {
 
 	char ch, key[32];
-
 	int i, by = 0, key_len, err = 0;
 
     /**The input to an encryption process must be binary data so we must convert the
@@ -630,58 +493,34 @@ int aesDecrypt(unsigned char *sessionKey, unsigned char *data,
 	{			// hence at most 64 hexadecimal digits
 		ch = toupper(*sessionKey++);	// process a hexadecimal digit
 		if (ch >= '0' && ch <= '9')
-
 			by = (by << 4) + ch - '0';
-
 		else if (ch >= 'A' && ch <= 'F')
-
 			by = (by << 4) + ch - 'A' + 10;
-
 		else		// error if not hexadecimal
 		{
-
 			printf("key must be in hexadecimal notation\n");
-
 			err = -2;
-
 			return err;
-
 		}
 
 		// store a key byte for each pair of hexadecimal digits
 		if (i++ & 1)
-
 			key[i / 2 - 1] = by & 0xff;
-
 	}
 
-	if (*sessionKey)
-	{
-
+	if (*sessionKey) {
 		printf("The key value is too long\n");
-
 		err = -3;
-
 		return err;
-
-	}
-
-	else if (i < 32 || (i & 15))
-	{
-
+	} else if (i < 32 || (i & 15)) {
 		printf
 		    ("The key length must be 32, 48 or 64 hexadecimal digits\n");
-
 		err = -4;
-
 		return err;
-
 	}
-
 	key_len = i / 2;
 
 	aes_decrypt_ctx ctx[1];
-
 	aes_decrypt_key((unsigned char *)key, key_len, ctx);
 
 	err = decfile(ctx, data, decrypted, nbytes);
@@ -689,21 +528,15 @@ int aesDecrypt(unsigned char *sessionKey, unsigned char *data,
 	char *string;
 
 	string = malloc(nbytes + 1);
-
 	memcpy(string, decrypted, nbytes);
-
 	string[nbytes] = '\0';
 
 	printf
 	    ("\nUsing AES key to decrypt message.\nHere is decrypted message: \n%s\n",
 	     string);
-
 	printf("\n");
-
 //    printf("\nDecrypted message in bytes: \n");
 //    pr_hex(decrypted,nbytes,0);
 	free(string);
-
 	return err;
-
 }
