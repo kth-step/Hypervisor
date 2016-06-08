@@ -41,7 +41,7 @@ mp_err mp_i2osp(mp_int * x, char *out, int len)
 
 }				/* end mp_i2osp() */
 
-		   /* }}} *///what is all these loose comments?
+			    /* }}} *///what is all these loose comments?
 
 /* {{{ mp_os2ip(x, in, len) */
 

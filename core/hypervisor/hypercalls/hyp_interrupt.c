@@ -14,8 +14,11 @@ void hypercall_interrupt_set(uint32_t interrupt, uint32_t op)
 		curr_vm->current_mode_state->ctx.psr &= ~(interrupt);
 
 		pending_irq = check_pending_interrupts();
-		if (pending_irq != 0xFFFFFFFF)
+		if (pending_irq != 0xFFFFFFFF) {
+			printf("PENDING1\n");
+			for (;;) ;
 			irq_handler(pending_irq, 0, 0);
+		}
 
 	} else if (op == 2) {	/*Restore ,restores the flag according to param0 */
 		curr_vm->current_mode_state->ctx.psr &=
@@ -24,8 +27,11 @@ void hypercall_interrupt_set(uint32_t interrupt, uint32_t op)
 
 		if (!(curr_vm->current_mode_state->ctx.psr & IRQ_MASK)) {
 			pending_irq = check_pending_interrupts();
-			if (pending_irq != 0xFFFFFFFF)
+			if (pending_irq != 0xFFFFFFFF) {
+				printf("PENDING2\n");
+				for (;;) ;
 				irq_handler(pending_irq, 0, 0);
+			}
 		}
 	} else if (op == 0) {	/*Disable */
 		curr_vm->current_mode_state->ctx.psr |= interrupt;

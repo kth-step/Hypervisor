@@ -38,9 +38,9 @@ impl_irq:
     blx r12
     
     /* 4. reset interrupt */
-    ldr r0, =INTC_VIRT_BASE
-    ldr r1, =INTC_CONTROL_NEWIRQAGR
-    str r1, [r0, #4 * INTC_CONTROL]
+//    ldr r0, =INTC_VIRT_BASE
+//    ldr r1, =INTC_CONTROL_NEWIRQAGR
+//    str r1, [r0, #4 * INTC_CONTROL]
 
     /* 5. restore context 
      * note: this code is shared with some other

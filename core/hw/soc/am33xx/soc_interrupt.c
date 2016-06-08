@@ -49,7 +49,9 @@ static volatile intc_registers *intc = 0;
 /* static */ return_value default_handler(uint32_t r0, uint32_t r1,
 					  uint32_t r2)
 {
-	printf("DIH %x:%x:%x\n", r0, r1, r2);
+	printf
+	    ("HYPERVISOR default_handler (Default Interrupt Handler) %x:%x:%x\n",
+	     r0, r1, r2);
 	return RV_OK;
 }
 
@@ -160,23 +162,30 @@ void soc_interrupt_init()
 		cpu_irq_set_enable(i, FALSE);
 		cpu_irq_set_handler(i, default_handler);
 	}
-	cpu_irq_set_enable(0x48, TRUE);	/*Enable interrupts for Linux UART0 */
-	cpu_irq_set_handler(0x48, (cpu_callback) irq_handler);
 
-////////
+	//Enable Interrupts for CPSW for Linux.
+#if defined(LINUX) && defined(CPSW)
 	//The network driver uses interrupt lines 40, 41, 42, and 43.
 	//Enables interrupts from the Ethernet subsystem and they should be
 	//redirected directly to the Linux kernel and therefore they are given the
 	//hypervisor interrupt handler irq_handler.
 	cpu_irq_set_enable(40, TRUE);
-	cpu_irq_set_enable(41, TRUE);
-	cpu_irq_set_enable(42, TRUE);
-	cpu_irq_set_enable(43, TRUE);
 	cpu_irq_set_handler(40, (cpu_callback) irq_handler);
+	cpu_irq_set_enable(41, TRUE);
 	cpu_irq_set_handler(41, (cpu_callback) irq_handler);
+	cpu_irq_set_enable(42, TRUE);
 	cpu_irq_set_handler(42, (cpu_callback) irq_handler);
+	cpu_irq_set_enable(43, TRUE);
 	cpu_irq_set_handler(43, (cpu_callback) irq_handler);
-////////
+#endif
+
+	//Enable interrupts for DMTIMER2 for Linux.
+	cpu_irq_set_enable(68, TRUE);
+	cpu_irq_set_handler(68, (cpu_callback) irq_handler);
+
+	/*Enable interrupts for Linux UART0 */
+	cpu_irq_set_enable(72, TRUE);
+	cpu_irq_set_handler(72, (cpu_callback) irq_handler);
 
 	intc->intc_control = INTC_CONTROL_NEWIRQAGR;
 }

@@ -176,9 +176,9 @@ uint32_t l1Sec_checker(uint32_t l1_desc, addr_t l1_base_pa_add)
 	// TODO: e.g. if you can read in user mode and the domain is the guest user domain or kernel domain then the pa must be in the guest memory
 	else if (ap == 3) {
 		uint32_t max_kernel_ac =
-		    (curr_vm->config->
-		     guest_modes[HC_GM_KERNEL]->domain_ac | curr_vm->config->
-		     guest_modes[HC_GM_TASK]->domain_ac);
+		    (curr_vm->config->guest_modes[HC_GM_KERNEL]->
+		     domain_ac | curr_vm->config->guest_modes[HC_GM_TASK]->
+		     domain_ac);
 		uint32_t page_domain_mask = (0x3 << (2 * sec->dom));
 		uint32_t kernel_ac = max_kernel_ac & page_domain_mask;
 		if (kernel_ac != 0) {

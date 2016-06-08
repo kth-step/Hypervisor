@@ -174,7 +174,7 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 		uint32_t attrs = MMU_L1_TYPE_PT;
 		attrs |= (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
 		if ((err = dmmu_l1_pt_map((addr_t) linux_va, table2_pa, attrs)))
-			printf("\n\tCould not map L1PT in new PGD\n");
+			printf("\n\tCould not map L1PT in new PGD %x \n", err);
 
 		/*Remap each individual small page to the same address */
 		uint32_t page_pa = MMU_L1_SECTION_ADDR(l1_desc_entry);

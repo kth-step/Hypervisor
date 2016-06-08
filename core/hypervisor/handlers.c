@@ -1,6 +1,8 @@
 #include <hw.h>
 #include "hypercalls.h"
+#if defined(LINUX) && defined(CPSW)
 #include <soc_cpsw.h>
+#endif
 
 extern virtual_machine *curr_vm;
 
@@ -39,6 +41,12 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		}
 	}
 	if (curr_vm->current_guest_mode == HC_GM_TASK) {
+/////////////////////
+		if ((curr_vm->current_mode_state->ctx.psr & IRQ_MASK) != 0)
+			printf
+			    ("ERROR (interrupt delivered when disabled) IRQ_MASK = %x\n",
+			     curr_vm->current_mode_state->ctx.psr);
+/////////////////////
 
 		//  debug("\tUser process made system call:\t\t\t %x\n",  curr_vm->mode_states[HC_GM_TASK].ctx.reg[7] );
 		change_guest_mode(HC_GM_KERNEL);
@@ -82,8 +90,8 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			/*Set PC to systemcall function */
 			curr_vm->current_mode_state->ctx.pc =
 			    *((uint32_t *) (curr_vm->exception_vector[V_SWI] +
-					    (curr_vm->current_mode_state->
-					     ctx.reg[7] << 2)));
+					    (curr_vm->current_mode_state->ctx.
+					     reg[7] << 2)));
 		} else {
 			//TODO Have not added check that its a valid private arm syscall, done anyways inside arm_syscall
 			//if(curr_vm->current_mode_state->ctx.reg[7] >= 0xF0000){ //NR_SYSCALL_BASE
@@ -188,6 +196,29 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			//case HYPERCALL_VFP:
 			//  hypercall_vfp_op(param0, param1, param2);
 			//  return;
+		case HYPERCALL_UPDATE_MONITOR:
+			{
+				uint32_t number_of_signatures = param0;
+				uint32_t *kernel_image = (uint32_t *) param1;
+				uint32_t *kernel_image_signature =
+				    (uint32_t *) param2;
+				printf
+				    ("HYPERVISOR: HYPERCALL_UPDATE_MONITOR\n");
+				printf
+				    ("HYPERVISOR: number_of_signatures = %d\n",
+				     number_of_signatures);
+				printf("HYPERVISOR: kernel_image = %x\n",
+				       kernel_image);
+				printf
+				    ("HYPERVISOR: kernel_image_signature = %x\n",
+				     kernel_image_signature);
+
+				//Successful update of the monitor.
+				curr_vm->mode_states[HC_GM_KERNEL].ctx.reg[0] =
+				    0;
+
+				return;
+			}
 		default:
 			hypercall_num_error(hypercall_number);
 		}
@@ -260,7 +291,6 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
 
 ////////
-#if 1
 #if defined(LINUX) && defined(CPSW)
 	//If accessed address is within the mapped Ethernet Subsystem memory
 	//regions.
@@ -286,7 +316,6 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 		return RV_OK;
 	} else if (addr >= 0xc0000000)
 		printf("Dabort:%x Status:%x, u=%x \n", addr, status, unused);
-#endif
 #endif
 ////////
 	/*Must be in virtual kernel mode to access kernel handlers */
@@ -346,9 +375,13 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 
 return_value irq_handler(uint32_t irq, uint32_t r1, uint32_t r2)
 {
-	//printf("IRQ handler called \n");
+//      printf("IRQ handler called %d\n", irq);
 	if (curr_vm->current_mode_state->ctx.psr & 0x80) {	/*Interrupts are off, return */
-		mask_interrupt(irq, 1);	//Mask interrupt and mark pending
+
+		printf("AVBROTT: FREEZE!\n");
+		for (;;) ;
+
+//              mask_interrupt(irq, 1); //Mask interrupt and mark pending
 		return RV_OK;
 	}
 
@@ -389,7 +422,7 @@ return_value irq_handler(uint32_t irq, uint32_t r1, uint32_t r2)
 	    curr_vm->mode_states[HC_GM_KERNEL].ctx.sp;
 
 #endif
-	unmask_interrupt(irq, 0);
+//      unmask_interrupt(irq, 0);
 	return RV_OK;
 }
 

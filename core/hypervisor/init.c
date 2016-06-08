@@ -172,7 +172,7 @@ void setup_handlers()
 	printf("undef_handler is READY \n");
 
 	/* Start the timer and direct interrupts to hypervisor irq handler */
-	gp_timer_tick_start((cpu_callback) irq_handler);
+//      gp_timer_tick_start((cpu_callback) irq_handler);
 
 }
 

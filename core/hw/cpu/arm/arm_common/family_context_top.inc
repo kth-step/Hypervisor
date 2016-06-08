@@ -86,7 +86,8 @@
      
      ldr r0, [lr, #4 * INDEX_PSR]
      #and r0,  #0xFFFFFFF0 @Ensure user mode
-     and r0,   #0xFFFFFF30 @Ensure user mode and IRQ and FIQ always enabled 
+//     and r0,   #0xFFFFFF30 @Ensure user mode and IRQ and FIQ always enabled 
+     and r0,   #0xFFFFFFF0 @Ensure user mode
      msr spsr, r0
      ldmia lr, {r0-lr} ^
      ldr lr, [lr, #4 * INDEX_PC]    
