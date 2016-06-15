@@ -8,6 +8,7 @@ void handler_rpc(unsigned callNum, void *params)
 #include <types.h>
 
 #include "dtest.h"
+#include "test_x_ref.h"
 
 //The initial memory layout of the dtest guest is something like 0xc0i00000
 //mapped to base_pa+i, with i in [0..5] (with the exception of i=2, where the
@@ -1082,6 +1083,9 @@ void _main()
 	int j;
 	for (j = 0; j < 500000; j++)
 		asm("nop");
+
+	main_x_ref();
+	return;
 	//*****************//
 #ifdef TEST_DMMU_MAP_L1_SECTION
 	test_map_l1_section();

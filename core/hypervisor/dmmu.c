@@ -23,13 +23,14 @@ dmmu_entry_t *get_bft_entry(addr_t adr_py)
 	return get_bft_entry_by_block_idx(PA_TO_PH_BLOCK(adr_py));
 }
 
-void mmu_bft_region_set(addr_t start, size_t size, uint32_t refc, uint32_t typ)
+void mmu_bft_region_set(addr_t start, size_t size, uint32_t refc, uint32_t x_refc, uint32_t typ)
 {
 	int n;
 	dmmu_entry_t *e = get_bft_entry(start);
 
 	for (n = size >> 12; n-- > 0; e++) {
 		e->refcnt = refc;
+		e->x_refcnt = x_refc;
 		e->type = typ;
 	}
 }
@@ -57,6 +58,8 @@ int mmu_bft_region_refcnt_equals(addr_t start, size_t size, uint32_t cnt)
 	}
 	return 1;
 }
+
+//TODO Check x_refcnt equals
 
 void dmmu_init()
 {
@@ -134,7 +137,7 @@ uint32_t l1PT_checker(uint32_t l1_desc)
 		err_flag = ERR_MMU_L2_BASE_OUT_OF_RANGE;
 	} else if (bft_entry_pt->type != PAGE_INFO_TYPE_L2PT) {
 		err_flag = ERR_MMU_IS_NOT_L2_PT;
-	} else if (bft_entry_pt->refcnt >= (MAX_30BIT - 4096)) {
+	} else if (bft_entry_pt->refcnt >= (MAX_15BIT - 4096)) {
 		err_flag = ERR_MMU_REF_OVERFLOW;
 	} else if (pt->pxn) {
 		err_flag = ERR_MMU_AP_UNSUPPORTED;
@@ -200,11 +203,26 @@ uint32_t l1Sec_checker(uint32_t l1_desc, addr_t l1_base_pa_add)
 			     L1_BASE_MASK) == l1_base_pa_add) {
 				err_flag = ERR_MMU_NEW_L1_NOW_WRITABLE;
 			}
-			if (bft_entry_in_sec->refcnt >= (MAX_30BIT - 4096)) {
+			if (bft_entry_in_sec->refcnt >= (MAX_15BIT - 4096)) {
 				err_flag = ERR_MMU_REF_OVERFLOW;
 			}
 		}
 	}
+	
+	if ((ap == 3 || ap == 2) && sec->xn == 0)
+	{
+		for(sec_idx = 0; sec_idx < 256; sec_idx++)
+		{
+			uint32_t ph_block_in_sec = PA_TO_PH_BLOCK(START_PA_OF_SECTION(sec)) | (sec_idx); // Address of a page in the section
+			dmmu_entry_t *bft_entry_in_sec = get_bft_entry_by_block_idx(ph_block_in_sec);
+
+			if(bft_entry_in_sec->x_refcnt >= (MAX_15BIT - 4096))
+			{
+				err_flag = ERR_MMU_X_REF_OVERFLOW;
+			}
+		}
+	}
+	
 	if (err_flag != SUCCESS_MMU) {
 #if DEBUG_DMMU_MMU_LEVEL >1
 
@@ -256,6 +274,19 @@ void create_L1_refs_update(addr_t l1_base_pa_add)
 					    get_bft_entry_by_block_idx
 					    (ph_block);
 					bft_entry->refcnt += 1;
+				}
+			}
+
+			if (sec->xn == 0 && (ap == 3 || ap == 2))
+			{
+				for(sec_idx = 0; sec_idx < 256; sec_idx++)
+				{
+					uint32_t ph_block = PA_TO_PH_BLOCK(START_PA_OF_SECTION(sec)) | (sec_idx);
+					dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
+					bft_entry->x_refcnt += 1;
+#ifdef DEBUG_X_REF_CREATE_L1
+					printf("After creating page table, exe ref counter: %d\n", bft_entry->x_refcnt);
+#endif
 				}
 			}
 		}
@@ -445,6 +476,17 @@ int dmmu_unmap_L1_pt(addr_t l1_base_pa_add)
 					bft_entry->refcnt -= 1;
 				}
 			}
+			if ((ap == 3 || ap ==2) && sec->xn == 0) {
+				for (sec_idx = 0; sec_idx < 256; sec_idx++) {
+					uint32_t ph_block =
+					    PA_TO_PH_BLOCK(START_PA_OF_SECTION
+							   (sec)) | (sec_idx);
+					dmmu_entry_t *bft_entry =
+					    get_bft_entry_by_block_idx
+					    (ph_block);
+					bft_entry->x_refcnt -= 1;
+				}
+			}
 		}
 	}
 	//unmap_L1_pt_pgtype_update
@@ -525,6 +567,16 @@ uint32_t dmmu_map_L1_section(addr_t va, addr_t sec_base_add, uint32_t attrs)
 			bft_entry->refcnt += 1;
 		}
 	}
+	if ((ap == 3 || ap == 2) && l1_sec_desc->xn == 0) {
+		for (sec_idx = 0; (sec_idx < 256); sec_idx++) {
+			uint32_t ph_block =
+			    PA_TO_PH_BLOCK(START_PA_OF_SECTION(l1_sec_desc)) |
+			    (sec_idx);
+			dmmu_entry_t *bft_entry =
+			    get_bft_entry_by_block_idx(ph_block);
+			bft_entry->x_refcnt += 1;
+		}
+	}
 	// Update the descriptor in the page table
 	*((uint32_t *) l1_desc_va_add) = l1_desc;
 #if DEBUG_DMMU_MMU_LEVEL > 2
@@ -590,7 +642,7 @@ int dmmu_l1_pt_map(addr_t va, addr_t l2_base_pa_add, uint32_t attrs)
 		while (1) ;
 	}
 
-	if (bft_entry->refcnt == MAX_30BIT) {
+	if (bft_entry->refcnt == MAX_15BIT) {
 		return ERR_MMU_REF_OVERFLOW;
 		while (1) ;
 	}
@@ -669,6 +721,15 @@ uint32_t dmmu_unmap_L1_pageTable_entry(addr_t va)
 				    get_bft_entry_by_block_idx(ph_block);
 				bft_entry->refcnt -= 1;
 			}
+		if ((ap == 3 || ap ==2) && l1_sec_desc->xn == 0)
+			for (sec_idx = 0; sec_idx < 256; sec_idx++) {
+				uint32_t ph_block =
+				    PA_TO_PH_BLOCK(START_PA_OF_SECTION
+						   (l1_sec_desc)) | (sec_idx);
+				dmmu_entry_t *bft_entry =
+				    get_bft_entry_by_block_idx(ph_block);
+				bft_entry->x_refcnt -= 1;
+			}
 		*((uint32_t *) l1_desc_va_add) = UNMAP_L1_ENTRY(l1_desc);
 	}
 	// nothing, since the entry was already unmapped
@@ -682,13 +743,13 @@ uint32_t dmmu_unmap_L1_pageTable_entry(addr_t va)
 /* -------------------------------------------------------------------
  * L2 creation API it checks validity of created L2 by the guest
  -------------------------------------------------------------------*/
-uint32_t l2Pt_desc_ap(addr_t l2_base_pa_add, l2_small_t * pg_desc)
+uint32_t l2PT_checker(addr_t l2_base_pa_add, l2_small_t * pg_desc)
 {
 	uint32_t ap = ((uint32_t) (pg_desc->ap_3b) << 2) | (pg_desc->ap_0_1bs);
+	
 	dmmu_entry_t *bft_entry =
 	    get_bft_entry_by_block_idx(PA_TO_PH_BLOCK
 				       (START_PA_OF_SPT(pg_desc)));
-
 #ifdef CHECK_PAGETABLES_CACHEABILITY
 	if (guest_intersect_always_cached_region
 	    (START_PA_OF_SPT(pg_desc), PAGE_SIZE)) {
@@ -699,9 +760,7 @@ uint32_t l2Pt_desc_ap(addr_t l2_base_pa_add, l2_small_t * pg_desc)
 
 	if ((ap != 1) && (ap != 2) && (ap != 3))
 		return ERR_MMU_AP_UNSUPPORTED;
-
-	if (ap == 1 || ap == 2)
-		return SUCCESS_MMU;
+	
 
 	if (ap == 3) {
 		if (pg_desc->addr == (l2_base_pa_add >> 12))
@@ -715,22 +774,15 @@ uint32_t l2Pt_desc_ap(addr_t l2_base_pa_add, l2_small_t * pg_desc)
 		if (!guest_pa_range_checker
 		    (START_PA_OF_SPT(pg_desc), PAGE_SIZE))
 			return ERR_MMU_OUT_OF_RANGE_PA;
-		return SUCCESS_MMU;
+		if (bft_entry->refcnt >= (MAX_15BIT - 512))
+			return ERR_MMU_REF_OVERFLOW;
+	}
+	if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
+	{
+		if (bft_entry->x_refcnt >= (MAX_15BIT - 512))
+			return ERR_MMU_X_REF_OVERFLOW;
 	}
 	return SUCCESS_MMU;
-}
-
-uint32_t l2PT_checker(addr_t l2_base_pa_add, uint32_t l2_desc)
-{
-	l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
-	dmmu_entry_t *bft_entry =
-	    get_bft_entry_by_block_idx(PA_TO_PH_BLOCK
-				       (START_PA_OF_SPT(pg_desc)));
-
-	if (bft_entry->refcnt >= (MAX_30BIT - 1024))
-		return ERR_MMU_REF_OVERFLOW;
-
-	return l2Pt_desc_ap(l2_base_pa_add, pg_desc);
 }
 
 uint32_t l2Desc_validityChecker_dispatcher(uint32_t l2_type, uint32_t l2_desc,
@@ -739,7 +791,10 @@ uint32_t l2Desc_validityChecker_dispatcher(uint32_t l2_type, uint32_t l2_desc,
 	if (l2_type == 0)
 		return SUCCESS_MMU;
 	if ((l2_type == 2) || (l2_type == 3))
-		return l2PT_checker(l2_base_pa_add, l2_desc);
+	{	
+		l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+		return l2PT_checker(l2_base_pa_add, pg_desc);
+	}
 	return ERR_MMU_L2_UNSUPPORTED_DESC_TYPE;
 }
 
@@ -765,6 +820,9 @@ void create_L2_refs_update(addr_t l2_base_pa_add)
 			if ((bft_entry->type == PAGE_INFO_TYPE_DATA)
 			    && (ap == 3))
 				bft_entry->refcnt += 1;
+			if ((bft_entry->type == PAGE_INFO_TYPE_DATA)
+			    && ((ap == 3 || ap == 2) && pg_desc->xn == 0))
+				bft_entry->x_refcnt += 1;
 		}
 	}
 }
@@ -895,6 +953,8 @@ int dmmu_unmap_L2_pt(addr_t l2_base_pa_add)
 		if ((l2_type == 2) || (l2_type == 3)) {
 			if (ap == 3)
 				bft_entry_pg->refcnt -= 1;
+			if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
+				bft_entry_pg->x_refcnt -= 1;
 		}
 	}
 
@@ -942,9 +1002,8 @@ int dmmu_l2_map_entry(addr_t l2_base_pa_add, uint32_t l2_idx,
 	//checks if the L2 entry is unmapped or not
 	if ((l2_desc & DESC_TYPE_MASK) != 0)
 		return ERR_MMU_PT_NOT_UNMAPPED;
-
 	uint32_t new_l2_desc = CREATE_L2_DESC(page_pa_add, attrs);
-
+	printf ("THE DESCRIPTOR: %x\n", new_l2_desc);
 	uint32_t sanity_check = l2PT_checker(l2_base_pa_add, new_l2_desc);
 	if (sanity_check != SUCCESS_MMU)
 		return sanity_check;
@@ -954,9 +1013,10 @@ int dmmu_l2_map_entry(addr_t l2_base_pa_add, uint32_t l2_idx,
 	ap = GET_L2_AP(pg_desc);
 	if (ap == 3)
 		bft_entry_pg->refcnt += 1;
+	if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
+		bft_entry_pg->x_refcnt += 1;
 	//Updating page table in memory
 	*((uint32_t *) l2_desc_va_add) = new_l2_desc;
-
 	return SUCCESS_MMU;
 }
 
@@ -1001,6 +1061,8 @@ int dmmu_l2_unmap_entry(addr_t l2_base_pa_add, uint32_t l2_idx)
 	if (ap == 3)
 		bft_entry_pg->refcnt -= 1;
 
+	if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
+		bft_entry_pg->x_refcnt -= 1;
 	//Updating page table in memory
 	l2_desc = UNMAP_L2_ENTRY(l2_desc);
 	*((uint32_t *) l2_desc_va_add) = l2_desc;

@@ -27,7 +27,8 @@ enum dmmu_entry_type {
 typedef union dmmu_entry {
 	uint32_t all;
 	__PACKED struct {
-		uint32_t refcnt:30;
+		uint32_t refcnt:15;
+		uint32_t x_refcnt:15;
 		uint32_t type:2;
 	};
 } dmmu_entry_t;
@@ -104,6 +105,7 @@ typedef __PACKED struct l2_small {
 #define ERR_MMU_NOT_CACHEABLE               (26)
 #define ERR_MMU_OUT_OF_CACHEABLE_RANGE      (27)
 #define ERR_MMU_NEW_L2_NOW_WRITABLE			(28)
+#define ERR_MMU_X_REF_OVERFLOW                (29)
 #define ERR_MMU_UNIMPLEMENTED               (-1)
 
 #define PAGE_INFO_TYPE_DATA 0
@@ -115,7 +117,7 @@ typedef __PACKED struct l2_small {
 int mmu_lookup_guest(addr_t vadr, addr_t * padr, int user_write);
 int mmu_lookup_hv(addr_t vadr, addr_t * padr, int hv_write);
 addr_t mmu_guest_pa_to_va(addr_t padr, hc_config * config);
-void mmu_bft_region_set(addr_t start, size_t size, uint32_t refc,
+void mmu_bft_region_set(addr_t start, size_t size, uint32_t refc, uint32_t x_refc,
 			uint32_t typ);
 
 #define DESC_TYPE_MASK 0b11
@@ -130,6 +132,7 @@ void mmu_bft_region_set(addr_t start, size_t size, uint32_t refc,
 #define SECTION_SIZE (0x00100000)
 #define PAGE_SIZE (0x00001000)
 #define MAX_30BIT 0x3fffffff
+#define MAX_15BIT 0x1ffff
 #define L2_DESC_ATTR_MASK 0x00000FFD
 
 #define VA_TO_L1_IDX(va) (va >> 20)
