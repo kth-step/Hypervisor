@@ -93,4 +93,5 @@ void hypercall_end_rpc();
 #define HYPERCALL_DBG					1030
      /*VFP*/
 #define HYPERCALL_UPDATE_MONITOR		1040
+#define HYPERCALL_QUERY_BFT		1041
 #endif				/* HYPERCALLS_H_ */

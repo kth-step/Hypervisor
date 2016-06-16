@@ -1162,6 +1162,13 @@ int dmmu_handler(uint32_t p03, uint32_t p1, uint32_t p2)
 	}
 }
 
+uint32_t dmmu_query_bft(uint32_t pa) {
+	uint32_t ph_block;
+
+	ph_block = PA_TO_PH_BLOCK(pa);
+	return get_bft_entry_by_block_idx(ph_block)->all;
+}
+
 void print_all_pointing_L1(uint32_t pa, uint32_t mask)
 {
 	uint32_t ph_block_pg = PA_TO_PH_BLOCK(pa);

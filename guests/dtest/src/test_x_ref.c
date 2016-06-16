@@ -19,6 +19,9 @@ extern uint32_t syscall_dmmu(uint32_t r0, uint32_t r1, uint32_t r2);
 #define ISSUE_DMMU_HYPERCALL_(type, p0, p1, p2, p3) \
 		syscall_dmmu((type | (p2 & 0xFFFFFFF0)), p0, ((p1 << 20) | p3));
 
+#define ISSUE_DMMU_QUERY_HYPERCALL(p0) \
+		syscall_dmmu_query(p0);
+
 
 void test_xref_5MB_allocated()
 {
@@ -138,6 +141,26 @@ void test_xref_l1_pt_map() {
 
 }
 
+void test_xref_query() {
+	uint32_t res;
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pstart);
+
+	dmmu_entry_t bft_entry = (dmmu_entry_t) res;
+	
+	printf("Refcnt 0x%x\n", res);
+	expect(0, "Reference counter", 1, bft_entry.refcnt);
+	expect(0, "Executable reference counter", 1, bft_entry.x_refcnt);
+	expect(0, "Type", 0, bft_entry.type);
+
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pstart + 0x200000);
+
+	bft_entry = (dmmu_entry_t) res;
+	
+	printf("Refcnt 0x%x\n", res);
+	expect(0, "Reference counter", 0, bft_entry.refcnt);
+	expect(0, "Executable reference counter", 0, bft_entry.x_refcnt);
+	expect(0, "Type", 1, bft_entry.type);
+}
 
 void test_xref_1()
 {
@@ -165,6 +188,9 @@ void main_x_ref()
 #endif
 #ifdef TEST_XREF_L1_PT_MAP
 	test_xref_l1_pt_map();
+#endif
+#ifdef TEST_XREF_QUERY
+	test_xref_query();
 #endif
 #ifdef TEST_EX_1
 	test_xref_1();
