@@ -16,3 +16,11 @@ syscall_dmmu:
 syscall_dmmu_query:
     svc # 1041
     bx lr
+
+    .global syscall_monitor   
+    .code 32
+    .balign 4
+
+syscall_monitor:
+    svc # 1042
+    bx lr

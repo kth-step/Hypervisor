@@ -103,7 +103,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			    curr_vm->exception_vector[V_ARM_SYSCALL];
 		}
 	} else if (curr_vm->current_guest_mode != HC_GM_TASK) {
-		//    printf("\tHypercallnumber: %d (%x, %x) called\n", hypercall_number, param0, param);
+		// printf("\tHypercallnumber: %d (%x) called\n", hypercall_number, param0);
 		uint32_t res;
 		switch (hypercall_number) {
 			/* TEMP: DMMU TEST */
@@ -190,7 +190,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			hypercall_rpc(param0, (uint32_t *) param1);
 			return;
 		case HYPERCALL_END_RPC:
-			hypercall_end_rpc();
+			hypercall_end_rpc(param0);
 			return;
 			//  /*VFP Test**********************/
 			//case HYPERCALL_VFP:
@@ -222,6 +222,9 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		case HYPERCALL_QUERY_BFT:
 			res = dmmu_query_bft(param0);
 			curr_vm->current_mode_state->ctx.reg[0] = res;
+			return;
+		case HYPERCALL_PING_MONITOR:
+			hypercall_rpc(0, (void *)param0);
 			return;			
 		default:
 			hypercall_num_error(hypercall_number);

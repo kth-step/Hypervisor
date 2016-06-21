@@ -250,6 +250,15 @@ void guests_init()
 
 	printf("HV pagetable after guests initialization:\n");	// DEBUG
 	//    dump_mmu(flpt_va); // DEBUG
+#ifdef TRUSTED
+	// initialize the mapping for the TRUESTED guest
+	// this mapping must exist in all page tables
+	// so we define the mapping in the master page table
+	uint32_t va = guests_db.guests[0].vstart;
+	uint32_t pa = guests_db.guests[0].pstart;
+	pt_create_section(flpt_va, va, pa, MLT_TRUSTED_RAM);
+	memory_commit();
+#endif
 
 	// We pin the L2s that can be created in the 32KB are of slpt_va
 	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
@@ -350,8 +359,8 @@ void guests_init()
 		for (i = 0; i < HC_NGUESTMODES; i++) {
 			curr_vm->mode_states[i].mode_config =
 			    (curr_vm->config->guest_modes[i]);
-			//curr_vm->mode_states[i].rpc_for = MODE_NONE;
-			//curr_vm->mode_states[i].rpc_to  = MODE_NONE;
+			curr_vm->mode_states[i].rpc_for = MODE_NONE;
+			curr_vm->mode_states[i].rpc_to  = MODE_NONE;
 		}
 		curr_vm->current_guest_mode = MODE_NONE;
 		curr_vm->interrupted_mode = MODE_NONE;

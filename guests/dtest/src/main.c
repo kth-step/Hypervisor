@@ -1084,7 +1084,7 @@ void _main()
 	for (j = 0; j < 500000; j++)
 		asm("nop");
 
-	main_x_ref();
+	main_monitor();
 	return;
 	//*****************//
 #ifdef TEST_DMMU_MAP_L1_SECTION

@@ -66,6 +66,19 @@ static const hc_guest_mode gm_trusted = {
 
 ;
 
+#define TRUSTED_LOCATION 0xF0600000
+#define TRUSTED_ENTRY (TRUSTED_LOCATION)
+#define TRUSTED_RPC   ((TRUSTED_LOCATION) + 4)
+#define TRUSTED_SP    ((TRUSTED_LOCATION) + 0x00100000 - 4)
+ 
+/*RPC handler*/
+static const hc_rpc_handler rpc_handler_trusted = {
+	.name = "trusted_rpc_handler",
+	.mode = HC_GM_TRUSTED,
+	.entry_point = TRUSTED_RPC,
+	.sp = TRUSTED_SP
+};
+
 /*
  * Guest configuration structure
  */
@@ -74,6 +87,7 @@ hc_config minimal_config = {
 	// offset in the VA respect to the initial va of the guest
 	.guest_entry_offset = 0,
 	.guest_modes = {&gm_trusted, &gm_kernel, &gm_task, &gm_interrupt},
+	.rpc_handlers = &rpc_handler_trusted,
 	.reserved_va_for_pt_access_start = 0x0,
 	// Offset respect the initial pa of the guest
 	.pa_initial_l1_offset = 0x00200000,	// Initial address + 2MB
