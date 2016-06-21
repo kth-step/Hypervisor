@@ -8,7 +8,6 @@ SUBDIRS = utils library drivers guests test core simulation
 all:
 	set -e; for d in $(SUBDIRS); do $(MAKE) -C $$d ; done
 
-
 clean:
 	for d in $(SUBDIRS); do $(MAKE) clean -C $$d ; done
 	rm -rf bin
@@ -16,6 +15,15 @@ clean:
 test: all
 	make -C test test
 .PHONY: test
+
+setup:
+	cd ../sth-linux; ./build.sh; ./deploy.sh; cd -
+
+deploy: 
+	./deploy.sh
+
+run:	setup all deploy
+	./uart_screen.sh; reset
 
 ##
 sim: all

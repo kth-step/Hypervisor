@@ -16,7 +16,6 @@ ovp_*.data
 zImage
 zImage.bin
 .cproject
-*.sh
 *.to
 *.o
 *.ho
