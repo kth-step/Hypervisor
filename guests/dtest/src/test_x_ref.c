@@ -371,6 +371,156 @@ void test_xref_query() {
 	expect(0, "Type", 1, bft_entry.type);
 }
 
+void test_xref_nonexe()
+{
+	uint32_t va;
+	uint32_t pa;
+	uint32_t i;
+	uint32_t res;
+	dmmu_entry_t bft_entry;
+
+	va = va_base + 0x100000;
+	pa = pstart + 0x100000;
+
+	//Unmapping at 0xC0100000
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(0, "Unmapping a valid writable page", 0, res);
+
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(1, "Reference counter", 0, bft_entry.refcnt);
+	expect(1, "Executable reference counter", 0, bft_entry.x_refcnt);
+	expect(1, "Type", 0, bft_entry.type);
+
+	//Mapping 0xC0100000 to pa(pstart + 0x100000)
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, 0xc2e);
+	expect(2, "Mapping a valid writable page", 0, res);
+	
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(3, "Reference counter", 1, bft_entry.refcnt);
+	expect(3, "Executable reference counter", 1, bft_entry.x_refcnt);
+	expect(3, "Type", 0, bft_entry.type);
+
+	//Unmapping 0xC0300000
+	va = va + 0x200000;
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(4, "Unmapping a valid writable page", 0, res);
+
+	//Mapping 0xC0300000 to the same physical address as above: pa
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, 0xc00);
+	expect(5, "Mapping a valid writable page", 0, res);
+	
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(6, "Reference counter", 2, bft_entry.refcnt);
+	expect(6, "Executable reference counter", 2, bft_entry.x_refcnt);
+	expect(6, "Type", 0, bft_entry.type);
+
+	//Unmapping 0xC0300000
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(4, "Unmapping a valid writable page", 0, res);
+
+	//Mapping 0xC0300000 to pa again but with the "xn" bit set to 1 (not executable)
+	uint32_t attrs;
+	attrs = 0xc10;
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, attrs);
+	expect(5, "Mapping a valid writable page", 0, res);
+	//The executable reference counter is 1 while the reference counter is 2
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(6, "Reference counter", 2, bft_entry.refcnt);
+	expect(6, "Executable reference counter", 1, bft_entry.x_refcnt);
+	expect(6, "Type", 0, bft_entry.type);
+	
+	//Unmapping 0xC0300000
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(7, "Unmapping a valid writable page", 0, res);
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(8, "Reference counter", 1, bft_entry.refcnt);
+	expect(8, "Executable reference counter", 1, bft_entry.x_refcnt);
+	expect(8, "Type", 0, bft_entry.type);
+
+	//Unmapping 0xC0100000
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va - 0x200000, 0, 0);
+	expect(9, "Unmapping a valid writable page", 0, res);
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(10, "Reference counter", 0, bft_entry.refcnt);
+	expect(10, "Executable reference counter", 0, bft_entry.x_refcnt);
+	expect(10, "Type", 0, bft_entry.type);
+
+}
+
+void test_xref_ro()
+{
+	uint32_t va;
+	uint32_t pa;
+	uint32_t i;
+	uint32_t res;
+	dmmu_entry_t bft_entry;
+
+	va = va_base + 0x100000;
+	pa = pstart + 0x100000;
+
+	//Unmapping at 0xC0100000
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(0, "Unmapping a valid writable page", 0, res);
+
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(1, "Reference counter", 0, bft_entry.refcnt);
+	expect(1, "Executable reference counter", 0, bft_entry.x_refcnt);
+	expect(1, "Type", 0, bft_entry.type);
+
+	//Mapping 0xC0100000 to pa (pstart + 0x100000)
+	//The access permissions are set to RO
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, 0x800);
+	expect(2, "Mapping a valid writable page", 0, res);
+	//Reference counter expected to be 0 and exe reference counter 1 
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(3, "Reference counter", 0, bft_entry.refcnt);
+	expect(3, "Executable reference counter", 1, bft_entry.x_refcnt);
+	expect(3, "Type", 0, bft_entry.type);
+
+}
+
+void test_xref_ro_nonexe()
+{
+	uint32_t va;
+	uint32_t pa;
+	uint32_t i;
+	uint32_t res;
+	dmmu_entry_t bft_entry;
+
+	va = va_base + 0x100000;
+	pa = pstart + 0x100000;
+
+	//Unmapping at 0xC0100000
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(0, "Unmapping a valid writable page", 0, res);
+
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(1, "Reference counter", 0, bft_entry.refcnt);
+	expect(1, "Executable reference counter", 0, bft_entry.x_refcnt);
+	expect(1, "Type", 0, bft_entry.type);
+
+	//Mapping 0xC0100000 to pa (pstart + 0x100000)
+	//The access permissions are set to RO and the non executable bit is set to 1
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, 0x810);
+	expect(2, "Mapping a valid writable page", 0, res);
+	//Reference counter expected to be 0 and exe reference counter 0 
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
+	bft_entry = (dmmu_entry_t) res;
+	expect(3, "Reference counter", 0, bft_entry.refcnt);
+	expect(3, "Executable reference counter", 0, bft_entry.x_refcnt);
+	expect(3, "Type", 0, bft_entry.type);
+
+}
+
 void test_xref_1()
 {
 	int x = 0+5;
@@ -406,6 +556,15 @@ void main_x_ref()
 #endif
 #ifdef TEST_XREF_QUERY
 	test_xref_query();
+#endif
+#ifdef TEST_XREF_NONEXE
+	test_xref_nonexe();
+#endif
+#ifdef TEST_XREF_RO_NONEXE
+	test_xref_ro_nonexe();
+#endif
+#ifdef TEST_XREF_RO
+	test_xref_ro();
 #endif
 #ifdef TEST_EX_1	
 	test_xref_1();
