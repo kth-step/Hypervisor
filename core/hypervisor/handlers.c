@@ -12,6 +12,15 @@ extern BOOL soc_check_cpsw_access(uint32_t, uint32_t);
 // Disabling aggressive flushing
 #define AGGRESSIVE_FLUSHING_HANDLERS
 
+typedef struct data
+{
+	uint32_t p0;
+	uint32_t p1;
+	uint32_t p2;
+};
+
+struct data* params;
+
 void clean_and_invalidate_cache()
 {
 #ifdef AGGRESSIVE_FLUSHING_HANDLERS
@@ -108,6 +117,9 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		switch (hypercall_number) {
 			/* TEMP: DMMU TEST */
 		case 666:
+			params->p0 = param0;
+			params->p1 = param1;
+			params->p2 = param2;
 			hypercall_rpc(0, (void *)param0);
 			//clean_and_invalidate_cache();
 
