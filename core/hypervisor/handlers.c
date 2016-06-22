@@ -108,14 +108,14 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		switch (hypercall_number) {
 			/* TEMP: DMMU TEST */
 		case 666:
+			hypercall_rpc(0, (void *)param0);
+			//clean_and_invalidate_cache();
 
-			clean_and_invalidate_cache();
+			//res = dmmu_handler(param0, param1, param2);
+			//curr_vm->current_mode_state->ctx.reg[0] = res;
 
-			res = dmmu_handler(param0, param1, param2);
-			curr_vm->current_mode_state->ctx.reg[0] = res;
-
-			clean_and_invalidate_cache();
-
+			//clean_and_invalidate_cache();
+			
 			return;
 		case HYPERCALL_DBG:
 			printf("To here %x\n", param0);
