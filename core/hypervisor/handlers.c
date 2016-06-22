@@ -120,7 +120,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			params->p0 = param0;
 			params->p1 = param1;
 			params->p2 = param2;
-			hypercall_rpc(0, (void *)param0);
+			hypercall_rpc_mon(0, (void **)params);
 			//clean_and_invalidate_cache();
 
 			//res = dmmu_handler(param0, param1, param2);

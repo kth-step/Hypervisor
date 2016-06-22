@@ -10,10 +10,10 @@
 
 
 
-void handler_rpc(unsigned callNum, uint32_t params)
+void handler_rpc(unsigned callNum, uint32_t param0, uint32_t param1, uint32_t param2)
 {
-	printf("Monitor invoked with parameters: 0x%x 0x%x\n", callNum, params);
-	finish_rpc(params+4);
+	printf("Monitor invoked with parameters: 0x%x 0x%x 0x%x 0x%x\n", callNum, param0, param1, param2);
+	finish_rpc(param0+4);
 }
 
 void finish_rpc(uint32_t value)
