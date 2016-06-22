@@ -24,7 +24,7 @@ void hypercall_restore_regs(uint32_t * regs);
 #include "hyp_cache.h"
 #include "hyp_mmu.h"
 
-void hypercall_rpc(uint32_t rpc_op, void *arg);
+void hypercall_rpc(uint32_t rpc_op, void **arg);
 void hypercall_end_rpc();
 /***************************/
 
