@@ -14,6 +14,11 @@ enum dmmu_command {
 	CMD_CREATE_L1_PT, CMD_SWITCH_ACTIVE_L1, CMD_FREE_L1
 };
 
+dmmu_entry_t *get_bft_entry_by_block_idx(addr_t ph_block)
+{
+	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
+	return &bft[ph_block];
+}
 
 uint32_t call_checker(uint32_t param3, uint32_t param1, uint32_t param2)
 {
@@ -54,6 +59,9 @@ void handler_rpc(unsigned callNum, uint32_t param3, uint32_t param1, uint32_t pa
 {
 	printf("Monitor invoked with parameters: 0x%x 0x%x 0x%x 0x%x\n", callNum, param3, param1, param2);
 	
+	dmmu_entry_t * entry = get_bft_entry_by_block_idx(0x87600000>>12);
+	printf("ref cnt: %d\n", entry->refcnt);
+
 	//finish_rpc(param3+4);
 	uint32_t res = call_checker(param3, param1, param2);
 	finish_rpc(res);
