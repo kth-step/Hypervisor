@@ -4,7 +4,7 @@
 
 extern virtual_machine *curr_vm;
 
-void hypercall_rpc(uint32_t rpc_op, void **arg)
+void hypercall_rpc(uint32_t rpc_op, uint32_t arg0, uint32_t arg1, uint32_t arg2)
 {
 	const hc_rpc_handler *handler;
 
@@ -29,9 +29,9 @@ void hypercall_rpc(uint32_t rpc_op, void **arg)
 	
 		change_guest_mode(HC_GM_TRUSTED);
 		curr_vm->current_mode_state->ctx.reg[0] = rpc_op;
-		curr_vm->current_mode_state->ctx.reg[1] = (uint32_t) arg[0];
-		curr_vm->current_mode_state->ctx.reg[2] = (uint32_t) arg[1];
-		curr_vm->current_mode_state->ctx.reg[3] = (uint32_t) arg[2];
+		curr_vm->current_mode_state->ctx.reg[1] = arg0;
+		curr_vm->current_mode_state->ctx.reg[2] = arg1;
+		curr_vm->current_mode_state->ctx.reg[3] = arg2;
 		curr_vm->current_mode_state->ctx.pc = handler->entry_point;
 		curr_vm->current_mode_state->ctx.psr = 0xD0;	/*USR mode, IRQ off */
 	} else {

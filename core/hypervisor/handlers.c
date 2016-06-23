@@ -19,7 +19,7 @@ typedef struct data
 	uint32_t p2;
 };
 
-struct data* params;
+struct data params;
 
 void clean_and_invalidate_cache()
 {
@@ -39,16 +39,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 //  }
 	/*TODO Added check that controls if it comes from user space, makes it pretty inefficient, remake later */
 	/*Testing RPC from user space, remove later */
-	if (curr_vm->current_guest_mode == HC_GM_TASK) {
-		if (hypercall_number == 1020) {
-			//ALLOWED RPC OPERATION
-			hypercall_rpc(param0, (uint32_t *) param1);
-			return;
-		} else if (hypercall_number == 1021) {
-			hypercall_end_rpc();
-			return;
-		}
-	}
+
 	if (curr_vm->current_guest_mode == HC_GM_TASK) {
 /////////////////////
 		if ((curr_vm->current_mode_state->ctx.psr & IRQ_MASK) != 0)
@@ -117,17 +108,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		switch (hypercall_number) {
 			/* TEMP: DMMU TEST */
 		case 666:
-			params->p0 = param0;
-			params->p1 = param1;
-			params->p2 = param2;
-			hypercall_rpc(0, (void **)params);
-			//clean_and_invalidate_cache();
-
-			//res = dmmu_handler(param0, param1, param2);
-			//curr_vm->current_mode_state->ctx.reg[0] = res;
-
-			//clean_and_invalidate_cache();
-			
+			params.p0 = param0;
+			params.p1 = param1;
+			params.p2 = param2;
+			hypercall_rpc(0, param0, param1, param2);
 			return;
 		case HYPERCALL_DBG:
 			printf("To here %x\n", param0);
@@ -196,18 +180,13 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 					      param2);
 			//clean_and_invalidate_cache();
 			return;
-
-    /****************************/
-		 /*RPC*/ case HYPERCALL_RPC:
-			hypercall_rpc(param0, (uint32_t *) param1);
-			return;
 		case HYPERCALL_END_RPC:
 			res = curr_vm->current_mode_state->ctx.reg[0];
 			hypercall_end_rpc(res);
 			if (res == 0)
 			{
 				clean_and_invalidate_cache();
-				res = dmmu_handler(params->p0, params->p1, params->p2);
+				res = dmmu_handler(params.p0, params.p1, params.p2);
 				curr_vm->current_mode_state->ctx.reg[0] = res;
 				clean_and_invalidate_cache();
 			}
@@ -244,7 +223,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			curr_vm->current_mode_state->ctx.reg[0] = res;
 			return;
 		case HYPERCALL_PING_MONITOR:
-			hypercall_rpc(0, (void *)param0);
+			params.p0 = param0;
+			params.p1 = param1;
+			params.p2 = param2;
+			hypercall_rpc(0, param0, param1, param2);
 			return;			
 		default:
 			hypercall_num_error(hypercall_number);
