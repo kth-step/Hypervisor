@@ -202,7 +202,15 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			hypercall_rpc(param0, (uint32_t *) param1);
 			return;
 		case HYPERCALL_END_RPC:
-			hypercall_end_rpc(param0);
+			res = curr_vm->current_mode_state->ctx.reg[0];
+			hypercall_end_rpc(res);
+			if (res == 0)
+			{
+				clean_and_invalidate_cache();
+				res = dmmu_handler(params->p0, params->p1, params->p2);
+				curr_vm->current_mode_state->ctx.reg[0] = res;
+				clean_and_invalidate_cache();
+			}
 			return;
 			//  /*VFP Test**********************/
 			//case HYPERCALL_VFP:
