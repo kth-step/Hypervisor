@@ -13,12 +13,6 @@
  * Guest mode access to certain domains
  * ********************************************************/
 
-#define HC_DOMAC_ALL				\
-  ((1 << (2 * HC_DOM_DEFAULT)) |		\
-   (1 << (2 * HC_DOM_TASK)) |			\
-   (1 << (2 * HC_DOM_KERNEL)) |			\
-   (1 << (2 * HC_DOM_TRUSTED)))
-
 #define HC_DOMAC_KERNEL				\
   ((1 << (2 * HC_DOM_DEFAULT)) |		\
    (1 << (2 * HC_DOM_KERNEL)))
@@ -27,7 +21,11 @@
   ((1 << (2 * HC_DOM_DEFAULT)) |		\
    (1 << (2 * HC_DOM_TRUSTED)))
 
-#define HC_DOMAC_INTERRUPT HC_DOMAC_ALL
+#define HC_DOMAC_INTERRUPT                      \
+  ((1 << (2 * HC_DOM_DEFAULT)) |		\
+   (1 << (2 * HC_DOM_TASK)) |			\
+   (1 << (2 * HC_DOM_KERNEL)) |			\
+   (1 << (2 * HC_DOM_TRUSTED)))
 
 #define HC_DOMAC_TASK				\
   ((1 << (2 * HC_DOM_DEFAULT)) |		\

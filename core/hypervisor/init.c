@@ -134,8 +134,8 @@ void memory_init()
 		case MLT_USER_RAM:
 			/* do this later */
 			break;
+		case MLT_TRUSTED_READABLE_RAM:
 		case MLT_HYPER_RAM:
-		case MLT_TRUSTED_RAM:
 			/* own memory */
 			j = (list->page_start) >> 8;	/*Get L1 Page index */
 			for (; j < ((list->page_count) >> 8); j++) {
@@ -385,6 +385,8 @@ void start_guest()
 
 	/*Change guest mode to KERNEL before going into guest */
 	change_guest_mode(HC_GM_KERNEL);
+	uint32_t domac = curr_vm->current_mode_state->mode_config->domain_ac;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 
 	/*Starting Guest */
 	start();
