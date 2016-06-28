@@ -20,6 +20,45 @@ dmmu_entry_t *get_bft_entry_by_block_idx(addr_t ph_block)
 	return &bft[ph_block];
 }
 
+uint32_t guest_pa_range_checker(pa, size)
+{
+	// TODO: we are not managing the spatial isolation with the TRUSTED MODE
+	uint32_t guest_start_pa = GUEST_PASTART;
+	/*Added 1MB to range check, Last +1MB after guest physical address is reserved for L1PT */
+	uint32_t guest_end_pa =
+	    GUEST_PASTART +
+	    GUEST_PSIZE + SECTION_SIZE;
+	if (!((pa >= (guest_start_pa)) && (pa + size <= guest_end_pa)))
+		return 0;
+	return 1;
+}
+
+uint32_t mmu_guest_pa_to_va(uint32_t padr, uint32_t guest_pstart, uint32_t va_for_pt_access_start)
+{
+	return padr - guest_pstart + va_for_pt_access_start;
+}
+
+uint32_t section_checker(uint32_t l1_desc)
+{
+	l1_sec_t *l1_sec_desc = (l1_sec_t *) (&l1_desc);
+	uint32_t ap = GET_L1_AP(l1_sec_desc);
+	
+	uint32_t sec_idx;
+	for (sec_idx = 0; (sec_idx < 256); sec_idx++) {
+		uint32_t ph_block =
+			    PA_TO_PH_BLOCK(START_PA_OF_SECTION(l1_sec_desc)) | (sec_idx);
+		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
+
+		if (bft_entry->refcnt > 0 && l1_sec_desc->xn == 0)
+			return ERR_MONITOR_BLOCK_WRITABLE;
+		else if (bft_entry->x_refcnt > 0 && ap == 3)
+			return ERR_MONITOR_BLOCK_EXE;
+		else if (l1_sec_desc->xn == 0 && ap == 3)
+			return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;	
+	}
+	return 0;
+}
+
 uint32_t map_l2_entry_checker(uint32_t param3, uint32_t param1, uint32_t param2)
 {
 	printf("Entered the map_l2_entry case\n");
@@ -48,37 +87,42 @@ uint32_t map_l1_section_checker(uint32_t param3, uint32_t va, uint32_t sec_base_
 	printf("Entered the map_l1_section case\n");
 	uint32_t attrs = param3 >> 4;
 	uint32_t l1_desc = CREATE_L1_SEC_DESC(sec_base_add, attrs);
-	l1_sec_t *l1_sec_desc = (l1_sec_t *) (&l1_desc);
-	uint32_t ap = GET_L1_AP(l1_sec_desc);
-	
-	uint32_t sec_idx;
-	for (sec_idx = 0; (sec_idx < 256); sec_idx++) {
-		uint32_t ph_block =
-			    PA_TO_PH_BLOCK(START_PA_OF_SECTION(l1_sec_desc)) | (sec_idx);
-		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
-
-		if (bft_entry->refcnt > 0 && l1_sec_desc->xn == 0)
-			return ERR_MONITOR_BLOCK_WRITABLE;
-		else if (bft_entry->x_refcnt > 0 && ap == 3)
-			return ERR_MONITOR_BLOCK_EXE;
-		else if (l1_sec_desc->xn == 0 && ap == 3)
-			return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;	
-	}
-	return 0;
+	return section_checker(l1_desc);
 }
 
 uint32_t create_l1_pt_checker(uint32_t l1_base_pa_add)
 {
-	uint32_t ph_block;
-	
-	ph_block = PA_TO_PH_BLOCK(l1_base_pa_add);
-	return 0;
+	uint32_t l1_desc_pa_add;
+	uint32_t l1_desc_va_add;
+	uint32_t l1_desc;
+	uint32_t l1_type;
+	uint32_t l1_idx;
+	uint32_t res = 0;
+	if (!guest_pa_range_checker(l1_base_pa_add, 4 * PAGE_SIZE))
+		return ERR_MMU_OUT_OF_RANGE_PA;
+
+	for (l1_idx = 0; l1_idx < 4096; l1_idx++) {
+		l1_desc_pa_add = L1_IDX_TO_PA(l1_base_pa_add, l1_idx);
+		l1_desc_va_add =
+		    mmu_guest_pa_to_va(l1_desc_pa_add, GUEST_PASTART, VA_FOR_PT_ACCESS_START);
+		l1_desc = *((uint32_t *) l1_desc_va_add);
+		l1_type = l1_desc & DESC_TYPE_MASK;
+		if (l1_type == 2)
+		{
+			uint32_t value = section_checker(l1_desc);
+			if (value != 0)
+				res = value;
+		}
+	}
+	return res;
 }
 
 uint32_t create_l2_pt_checker(uint32_t l2_base_pa_add)
 {
+	
 	return 0;
 }
+
 
 uint32_t call_checker(uint32_t param3, uint32_t param1, uint32_t param2)
 {
@@ -129,6 +173,7 @@ uint32_t call_checker(uint32_t param3, uint32_t param1, uint32_t param2)
 	
 	return 0;
 }
+
 
 void handler_rpc(unsigned callNum, uint32_t param3, uint32_t param1, uint32_t param2)
 {

@@ -237,7 +237,7 @@ void guests_init()
 		uint32_t va =
 		    vm_0.config->reserved_va_for_pt_access_start + va_offset;
 		uint32_t pa = guest_pstart + va_offset;
-		pt_create_section(flpt_va, va, pa, MLT_HYPER_RAM);
+		pt_create_section(flpt_va, va, pa, MLT_TRUSTED_READABLE_RAM);
 
 		/* Invalidate the new created entries */
 		offset = ((va >> MMU_L1_SECTION_SHIFT) * 4);

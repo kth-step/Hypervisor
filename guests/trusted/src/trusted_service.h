@@ -88,6 +88,7 @@ typedef __PACKED struct l1_sec {
 #define L2_DESC_ATTR_MASK 0x00000FFD
 #define L1_SEC_DESC_MASK 0xFFF00000
 #define L1_SEC_DESC_ATTR_MASK 0x000BFFFC
+#define DESC_TYPE_MASK 0b11
 
 #define PA_TO_PH_BLOCK(pa) ((pa) >> 12)
 #define CREATE_L2_DESC(x, y) (L2_BASE_MASK & x) | (L2_DESC_ATTR_MASK & y) | (0b10)
@@ -96,10 +97,19 @@ typedef __PACKED struct l1_sec {
 #define GET_L1_AP(sec) ((((uint32_t) sec->ap_3b) << 2) | ((uint32_t) sec->ap_0_1bs))
 
 #define START_PA_OF_SECTION(sec) (((uint32_t)sec->addr) << 20)
+#define L1_IDX_TO_PA(l1_base, idx) ((l1_base & 0xFFFFC000) | (idx << 2))
+
+#define GUEST_PASTART 0x87600000
+#define VA_FOR_PT_ACCESS_START 0x0
+#define SECTION_SIZE (0x00100000)
+#define GUEST_PSIZE (0x00600000)
+#define PAGE_SIZE (0x00001000)
 
 //Errors
-#define ERR_MONITOR_BLOCK_WRITABLE 1
-#define ERR_MONITOR_BLOCK_EXE 2
-#define ERR_MONITOR_PAGE_WRITABLE_AND_EXE 3
+#define ERR_MONITOR_BLOCK_WRITABLE 64
+#define ERR_MONITOR_BLOCK_EXE 65
+#define ERR_MONITOR_PAGE_WRITABLE_AND_EXE 66
+
+#define ERR_MMU_OUT_OF_RANGE_PA             (3)
 
 #endif				/* TRUSTED_SERVICE_H_ */
