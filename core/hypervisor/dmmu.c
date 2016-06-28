@@ -1003,7 +1003,6 @@ int dmmu_l2_map_entry(addr_t l2_base_pa_add, uint32_t l2_idx,
 	if ((l2_desc & DESC_TYPE_MASK) != 0)
 		return ERR_MMU_PT_NOT_UNMAPPED;
 	uint32_t new_l2_desc = CREATE_L2_DESC(page_pa_add, attrs);
-	printf ("THE DESCRIPTOR: %x\n", new_l2_desc);
 	uint32_t sanity_check = l2PT_checker(l2_base_pa_add, &new_l2_desc);
 	if (sanity_check != SUCCESS_MMU)
 		return sanity_check;

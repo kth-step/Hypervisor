@@ -1085,6 +1085,7 @@ void _main()
 		asm("nop");
 
 	main_monitor();
+	//main_x_ref();
 	return;
 	//*****************//
 #ifdef TEST_DMMU_MAP_L1_SECTION
