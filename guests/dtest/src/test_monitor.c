@@ -324,6 +324,10 @@ void test_map_l1_section_w_nx()
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, 0xc10);
 	expect(3, "Mapping a valid writable page", 0, res);
 	
+	//Trying to write in the memory region just set as writable
+	*(int*)(va) = 7;
+	expect(3, "The value is: ", 7, *(int*) (va));	
+	
 	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
 	bft_entry = (dmmu_entry_t) res;
 	expect(4, "Reference counter", 1, bft_entry.refcnt);
@@ -341,19 +345,28 @@ void test_map_l1_section_w_nx()
 	
 }
 
+void test_x_refcnt_2()
+{
+	printf("HELLO\n");
+}
+
 void test_map_l1_section_nw_x()
 {
 	uint32_t va;
+	uint32_t va2;
 	uint32_t pa;
+	uint32_t pa2;
 	uint32_t res;
 	dmmu_entry_t bft_entry;
 
 	va = (va_base + 0x100000);
 	pa = pstart + 1 * 0x100000;
+	va2 = va_base + 0x300000;
+	pa2 = pstart + 0x300000;
 
 	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
 	expect(1, "Unmapping a valid writable page", 0, res);
-
+	
 	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
 	bft_entry = (dmmu_entry_t) res;
 	expect(2, "Reference counter", 0, bft_entry.refcnt);
@@ -364,7 +377,7 @@ void test_map_l1_section_nw_x()
 	//attrs = 0x800 => Read only. Executable. Should succeed
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, 0x800);
 	expect(3, "Mapping a valid writable page", 0, res);
-	
+
 	res = ISSUE_DMMU_QUERY_HYPERCALL(pa);
 	bft_entry = (dmmu_entry_t) res;
 	expect(4, "Reference counter", 0, bft_entry.refcnt);
@@ -379,6 +392,44 @@ void test_map_l1_section_nw_x()
 	//Should fail since the exe ref counter is greater than 0.
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va, pa, 0xc10);
 	expect(6, "Mapping a section to an exe memory region and setting it writable.", 65, res);
+
+	//**********************************************************************************
+
+	//Testing if code can be executed in a memory region set as executable
+
+	//Mapping a writable memory region in pa2 to va2
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va2, pa2, 0xc10);
+	expect(8, "Mapping a valid writable page", 0, res);
+
+	int (*func)();
+	func = &test_x_refcnt_2;
+	
+	//Copying the whole first MB where the function resides to another memory region.
+	uint32_t i;
+	for (i = 0; i < 0x100000; i++)
+	{
+		*(int*)(va2 + i) = *(int*)(va_base + i);
+	}
+
+	//Unmap va2 again.
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va2, 0, 0);
+	expect(9, "Unmapping a valid writable page", 0, res);
+	//Map it to pa2 again but this time, not writable, executable only.
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va2, pa2, 0x800);
+	expect(10, "Mapping a valid writable page", 0, res);
+
+	//Trying to execute the code
+	(*(void(*)())(func + 0x300000))();
+
+	//Unmap va2 again.
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va2, 0, 0);
+	expect(11, "Unmapping a valid writable page", 0, res);
+	//Map it to pa2 again but this time, as not executable.
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va2, pa2, 0x810);
+	expect(12, "Mapping a valid writable page", 0, res);
+
+	//Trying to execute the code. Should fail.
+	(*(void(*)())(func + 0x300000))();
 	
 }
 
@@ -526,6 +577,110 @@ void test_create_l1_pt_w_x()
 
 //***********************************************************************************
 
+void test_create_l2_pt_w_nx()
+{
+	uint32_t va = (va_base + 1 * 0x100000);
+	uint32_t pa;
+	uint32_t res;
+	dmmu_entry_t bft_entry;
+
+	pa = pstart + 1 * 0x100000;
+	uint32_t pa2 = pa + 0x200000;
+	uint32_t va2 = va + 0x200000;
+
+	//(pa2 & 0xFFF00000) is the physical address where I am going to map a page table. 0x232 are the attributes. 
+	//=> The memory region where this page table is going to be mapped to is read only and executable.
+	//(pa & 0xFFF00000) | 0x232 => is the descriptor of a page table, L2 entry
+	*(int*)(va) = (pa2 & 0xFFFFF000) | 0x232;
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(0, "Unmap 0xC0010000 that was mapping the L1", 0, res);
+
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va2, 0, 0);
+	expect(1, "Unmap 0xC0010000 that was mapping the L1", 0, res);
+
+	//I map a section with attributes 0xc10 => Writable, non executable
+	//to the address pa.
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va2, pa2, 0xc10);
+	expect(2, "Mapping a valid writable page", 0, res);
+
+	//Trying to create a L2 page table at the address pa. 
+	//va is the corresponding va of this pa. Previously we have written a pt entry
+	//at this address. The attrs for this pt mapping were set to 0x232=>RO, exe. 
+	//The pa where this pt is to be mapped is set to the same pa as the section we mapped before
+	//That memory region was previously made writable so this test should fail.
+	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L2_PT, pa, 0, 0);
+	expect(3, "Creating an L2 on a non referenced part of the memory \
+	       and having an entry with the exe bit set and corresponding to\
+	       a section mapped to a writable memory region.", 
+	       64, res);
+
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa2);
+	bft_entry = (dmmu_entry_t) res;
+	expect(4, "Reference counter", 1, bft_entry.refcnt);
+	expect(4, "Executable reference counter", 0, bft_entry.x_refcnt);
+	expect(4, "Type", 0, bft_entry.type);
+	
+}
+
+void test_create_l2_pt_nw_x()
+{
+	uint32_t va = (va_base + 1 * 0x100000);
+	uint32_t pa;
+	uint32_t res;
+	dmmu_entry_t bft_entry;
+
+	pa = pstart + 1 * 0x100000;
+	uint32_t pa2 = pa + 0x200000;
+	uint32_t va2 = va + 0x200000;
+
+	//attrs = 0x33 => Writable, non executable.
+	*(int*)(va) = (pa2 & 0xFFF00000) | 0x33;
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(0, "Unmap 0xC0010000 that was mapping the L1", 0, res);
+
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va2, 0, 0);
+	expect(1, "Unmap 0xC0010000 that was mapping the L1", 0, res);
+
+	//attrs = 0x800 => Executable, Read only
+	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va2, pa2, 0x800);
+	expect(2, "Mapping a valid writable page", 0, res);
+
+	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L2_PT, pa, 0, 0);
+	expect(3, "Creating an L2 on a non referenced part of the memory \
+	       and having an entry with the ap set to RW and corresponding to \
+	       a section mapped to an exe memory region.", 
+	       65, res);
+
+	res = ISSUE_DMMU_QUERY_HYPERCALL(pa2);
+	bft_entry = (dmmu_entry_t) res;
+	expect(4, "Reference counter", 0, bft_entry.refcnt);
+	expect(4, "Executable reference counter", 1, bft_entry.x_refcnt);
+	expect(4, "Type", 0, bft_entry.type);
+}
+
+void test_create_l2_pt_w_x()
+{
+	uint32_t va;
+	uint32_t pa;
+	uint32_t res;
+	dmmu_entry_t bft_entry;
+
+	va = (va_base + 1 * 0x100000);
+	pa = pstart + 1* 0x100000;
+
+	//0x032 is the descriptor of a page table with xn bit set to 0 => executable
+	//and the ap set to RW.
+	*(int*)va = 0x32;
+
+	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(0, "Unmap 0xC0100000 that was mapping the L1", 0, res);	
+
+	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L2_PT, pa, 0, 0);
+	expect(0, "Unsuccessful creation of a new L2. Entry corresponding to\
+	       a memory region both writable and executable.", 66, res);
+}
+
+//***********************************************************************************
 
 void main_monitor()
 {
@@ -538,6 +693,7 @@ void main_monitor()
 #ifdef TEST_MONITOR_3	
 	test_monitor_3();
 #endif
+
 #ifdef TEST_MAP_L2_W_NX	
 	test_map_l2_w_nx();
 #endif
@@ -547,6 +703,7 @@ void main_monitor()
 #ifdef TEST_MAP_L2_W_X	
 	test_map_l2_w_x();
 #endif
+
 #ifdef TEST_MAP_L1_SECTION_W_NX	
 	test_map_l1_section_w_nx();
 #endif
@@ -556,6 +713,7 @@ void main_monitor()
 #ifdef TEST_MAP_L1_SECTION_W_X	
 	test_map_l1_section_w_x();
 #endif
+
 #ifdef TEST_CREATE_L1_PT_W_NX	
 	test_create_l1_pt_w_nx();
 #endif
@@ -564,6 +722,16 @@ void main_monitor()
 #endif
 #ifdef TEST_CREATE_L1_PT_W_X	
 	test_create_l1_pt_w_x();
+#endif
+
+#ifdef TEST_CREATE_L2_PT_W_NX	
+	test_create_l2_pt_w_nx();
+#endif
+#ifdef TEST_CREATE_L2_PT_NW_X	
+	test_create_l2_pt_nw_x();
+#endif
+#ifdef TEST_CREATE_L2_PT_W_X	
+	test_create_l2_pt_w_x();
 #endif
 	printf("TEST COMPLETED\n");
 }

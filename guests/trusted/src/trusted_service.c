@@ -119,7 +119,34 @@ uint32_t create_l1_pt_checker(uint32_t l1_base_pa_add)
 
 uint32_t create_l2_pt_checker(uint32_t l2_base_pa_add)
 {
-	
+	uint32_t l2_desc_pa_add;
+	uint32_t l2_desc_va_add;
+	int l2_idx;
+
+	if (!guest_pa_range_checker(l2_base_pa_add, PAGE_SIZE))
+		return ERR_MMU_OUT_OF_RANGE_PA;
+
+	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
+		l2_desc_pa_add = L2_DESC_PA(l2_base_pa_add, l2_idx);
+		l2_desc_va_add =
+		    mmu_guest_pa_to_va(l2_desc_pa_add, GUEST_PASTART, VA_FOR_PT_ACCESS_START);
+		uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
+		uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
+		l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+		if ((l2_type == 2) || (l2_type == 3)) {
+			uint32_t ap = GET_L2_AP(pg_desc);
+			uint32_t ph_block =
+			    PA_TO_PH_BLOCK(START_PA_OF_SPT(pg_desc));
+			dmmu_entry_t *bft_entry =
+			    get_bft_entry_by_block_idx(ph_block);
+			if (bft_entry->refcnt > 0 && pg_desc->xn == 0)
+				return ERR_MONITOR_BLOCK_WRITABLE;
+			else if (bft_entry->x_refcnt > 0 && ap == 3)
+				return ERR_MONITOR_BLOCK_EXE;
+			else if (pg_desc->xn == 0 && ap == 3)
+				return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;
+		}
+	}
 	return 0;
 }
 
@@ -128,7 +155,6 @@ uint32_t call_checker(uint32_t param3, uint32_t param1, uint32_t param2)
 {
 	//The type of the call
 	uint32_t p0 = param3 & 0xF;
-
 	switch (p0) {
 
 	case CMD_CREATE_L1_PT:

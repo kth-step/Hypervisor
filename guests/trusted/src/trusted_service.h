@@ -4,7 +4,6 @@
  *  Created on: 30 mar 2011
  *      Author: Master
  */
-
 #ifndef TRUSTED_SERVICE_H_
 #define TRUSTED_SERVICE_H_
 
@@ -97,7 +96,9 @@ typedef __PACKED struct l1_sec {
 #define GET_L1_AP(sec) ((((uint32_t) sec->ap_3b) << 2) | ((uint32_t) sec->ap_0_1bs))
 
 #define START_PA_OF_SECTION(sec) (((uint32_t)sec->addr) << 20)
+#define START_PA_OF_SPT(pt) (((uint32_t)pt->addr) << 12)
 #define L1_IDX_TO_PA(l1_base, idx) ((l1_base & 0xFFFFC000) | (idx << 2))
+#define L2_DESC_PA(l2_base_add, l2_idx) (l2_base_add | (l2_idx << 2) | 0)
 
 #define GUEST_PASTART 0x87600000
 #define VA_FOR_PT_ACCESS_START 0x0
