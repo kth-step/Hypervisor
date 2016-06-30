@@ -137,7 +137,7 @@ uint32_t l1PT_checker(uint32_t l1_desc)
 		err_flag = ERR_MMU_L2_BASE_OUT_OF_RANGE;
 	} else if (bft_entry_pt->type != PAGE_INFO_TYPE_L2PT) {
 		err_flag = ERR_MMU_IS_NOT_L2_PT;
-	} else if (bft_entry_pt->refcnt >= (MAX_15BIT - 4096)) {
+	} else if (bft_entry_pt->refcnt >= (MAX_REFCNT - 4096)) {
 		err_flag = ERR_MMU_REF_OVERFLOW;
 	} else if (pt->pxn) {
 		err_flag = ERR_MMU_AP_UNSUPPORTED;
@@ -203,7 +203,7 @@ uint32_t l1Sec_checker(uint32_t l1_desc, addr_t l1_base_pa_add)
 			     L1_BASE_MASK) == l1_base_pa_add) {
 				err_flag = ERR_MMU_NEW_L1_NOW_WRITABLE;
 			}
-			if (bft_entry_in_sec->refcnt >= (MAX_15BIT - 4096)) {
+			if (bft_entry_in_sec->refcnt >= (MAX_REFCNT - 4096)) {
 				err_flag = ERR_MMU_REF_OVERFLOW;
 			}
 		}
@@ -216,7 +216,7 @@ uint32_t l1Sec_checker(uint32_t l1_desc, addr_t l1_base_pa_add)
 			uint32_t ph_block_in_sec = PA_TO_PH_BLOCK(START_PA_OF_SECTION(sec)) | (sec_idx); // Address of a page in the section
 			dmmu_entry_t *bft_entry_in_sec = get_bft_entry_by_block_idx(ph_block_in_sec);
 
-			if(bft_entry_in_sec->x_refcnt >= (MAX_15BIT - 4096))
+			if(bft_entry_in_sec->x_refcnt >= (MAX_REFCNT - 4096))
 			{
 				err_flag = ERR_MMU_X_REF_OVERFLOW;
 			}
@@ -642,7 +642,7 @@ int dmmu_l1_pt_map(addr_t va, addr_t l2_base_pa_add, uint32_t attrs)
 		while (1) ;
 	}
 
-	if (bft_entry->refcnt == MAX_15BIT) {
+	if (bft_entry->refcnt == MAX_REFCNT) {
 		return ERR_MMU_REF_OVERFLOW;
 		while (1) ;
 	}
@@ -774,12 +774,12 @@ uint32_t l2PT_checker(addr_t l2_base_pa_add, l2_small_t * pg_desc)
 		if (!guest_pa_range_checker
 		    (START_PA_OF_SPT(pg_desc), PAGE_SIZE))
 			return ERR_MMU_OUT_OF_RANGE_PA;
-		if (bft_entry->refcnt >= (MAX_15BIT - 512))
+		if (bft_entry->refcnt >= (MAX_REFCNT - 512))
 			return ERR_MMU_REF_OVERFLOW;
 	}
 	if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
 	{
-		if (bft_entry->x_refcnt >= (MAX_15BIT - 512))
+		if (bft_entry->x_refcnt >= (MAX_REFCNT - 512))
 			return ERR_MMU_X_REF_OVERFLOW;
 	}
 	return SUCCESS_MMU;

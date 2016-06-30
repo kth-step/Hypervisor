@@ -27,8 +27,9 @@ enum dmmu_entry_type {
 typedef union dmmu_entry {
 	uint32_t all;
 	__PACKED struct {
-		uint32_t refcnt:15;
-		uint32_t x_refcnt:15;
+		uint32_t refcnt:13;
+		uint32_t x_refcnt:13;
+		uint32_t dev_refcnt:4;
 		uint32_t type:2;
 	};
 } dmmu_entry_t;
@@ -131,8 +132,8 @@ void mmu_bft_region_set(addr_t start, size_t size, uint32_t refc, uint32_t x_ref
 #define L1_PT_DESC_ATTR_MASK 0x000003FC
 #define SECTION_SIZE (0x00100000)
 #define PAGE_SIZE (0x00001000)
-#define MAX_30BIT 0x3fffffff
-#define MAX_15BIT 0x1ffff
+#define MAX_13BIT 8191
+#define MAX_REFCNT MAX_13BIT
 #define L2_DESC_ATTR_MASK 0x00000FFD
 
 #define VA_TO_L1_IDX(va) (va >> 20)
