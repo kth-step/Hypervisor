@@ -351,6 +351,15 @@ int dmmu_create_L1_pt(addr_t l1_base_pa_add)
 		       get_bft_entry_by_block_idx(ph_block + 1)->refcnt);
 		return ERR_MMU_REFERENCED;
 	}
+
+	if (get_bft_entry_by_block_idx(ph_block)->dev_refcnt != 0 ||
+	    get_bft_entry_by_block_idx(ph_block + 1)->dev_refcnt != 0 ||
+	    get_bft_entry_by_block_idx(ph_block + 2)->dev_refcnt != 0 ||
+	    get_bft_entry_by_block_idx(ph_block + 3)->dev_refcnt != 0) {
+		printf("Number of ref %d \n",
+		       get_bft_entry_by_block_idx(ph_block + 1)->dev_refcnt);
+		return ERR_MMU_REFERENCED;
+	}
 	// copies  the reserved virtual addresses from the master page table
 	// each virtual page non-unmapped in the master page table is considered reserved
 	for (l1_idx = 0; l1_idx < 4096; l1_idx++) {
@@ -872,7 +881,7 @@ uint32_t dmmu_create_L2_pt(addr_t l2_base_pa_add)
 	if (bft_entry->type == PAGE_INFO_TYPE_L1PT)
 		return ERR_MMU_PT_REGION;
 	if ((bft_entry->type == PAGE_INFO_TYPE_DATA)
-	    && (bft_entry->refcnt != 0))
+	    && ((bft_entry->refcnt != 0) || (bft_entry->dev_refcnt != 0)))
 		return ERR_MMU_REFERENCED;
 
 	uint32_t sanity_checker = SUCCESS_MMU;
