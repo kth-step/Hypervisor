@@ -101,12 +101,14 @@ uint32_t create_l1_pt_checker(uint32_t l1_base_pa_add)
 	if (!guest_pa_range_checker(l1_base_pa_add, 4 * PAGE_SIZE))
 		return ERR_MMU_OUT_OF_RANGE_PA;
 
+	//Iterates through each entry of the to be L1 page table.
 	for (l1_idx = 0; l1_idx < 4096; l1_idx++) {
 		l1_desc_pa_add = L1_IDX_TO_PA(l1_base_pa_add, l1_idx);
 		l1_desc_va_add =
 		    mmu_guest_pa_to_va(l1_desc_pa_add, GUEST_PASTART, VA_FOR_PT_ACCESS_START);
 		l1_desc = *((uint32_t *) l1_desc_va_add);
 		l1_type = l1_desc & DESC_TYPE_MASK;
+		//If the type of the entry is 2 => Section descriptor, the section it is mapping is checked.
 		if (l1_type == 2)
 		{
 			uint32_t value = section_checker(l1_desc);
@@ -126,6 +128,7 @@ uint32_t create_l2_pt_checker(uint32_t l2_base_pa_add)
 	if (!guest_pa_range_checker(l2_base_pa_add, PAGE_SIZE))
 		return ERR_MMU_OUT_OF_RANGE_PA;
 
+	//Iterates through all the entries of the to be L1.
 	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
 		l2_desc_pa_add = L2_DESC_PA(l2_base_pa_add, l2_idx);
 		l2_desc_va_add =
@@ -133,6 +136,7 @@ uint32_t create_l2_pt_checker(uint32_t l2_base_pa_add)
 		uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
 		uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
 		l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+		//If the type is 2 or 3 => a page table. The page table it is mapping is checked.
 		if ((l2_type == 2) || (l2_type == 3)) {
 			uint32_t ap = GET_L2_AP(pg_desc);
 			uint32_t ph_block =
