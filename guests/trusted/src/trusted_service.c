@@ -54,7 +54,7 @@ static void finishRPC();
 //XXX put back static
 void initFlashData();
 
-static count = 0;
+static unsigned int count = 0;
 
 static void getContract(TrustedContractArgs * args)
 {
@@ -79,6 +79,8 @@ static void getContract(TrustedContractArgs * args)
 		//*(args)->success = 1;
 		memcpy(contract, decrypted, nbytes);
 	}
+	/*Clear decrypted aeskey */
+	memset(decryptedAESKey, 0, 128);
 
 }
 
@@ -94,11 +96,11 @@ void initFlashData(int *success)
 	int aesErr = 0;		//error handling
 	int rsaErr = 0;
 
-//  hello(REP_TRUSTED_NAME);
+//      hello(REP_TRUSTED_NAME);
 	printf("In trusted mode initFlashData\n");
-//  TRUSTED_DATA static char data[50000] = "Messenger: Choose your next words carefully, Leonidas. They may be your last as king.\nKing Leonidas: [to himself: thinking] \"Earth and water\"?\n[Leonidas unsheathes and points his sword at the Messenger's throat]\nMessenger: Madman! You're a madman!\nKing Leonidas: Earth and water? You'll find plenty of both down there.\nMessenger: No man, Persian or Greek, no man threatens a messenger!\nKing Leonidas: You bring the crowns and heads of conquered kings to my city steps. You insult my queen. You threaten my people with slavery and death! Oh, I've chosen my words carefully, Persian. Perhaps you should have done the same!\nMessenger: This is blasphemy! This is madness!\nKing Leonidas: Madness...?\n[shouting]\nKing Leonidas: THIS IS SPARTA!\n[Kicks the messenger down the well]\n";
+//      TRUSTED_DATA static char data[50000] = "Messenger: Choose your next words carefully, Leonidas. They may be your last as king.\nKing Leonidas: [to himself: thinking] \"Earth and water\"?\n[Leonidas unsheathes and points his sword at the Messenger's throat]\nMessenger: Madman! You're a madman!\nKing Leonidas: Earth and water? You'll find plenty of both down there.\nMessenger: No man, Persian or Greek, no man threatens a messenger!\nKing Leonidas: You bring the crowns and heads of conquered kings to my city steps. You insult my queen. You threaten my people with slavery and death! Oh, I've chosen my words carefully, Persian. Perhaps you should have done the same!\nMessenger: This is blasphemy! This is madness!\nKing Leonidas: Madness...?\n[shouting]\nKing Leonidas: THIS IS SPARTA!\n[Kicks the messenger down the well]\n";
 
-//  32 bytes HEX key digits used as key to AES-128
+//      32 bytes HEX key digits used as key to AES-128
 //  TRUSTED_DATA static char sessionKey[33] = "0123456789abcdeffedcba9876543210"; AES key
 	char sessionKey[32];
 	generateAESKey(sessionKey);	//generates a random 16 byte AES key (AES-128)
@@ -113,7 +115,7 @@ void initFlashData(int *success)
 #if 1
 	if (aesErr != 0) {
 		printf("AES encryption failed.\n");
-//    *success = 0;
+//              *success = 0;
 	} else {
 		printf("\nTry to print encrypted data! \n %s \n\n", encrypted);
 		printf("\n Encrypting AES session key with RSA\n");
@@ -124,7 +126,7 @@ void initFlashData(int *success)
 		printf("RSA encryption failed.\n");
 		//*success = 0;
 	} else if (aesErr == 0 && rsaErr == 0) {
-		//  *success = 1;
+		//      *success = 1;
 	}
 #endif
 
@@ -173,7 +175,7 @@ static void verifyContract(TrustedSignArgs * args)
 		printf("\nSHA-256 TRUSTED DIGEST: \n");
 		pr_hex(hval, SHA256_DIGEST_SIZE, 1);
 
-		if (!strncmp(hval, ptx, 32)) {
+		if (!memcmp(hval, ptx, 32)) {
 			printf("Message signature is valid!\n");
 		} else
 			printf
@@ -192,17 +194,29 @@ void handler_rpc(unsigned callNum, void *params)
 {
 	switch (callNum) {
 	case 0:
-		printf("Initializing Trusted Service\n");
-		_main((uint32_t) params);
+		/*Only initialize seed and heap once */
+		if (count == 0) {
+			printf("Initializing Trusted Service\n");
+			_main((uint32_t) params);
+			count++;
+		} else
+			printf("Already initialized trusted service");
 		break;
 	case 1:
-		initFlashData(params);
+		if (count != 0)
+			initFlashData(params);
+		else
+			printf("Trusted service not initialized");
 		break;
 	case 2:
-		verifyContract(params);
+		//if(count !=0)
+		//verifyContract(params);
 		break;
 	case 3:
-		getContract(params);
+		if (count != 0)
+			getContract(params);
+		else
+			printf("Trusted service not initialized");
 		break;
 	case 4:
 		read();
@@ -220,13 +234,11 @@ void finish_rpc()
 
 void _main(int seed)
 {
-	int success;
 	printf("Seed value: %x", seed);
+
 	srand_mwc(seed);
 	/*Initialize the heap */
 	init_heap();
-	if (count == 0) {
-		memcpy(contract, data, nbytes);
-		count++;
-	}
+	//memcpy(contract,data,nbytes);
+
 }
