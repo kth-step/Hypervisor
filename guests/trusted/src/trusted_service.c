@@ -219,6 +219,4 @@ void finish_rpc(uint32_t value)
 
 void _main(uint32_t param)
 {
-	/*Initialize the heap */
-	init_heap();
 }
