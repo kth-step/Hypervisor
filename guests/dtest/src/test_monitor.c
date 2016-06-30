@@ -430,7 +430,7 @@ void test_map_l1_section_nw_x()
 	expect(12, "Mapping a valid writable page", 0, res);
 
 	//Trying to execute the code. Should fail.
-	(*(void(*)())(func + 0x300000))();
+	//(*(void(*)())(func + 0x300000))();
 	
 }
 

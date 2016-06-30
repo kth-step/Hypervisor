@@ -49,9 +49,9 @@ uint32_t section_checker(uint32_t l1_desc)
 			    PA_TO_PH_BLOCK(START_PA_OF_SECTION(l1_sec_desc)) | (sec_idx);
 		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
 
-		if (bft_entry->refcnt > 0 && l1_sec_desc->xn == 0)
+		if ((bft_entry->refcnt > 0 || bft_entry->dev_refcnt > 0) && l1_sec_desc->xn == 0)
 			return ERR_MONITOR_BLOCK_WRITABLE;
-		else if (bft_entry->x_refcnt > 0 && ap == 3)
+		else if ((bft_entry->x_refcnt > 0 || bft_entry->dev_refcnt > 0) && ap == 3)
 			return ERR_MONITOR_BLOCK_EXE;
 		else if (l1_sec_desc->xn == 0 && ap == 3)
 			return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;	
@@ -73,9 +73,9 @@ uint32_t map_l2_entry_checker(uint32_t param3, uint32_t param1, uint32_t param2)
 
 	dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
 
-	if (bft_entry->refcnt > 0 && pg_desc->xn == 0)
+	if ((bft_entry->refcnt > 0 || bft_entry->dev_refcnt > 0) && pg_desc->xn == 0)
 		return ERR_MONITOR_BLOCK_WRITABLE;
-	else if (bft_entry->x_refcnt > 0 && ap == 3)
+	else if ((bft_entry->x_refcnt > 0 || bft_entry->dev_refcnt > 0) && ap == 3)
 		return ERR_MONITOR_BLOCK_EXE;
 	else if (pg_desc->xn == 0 && ap == 3)
 		return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;
@@ -143,9 +143,9 @@ uint32_t create_l2_pt_checker(uint32_t l2_base_pa_add)
 			    PA_TO_PH_BLOCK(START_PA_OF_SPT(pg_desc));
 			dmmu_entry_t *bft_entry =
 			    get_bft_entry_by_block_idx(ph_block);
-			if (bft_entry->refcnt > 0 && pg_desc->xn == 0)
+			if ((bft_entry->refcnt > 0 || bft_entry->dev_refcnt > 0) && pg_desc->xn == 0)
 				return ERR_MONITOR_BLOCK_WRITABLE;
-			else if (bft_entry->x_refcnt > 0 && ap == 3)
+			else if ((bft_entry->x_refcnt > 0 || bft_entry->dev_refcnt > 0) && ap == 3)
 				return ERR_MONITOR_BLOCK_EXE;
 			else if (pg_desc->xn == 0 && ap == 3)
 				return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;
