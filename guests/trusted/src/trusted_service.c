@@ -162,15 +162,16 @@ uint32_t call_checker(uint32_t param3, uint32_t param1, uint32_t param2)
 	switch (p0) {
 
 	case CMD_CREATE_L1_PT:
-		return create_l1_pt_checker(param1);
+		//return create_l1_pt_checker(param1);
+		return 0;
 
 	//No need for checks when freeing an L1
 	case CMD_FREE_L1:
 		return 0;
 
 	case CMD_MAP_L1_SECTION:
-		return map_l1_section_checker(param3, param1, param2);
-
+		//return map_l1_section_checker(param3, param1, param2);
+		return 0;
 	//No need for checks when mapping an L1 page table
 	case CMD_MAP_L1_PT:
 		return 0;
@@ -180,15 +181,17 @@ uint32_t call_checker(uint32_t param3, uint32_t param1, uint32_t param2)
 		return 0;
 
 	case CMD_CREATE_L2_PT:
-		return create_l2_pt_checker(param1);
+		//return create_l2_pt_checker(param1);
+		return 0;
 
 	//No need for checks when freeing an L2
 	case CMD_FREE_L2:
 		return 0;
 
 	case CMD_MAP_L2_ENTRY:
-		return map_l2_entry_checker(param3, param1, param2);
-			
+		//return map_l2_entry_checker(param3, param1, param2);
+		return 0;		
+	
 	//No need for checks when unmapping an L2
 	case CMD_UNMAP_L2_ENTRY:
 		return 0;
