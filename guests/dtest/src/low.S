@@ -34,4 +34,22 @@ syscall_dmmu_2:
     svc # 1007
     bx lr
 
+    .global syscall_make_req   
+    .code 32
+    .balign 4
+    
 
+syscall_make_req:
+    svc # 1043
+    bx lr
+
+
+
+    .global syscall_end_req   
+    .code 32
+    .balign 4
+    
+
+syscall_end_req:
+    svc # 1044
+    bx lr

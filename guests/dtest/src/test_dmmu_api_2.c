@@ -11,7 +11,11 @@ enum dmmu_command {
 	    CMD_CREATE_L1_PT, CMD_SWITCH_ACTIVE_L1, CMD_FREE_L1
 };
 
+
+
+
 extern uint32_t syscall_dmmu(uint32_t r0, uint32_t r1, uint32_t r2);
+extern uint32_t syscall_make_req(uint32_t r0, uint32_t r1, uint32_t r2);
 #define ISSUE_DMMU_HYPERCALL(type, p0, p1, p2) \
 		syscall_dmmu(type | (p2 << 4), p0, p1);
 
@@ -24,7 +28,14 @@ extern uint32_t syscall_dmmu(uint32_t r0, uint32_t r1, uint32_t r2);
 #define ISSUE_DMMU_QUERY_HYPERCALL(p0) \
 		syscall_dmmu_query(p0);
 
+#define ISSUE_DMMU_HYPERCALL_REQ(type, p0, p1, p2) \
+	       syscall_make_req(type | (p2 << 4), p0, p1);
+
+#define ISSUE_DMMU_HYPERCALL_END_REQ() \
+	       syscall_end_req();
+
 #define __PACKED __attribute__ ((packed))
+
 typedef union dmmu_entry {
 	uint32_t all;
 	__PACKED struct {
@@ -39,8 +50,8 @@ extern uint32_t va_base;
 extern addr_t pstart;
 
 extern uint32_t syscall_monitor(uint32_t r0, uint32_t r1, uint32_t r2);
-//extern uint32_t syscall_dmmu(uint32_t r0, uint32_t r1, uint32_t r2);
-extern uint32_t syscall_dmmu_2(uint32_t r0, uint32_t r1, uint32_t r2);
+extern uint32_t syscall_dmmu(uint32_t r0, uint32_t r1, uint32_t r2);
+//extern uint32_t syscall_dmmu_2(uint32_t r0, uint32_t r1, uint32_t r2);
 
 void test_dmmu_api_2()
 {
@@ -70,11 +81,31 @@ void test_dmmu_api_2()
 	printf("Hello test 1\n");
 }
 
+void test_dmmu_api_2_push()
+{
+	// we use the base_address + 1MB
+	uint32_t va = (va_base + 1 * 0x100000);
+	uint32_t pa;
+	uint32_t res;
+	
+	va = va_base + 1 * 0x100000;
+	pa = pstart + 1 * 0x100000;
+		
+	//Unmapping 0xC0010000
+	res = ISSUE_DMMU_HYPERCALL_REQ(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	expect(1, "Unmap 0xC0010000 that was mapping the L2", 0, res);
+	ISSUE_DMMU_HYPERCALL_REQ(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	ISSUE_DMMU_HYPERCALL_END_REQ();
+	
+}
 
 void main_dmmu_api_2()
 {
 #ifdef TEST_DMMU_API_2	
 	test_dmmu_api_2();
+#endif
+#ifdef TEST_DMMU_API_2_PUSH	
+	test_dmmu_api_2_push();
 #endif
 printf("TEST COMPLETED\n");
 

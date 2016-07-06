@@ -406,6 +406,9 @@ void start_()
 	setup_handlers();
 	/* dmmu init */
 	dmmu_init();
+
+	pending_requests_init();
+
 	/* Initialize hypervisor guest modes and data structures
 	 * according to config file in guest*/
 	guests_init();

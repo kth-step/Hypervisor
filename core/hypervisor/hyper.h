@@ -5,6 +5,7 @@
 #include "hypercalls.h"
 #include "hyper_config_base.h"
 #include "hyper_config.h"
+#include "hyp_request.h"
 
 #define MODE_NONE ((uint32_t)-1)
 
@@ -43,6 +44,8 @@ typedef struct hyper_mode_state_ {
 	uint32_t rpc_to;
 } hyper_mode_state;
 
+#define MAX_PENDING_REQUESTS (10*1024)
+
 typedef struct virtual_machine_ {
 	uint32_t id;
 	uint32_t current_guest_mode;
@@ -53,6 +56,9 @@ typedef struct virtual_machine_ {
 	hyper_mode_state *current_mode_state;
 	struct hc_config_ *config;
 	struct virtual_machine_ *next;
+	hypercall_request_t pending_requests[MAX_PENDING_REQUESTS];
+	uint32_t pending_request_counter;
+	uint32_t pending_request_index;
 } virtual_machine;
 
 #endif

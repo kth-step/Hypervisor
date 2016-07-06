@@ -32,6 +32,9 @@ void clean_and_invalidate_cache()
 #endif
 }
 
+uint32_t num_requests = 0;
+uint32_t num_switches = 0;
+
 void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		 uint32_t hypercall_number)
 {
@@ -115,7 +118,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			params.p0 = param0;
 			params.p1 = param1;
 			params.p2 = param2;
-			hypercall_rpc(0, param0, param1, param2);
+			//hypercall_rpc(0, param0, param1, param2);
 			break;
 		case HYPERCALL_DBG:
 			printf("To here %x\n", param0);
@@ -230,8 +233,27 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			params.p0 = param0;
 			params.p1 = param1;
 			params.p2 = param2;
-			hypercall_rpc(0, param0, param1, param2);
-			break;			
+			//hypercall_rpc(0, param0, param1, param2);
+			break;
+		case HYPERCALL_MAKE_REQ:
+			params.p0 = param0;
+			params.p1 = param1;
+			params.p2 = param2;
+			dmmu_handler_2(param0, param1, param2);
+			break;
+		case HYPERCALL_END_REQ:
+			if (curr_vm->pending_request_index < curr_vm->pending_request_counter)
+			{
+				//num_switches += curr_vm->pending_request_counter;
+				num_requests++;
+				hypercall_request_t request = get_request(curr_vm->pending_request_index);
+				uint32_t l1_base_add;
+				COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_base_add);
+				request.curr_l1_base_add = l1_base_add;
+				change_request(request, curr_vm->pending_request_index);
+				hypercall_rpc(0, curr_vm->pending_request_index);
+			}	
+			break;	
 		default:
 			hypercall_num_error(hypercall_number);
 		}
