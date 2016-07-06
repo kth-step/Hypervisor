@@ -320,9 +320,9 @@ BOOL soc_check_cpsw_access(uint32_t accessed_va, uint32_t instruction_va)
 
 ///////////////////
 #if 0
-//      write_register_at_physical_address(0x4A100800 + 0x14, 1);    //DMA RX CONTROL, Förbjud allt utom 1
-//      write_register_at_physical_address(0x4A100800 + 0xAC, 0xFF);  //RX_INTMASK_CLEAR, Förbjud allt
-//      write_register_at_physical_address(0x4A101200 + 0x14, 0xFF);  //Core enable, Förbjud allt utom FF
+//      write_register_at_physical_address(0x4A100800 + 0x14, 1);    //DMA RX CONTROL, Forbid all but 1
+//      write_register_at_physical_address(0x4A100800 + 0xAC, 0xFF);  //RX_INTMASK_CLEAR, Forbid everything
+//      write_register_at_physical_address(0x4A101200 + 0x14, 0xFF);  //Core enable, Forbid all but FF
 
 		if (phys_to_virt(0x4A100814) == rn && rt == 0) {
 			printf("STH CPSW: PREVENTED DMA RX CONTROL DISABLE\n");
@@ -543,7 +543,7 @@ static BOOL tx0_hdp_handler(uint32_t bd_ptr)
 			return FALSE;
 		else {
 			//In this case, the initialization, and transmit teardown NIC processes are idle.
-			//Hence tx0_active_queue, and φACTIVE_CPPI_RAM are updated to zero for the
+			//Hence tx0_active_queue, and ACTIVE_CPPI_RAM are updated to zero for the
 			//buffer descriptors in tx0_active_queue.
 			update_active_queue(TRANSMIT);
 			if (is_queue_secure(bd_ptr, TRANSMIT)) {
@@ -1593,7 +1593,7 @@ static BOOL is_data_buffer_secure(uint32_t bd_ptr, BOOL transmit)
 	//buffer_pointer + buffer_offset + buffer_length - 1 > 0xFFFFFFFF <==>
 	//buffer_pointer > 0xFFFFFFFF - buffer_offset - buffer_length + 1.
 	//Now underflow since buffer_offset and buffer_length is at most 2^16 - 1
-	//and their sum is at most 2¹�� - 2.
+	//and their sum is at most 2^17 - 2.
 	if (buffer_pointer > 0xFFFFFFFF - buffer_offset - buffer_length + 1) {
 		printf("STH CPSW: Data buffer calculation overflow!\n");
 		return FALSE;
