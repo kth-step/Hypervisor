@@ -112,6 +112,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 	} else if (curr_vm->current_guest_mode != HC_GM_TASK) {
 		// printf("\tHypercallnumber: %d (%x) called\n", hypercall_number, param0);
 		uint32_t res;
+		uint32_t from_end_rpc = 0;
 		switch (hypercall_number) {
 			/* TEMP: DMMU TEST */
 		case 666:
@@ -190,10 +191,16 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		case HYPERCALL_END_RPC:
 			res = curr_vm->current_mode_state->ctx.reg[0];
 			hypercall_end_rpc(res);
+			from_end_rpc = 0;
+			printf("Monitor returned with result: %d\n", res);
 			if (res == 0)
 			{
 				clean_and_invalidate_cache();
-				res = dmmu_handler(params.p0, params.p1, params.p2);
+				//res = dmmu_handler(params.p0, params.p1, params.p2);
+				//uint32_t result = execute_all_requests();
+				uint32_t result = execute_next_request();
+				printf("Hypervisor returned with result: %d\n", result);
+				from_end_rpc = 1;			
 				curr_vm->current_mode_state->ctx.reg[0] = res;
 				clean_and_invalidate_cache();
 			}
@@ -245,7 +252,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			if (curr_vm->pending_request_index < curr_vm->pending_request_counter)
 			{
 				//num_switches += curr_vm->pending_request_counter;
-				num_requests++;
+				//num_requests++;
 				hypercall_request_t request = get_request(curr_vm->pending_request_index);
 				uint32_t l1_base_add;
 				COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_base_add);
@@ -253,11 +260,25 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 				change_request(request, curr_vm->pending_request_index);
 				hypercall_rpc(0, curr_vm->pending_request_index);
 			}	
-			break;	
+			break;
 		default:
 			hypercall_num_error(hypercall_number);
 		}
+
+		if (curr_vm->pending_request_index < curr_vm->pending_request_counter && from_end_rpc == 1)
+		{
+			//num_switches += curr_vm->pending_request_counter;
+			//num_requests++;
+			hypercall_request_t request = get_request(curr_vm->pending_request_index);
+			uint32_t l1_base_add;
+			COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_base_add);
+			request.curr_l1_base_add = l1_base_add;
+			change_request(request, curr_vm->pending_request_index);
+			hypercall_rpc(0, curr_vm->pending_request_index);
+		}
+			
 	}
+
 	/*Control of virtual PSR */
 #if 1
 	if ((curr_vm->current_mode_state->ctx.psr & 0x1F) == 0x13 && curr_vm->current_guest_mode != HC_GM_KERNEL) {	/*virtual SVC mode */

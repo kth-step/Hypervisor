@@ -745,7 +745,6 @@ uint32_t dmmu_unmap_L1_pageTable_entry(addr_t va)
 	else {
 		return ERR_MMU_ENTRY_UNMAPPED;
 	}
-
 	return 0;
 }
 

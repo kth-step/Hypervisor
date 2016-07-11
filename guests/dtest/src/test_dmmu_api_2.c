@@ -80,24 +80,65 @@ void test_dmmu_api_2()
 	expect(1, "First test", 0, res);
 	printf("Hello test 1\n");
 }
-
+#define MAX_PENDING_REQUESTS (10*1024)
 void test_dmmu_api_2_push()
 {
 	// we use the base_address + 1MB
-	uint32_t va = (va_base + 1 * 0x100000);
+	uint32_t va;
 	uint32_t pa;
-	uint32_t res;
+	uint32_t* res;
 	
 	va = va_base + 1 * 0x100000;
 	pa = pstart + 1 * 0x100000;
 		
 	//Unmapping 0xC0010000
-	res = ISSUE_DMMU_HYPERCALL_REQ(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
-	expect(1, "Unmap 0xC0010000 that was mapping the L2", 0, res);
 	ISSUE_DMMU_HYPERCALL_REQ(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
-	ISSUE_DMMU_HYPERCALL_END_REQ();
+	ISSUE_DMMU_HYPERCALL_REQ(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	ISSUE_DMMU_HYPERCALL_REQ(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	res = ISSUE_DMMU_HYPERCALL_END_REQ();
+	
+	uint32_t i = 0;
+	for (i = 0; i < 3; i++)
+	{
+		printf("After exiting result is: %d\n", *(res+i));
+	}
 	
 }
+
+void test_dmmu_api_2_push_exe()
+{
+	uint32_t va;
+	uint32_t pa;
+	uint32_t res;
+	dmmu_entry_t bft_entry;
+
+	va = (va_base + 0x100000);
+	pa = pstart + 1 * 0x100000;
+
+	ISSUE_DMMU_HYPERCALL_REQ(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	//expect(1, "Unmapping a valid writable page", 0, res);
+
+
+	//attrs = 0xc10 => Writable. Not executable. Should succeed
+	ISSUE_DMMU_HYPERCALL_REQ(CMD_MAP_L1_SECTION, va, pa, 0xc10);
+	//expect(3, "Mapping a valid writable page", 0, res);
+	
+	//Trying to write in the memory region just set as writable
+	*(int*)(va) = 7;
+	//expect(3, "The value is: ", 7, *(int*) (va));	
+	
+	va = va + 0x200000;
+	ISSUE_DMMU_HYPERCALL_REQ(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
+	//expect(1, "Unmapping a valid writable page", 0, res);
+	
+	//attrs = 0x800. Read only, executable. Mapping a section to a writable memory region and trying to make it exe.
+	//Should fail since the writable ref counter is greater than 0.
+	ISSUE_DMMU_HYPERCALL_REQ(CMD_MAP_L1_SECTION, va, pa, 0x800);
+	//expect(3, "Mapping a section to a writable memory region and setting it executable.", 64, res);
+	
+	ISSUE_DMMU_HYPERCALL_END_REQ();	
+}
+
 
 void main_dmmu_api_2()
 {
@@ -106,6 +147,9 @@ void main_dmmu_api_2()
 #endif
 #ifdef TEST_DMMU_API_2_PUSH	
 	test_dmmu_api_2_push();
+#endif
+#ifdef TEST_DMMU_API_2_PUSH_EXE	
+	test_dmmu_api_2_push_exe();
 #endif
 printf("TEST COMPLETED\n");
 

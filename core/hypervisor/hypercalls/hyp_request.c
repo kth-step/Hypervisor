@@ -84,7 +84,7 @@ hypercall_request_t request_map_L1Pt_section(addr_t va, addr_t sec_base_add, uin
 }
 
 
-#define REQUESTS_BASE_PY  ((5*MB) + HAL_PHYS_START)
+#define REQUESTS_BASE_PY  ((4*MB) + HAL_PHYS_START)
 #define REQUESTS_BASE_VA  (REQUESTS_BASE_PY - HAL_OFFSET)
 void pending_requests_init(void) {
 }
@@ -98,9 +98,7 @@ void push_request(hypercall_request_t request) {
 	if (curr_vm->pending_request_counter >= MAX_PENDING_REQUESTS)
     		return;
 	hypercall_request_t * pending_requests = (hypercall_request_t *)REQUESTS_BASE_VA;
-	hypercall_request_t request2 = request;
-	pending_requests[curr_vm->pending_request_counter] = request2;
-	printf("The counter 2: %d\n", curr_vm->pending_request_counter);
+	pending_requests[curr_vm->pending_request_counter] = request;
 	curr_vm->pending_request_counter++;
 }
 
@@ -164,7 +162,7 @@ void execute_next_request() {
 			dmmu_unmap_L2_pt(request.free_L2Pt.l2_base_pa_add);
 			break;
 	}
-	curr_vm->pending_request_index++;
+	curr_vm->pending_request_index++; 
 	return;
 }
 
