@@ -221,7 +221,6 @@ uint32_t call_checker_2(uint32_t index)
 
 		case CMD_CREATE_L1_PT:
 			return create_l1_pt_checker(request.create_L1Pt.l1_base_pa_add);
-			//return 0;
 
 		//No need for checks when freeing an L1
 		case CMD_FREE_L1:
@@ -231,7 +230,7 @@ uint32_t call_checker_2(uint32_t index)
 			return map_l1_section_checker(request.map_L1Pt_section.va,
 					              request.map_L1Pt_section.sec_base_add,
 					              request.map_L1Pt_section.attrs);
-			//return 0;
+
 		//No need for checks when mapping an L1 page table
 		case CMD_MAP_L1_PT:
 			return 0;
@@ -242,7 +241,6 @@ uint32_t call_checker_2(uint32_t index)
 
 		case CMD_CREATE_L2_PT:
 			return create_l2_pt_checker(request.create_L2Pt.l2_base_pa_add);
-			//return 0;
 
 		//No need for checks when freeing an L2
 		case CMD_FREE_L2:
@@ -252,8 +250,7 @@ uint32_t call_checker_2(uint32_t index)
 			return map_l2_entry_checker(request.map_L2Pt_entry.l2_base_pa_add,
 	    			                    request.map_L2Pt_entry.l2_idx,
 	    			                    request.map_L2Pt_entry.page_pa_add,
-	    			                    request.map_L2Pt_entry.attrs);
-			//return 0;		
+	    			                    request.map_L2Pt_entry.attrs);	
 	
 		//No need for checks when unmapping an L2
 		case CMD_UNMAP_L2_ENTRY:
@@ -322,7 +319,7 @@ uint32_t call_checker(uint32_t param3, uint32_t param1, uint32_t param2)
 
 void handler_rpc(unsigned callNum, uint32_t param)
 {
-	printf("Monitor invoked with parameters %d\n", param);
+	//printf("Monitor invoked with parameters %d\n", param);
 	//printf("Monitor invoked with parameters: 0x%x 0x%x 0x%x 0x%x\n", callNum, param3, param1, param2);
 
 	//uint32_t res = call_checker(param3, param1, param2);

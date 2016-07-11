@@ -251,14 +251,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		case HYPERCALL_END_REQ:
 			if (curr_vm->pending_request_index < curr_vm->pending_request_counter)
 			{
-				//num_switches += curr_vm->pending_request_counter;
-				//num_requests++;
-				hypercall_request_t request = get_request(curr_vm->pending_request_index);
-				uint32_t l1_base_add;
-				COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_base_add);
-				request.curr_l1_base_add = l1_base_add;
-				change_request(request, curr_vm->pending_request_index);
-				hypercall_rpc(0, curr_vm->pending_request_index);
+				hypercall_end_request();				
 			}	
 			break;
 		default:
@@ -267,14 +260,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 
 		if (curr_vm->pending_request_index < curr_vm->pending_request_counter && from_end_rpc == 1)
 		{
-			//num_switches += curr_vm->pending_request_counter;
-			//num_requests++;
-			hypercall_request_t request = get_request(curr_vm->pending_request_index);
-			uint32_t l1_base_add;
-			COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_base_add);
-			request.curr_l1_base_add = l1_base_add;
-			change_request(request, curr_vm->pending_request_index);
-			hypercall_rpc(0, curr_vm->pending_request_index);
+			hypercall_end_request();
 		}
 			
 	}
@@ -291,6 +277,18 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 
 	domac = curr_vm->current_mode_state->mode_config->domain_ac;
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
+}
+
+void hypercall_end_request()
+{
+	//num_switches += curr_vm->pending_request_counter;
+	//num_requests++;
+	hypercall_request_t request = get_request(curr_vm->pending_request_index);
+	uint32_t l1_base_add;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_base_add);
+	request.curr_l1_base_add = l1_base_add;
+	change_request(request, curr_vm->pending_request_index);
+	hypercall_rpc(0, curr_vm->pending_request_index);
 }
 
 return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
