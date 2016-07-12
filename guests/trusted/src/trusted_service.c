@@ -8,77 +8,12 @@
 #include "trusted_service.h"
 #include "hypercalls.h"
 
-enum dmmu_command {
-	CMD_MAP_L1_SECTION, CMD_UNMAP_L1_PT_ENTRY, CMD_CREATE_L2_PT, CMD_MAP_L1_PT, CMD_MAP_L2_ENTRY, CMD_UNMAP_L2_ENTRY, CMD_FREE_L2, CMD_CREATE_L1_PT, CMD_SWITCH_ACTIVE_L1, CMD_FREE_L1
-};
 
 dmmu_entry_t *get_bft_entry_by_block_idx(addr_t ph_block)
 {
 	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
 	return &bft[ph_block];
 }
-
-typedef enum hypercall_id_ {
-	MAP_L1PT_SECTION, UNMAP_L1PT_ENTRY, CREATE_L2PT, MAP_L1PT_PT,  MAP_L2PT_ENTRY,  UNMAP_L2PT_ENTRY, FREE_L2PT,  CREATE_L1PT, SWITCH_L1PT,  FREE_L1PT
-} hypercall_id_t;
-
-typedef struct hypercall_request_ {
-	hypercall_id_t  hypercall;
-  	uint32_t curr_l1_base_add;
-  	union {
-		struct {
-			addr_t l1_base_pa_add;
-		} switch_L1Pt;
-
-		struct {
-			addr_t l1_base_pa_add;
-		} create_L1Pt;
-
-		struct {
-			addr_t va;
-			addr_t l2_base_pa_add;
-			uint32_t attrs;
-		} map_L1Pt_pt;
-
-		struct {
-			addr_t va;
-			addr_t sec_base_add;
-			uint32_t attrs;
-		} map_L1Pt_section;
-
-		struct {
-			addr_t  va;
-		} unmap_L1Pt_entry;
-
-		struct {
-			addr_t l1_base_pa_add;
-		} free_L1Pt;
-
-		struct {
-			addr_t l2_base_pa_add;
-		} create_L2Pt;
-
-		struct {
-			addr_t l2_base_pa_add;
-			uint32_t l2_idx;
-			addr_t page_pa_add;
-			uint32_t attrs;
-		} map_L2Pt_entry;
-
-		struct {
-			addr_t l2_base_pa_add;
-			uint32_t l2_idx;
-		} unmap_L2Pt_entry;
-
-		struct {
-			addr_t l2_base_pa_add;
-		} free_L2Pt;
-	};
-} hypercall_request_t;
-
-#define REQUESTS_BASE_PY  ((4*MB) + HAL_PHYS_START)
-#define REQUESTS_BASE_VA  (REQUESTS_BASE_PY - HAL_OFFSET)
-
 
 uint32_t guest_pa_range_checker(pa, size)
 {
@@ -116,15 +51,11 @@ uint32_t section_checker(uint32_t l1_desc)
 		else if (l1_sec_desc->xn == 0 && ap == 3)
 			return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;	
 	}
-	return 0;
+	return SUCCESS;
 }
 
 uint32_t map_l2_entry_checker(uint32_t l2_base_pa_add, uint32_t l2_idx, uint32_t page_pa_add, uint32_t attrs)
 {
-	//The physical address to where the L2 entry is going to be mapped
-	//uint32_t pga = param3 & 0xFFFFFFF0;
-	//uint32_t idx = param2 >> 20;
-	//uint32_t attrs = param2 & 0xFFF;
 	uint32_t new_l2_desc = CREATE_L2_DESC(page_pa_add, attrs);
 	l2_small_t *pg_desc = (l2_small_t *) (&new_l2_desc);
 	uint32_t ap = GET_L2_AP(pg_desc);
@@ -138,12 +69,11 @@ uint32_t map_l2_entry_checker(uint32_t l2_base_pa_add, uint32_t l2_idx, uint32_t
 		return ERR_MONITOR_BLOCK_EXE;
 	else if (pg_desc->xn == 0 && ap == 3)
 		return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;
-	return 0;
+	return SUCCESS;
 }
 
 uint32_t map_l1_section_checker(uint32_t va, uint32_t sec_base_add, uint32_t attrs)
 {
-	//uint32_t attrs = param3 >> 4;
 	uint32_t l1_desc = CREATE_L1_SEC_DESC(sec_base_add, attrs);
 	return section_checker(l1_desc);
 }
@@ -209,11 +139,11 @@ uint32_t create_l2_pt_checker(uint32_t l2_base_pa_add)
 				return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;
 		}
 	}
-	return 0;
+	return SUCCESS;
 }
 
 
-uint32_t call_checker_2(uint32_t index)
+uint32_t call_checker(uint32_t index)
 {
 	hypercall_request_t * pending_requests = (hypercall_request_t *)REQUESTS_BASE_VA;
 	hypercall_request_t request = pending_requests[index];
@@ -224,7 +154,7 @@ uint32_t call_checker_2(uint32_t index)
 
 		//No need for checks when freeing an L1
 		case CMD_FREE_L1:
-			return 0;
+			return SUCCESS;
 
 		case CMD_MAP_L1_SECTION:
 			return map_l1_section_checker(request.map_L1Pt_section.va,
@@ -233,18 +163,18 @@ uint32_t call_checker_2(uint32_t index)
 
 		//No need for checks when mapping an L1 page table
 		case CMD_MAP_L1_PT:
-			return 0;
+			return SUCCESS;
 
 		//No need for checks when unmapping an entry
 		case CMD_UNMAP_L1_PT_ENTRY:
-			return 0;
+			return SUCCESS;
 
 		case CMD_CREATE_L2_PT:
 			return create_l2_pt_checker(request.create_L2Pt.l2_base_pa_add);
 
 		//No need for checks when freeing an L2
 		case CMD_FREE_L2:
-			return 0;
+			return SUCCESS;
 
 		case CMD_MAP_L2_ENTRY:
 			return map_l2_entry_checker(request.map_L2Pt_entry.l2_base_pa_add,
@@ -254,77 +184,25 @@ uint32_t call_checker_2(uint32_t index)
 	
 		//No need for checks when unmapping an L2
 		case CMD_UNMAP_L2_ENTRY:
-			return 0;
+			return SUCCESS;
 
 		//No need for checks when switching pages
 		case CMD_SWITCH_ACTIVE_L1:
-			return 0;
+			return SUCCESS;
 
 		default:
-			return 0;
+			return SUCCESS;
 	}
 	
-	return 0;
-}
-
-uint32_t call_checker(uint32_t param3, uint32_t param1, uint32_t param2)
-{
-	uint32_t p0 = param3 & 0xF;
-	switch(p0)
-	{
-		case CMD_CREATE_L1_PT:
-			return create_l1_pt_checker(param1);
-			//return 0;
-
-		//No need for checks when freeing an L1
-		case CMD_FREE_L1:
-			return 0;
-
-		case CMD_MAP_L1_SECTION:
-			return map_l1_section_checker(param3, param1, param2);
-			//return 0;
-		//No need for checks when mapping an L1 page table
-		case CMD_MAP_L1_PT:
-			return 0;
-
-		//No need for checks when unmapping an entry
-		case CMD_UNMAP_L1_PT_ENTRY:
-			return 0;
-
-		case CMD_CREATE_L2_PT:
-			return create_l2_pt_checker(param1);
-			//return 0;
-
-		//No need for checks when freeing an L2
-		case CMD_FREE_L2:
-			return 0;
-
-		case CMD_MAP_L2_ENTRY:
-			//return map_l2_entry_checker(param3, param1, param2);
-			return 0;		
-	
-		//No need for checks when unmapping an L2
-		case CMD_UNMAP_L2_ENTRY:
-			return 0;
-
-		//No need for checks when switching pages
-		case CMD_SWITCH_ACTIVE_L1:
-			return 0;
-
-		default:
-			return 0;
-	}
+	return SUCCESS;
 }
 
 
 void handler_rpc(unsigned callNum, uint32_t param)
 {
 	//printf("Monitor invoked with parameters %d\n", param);
-	//printf("Monitor invoked with parameters: 0x%x 0x%x 0x%x 0x%x\n", callNum, param3, param1, param2);
-
-	//uint32_t res = call_checker(param3, param1, param2);
 	uint32_t res;
-	res = call_checker_2(param);
+	res = call_checker(param);
 	finish_rpc(res);
 }
 

@@ -56,33 +56,6 @@ extern uint32_t syscall_monitor(uint32_t r0, uint32_t r1, uint32_t r2);
 extern uint32_t syscall_dmmu(uint32_t r0, uint32_t r1, uint32_t r2);
 //extern uint32_t syscall_dmmu_2(uint32_t r0, uint32_t r1, uint32_t r2);
 
-void test_dmmu_api_2()
-{
-	// we use the base_address + 1MB
-	uint32_t va = (va_base + 1 * 0x100000);
-	uint32_t pa;
-	uint32_t i;
-	uint32_t res;
-	for (i=0; i<1024; i++) {
-		uint32_t va1 = (va + i * 4);
-		*((uint32_t*)va1) = 0;
-	}
-
-	pa = pstart + 1 * 0x100000;
-
-	//Unmapping 0xC0010000
-	res = ISSUE_DMMU_HYPERCALL(CMD_UNMAP_L1_PT_ENTRY, va, 0, 0);
-	expect(1, "Unmap 0xC0010000 that was mapping the L2", 0, res);
-
-	//Creating a L2 page table at address pa
-	res = ISSUE_DMMU_HYPERCALL(CMD_CREATE_L2_PT, pa, 0, 0);
-	expect(2, "Creating the L2 in a non-referenced region", 0, res);
-	
-
-	res = syscall_dmmu_2(va, 7, 300);
-	expect(1, "First test", 0, res);
-	printf("Hello test 1\n");
-}
 #define MAX_PENDING_REQUESTS (10*1024)
 void test_dmmu_api_2_push()
 {
@@ -192,12 +165,7 @@ void test_req_list_create_l1_pt()
 	uint32_t pa;
 	uint32_t i;
 	uint32_t res;
-	dmmu_entry_t bft_entry;
 
-	pa = 0x0;
-	//res = ISSUE_DMMU_HYPERCALL_REQ(CMD_CREATE_L1_PT, pa, 0, 0);
-	//expect(0, "Creating L1 in PA outside the allowed guest memory",
-	//      3, res);
 
 	pa = pstart + 1 * 0x100000;
 	res = ISSUE_DMMU_HYPERCALL_REQ(CMD_CREATE_L1_PT, pa, 0, 0);
@@ -224,6 +192,7 @@ void test_req_list_create_l1_pt()
 	res = ISSUE_DMMU_HYPERCALL_REQ(CMD_CREATE_L1_PT, pa2, 0, 0);
 	//expect(0, "Creating an L1 on a non referenced part of the memory", 
 	//       0, res);
+
 	ISSUE_DMMU_HYPERCALL_END_REQ();		
 }
 
@@ -251,14 +220,12 @@ void test_req_list_l1_pt_map() {
 	//expect(0, "Mapping again the vm to the L1 page just created", 
 	//       0, res);
 
-
 	pa = pstart + 1 * 0x200000;
 	//Mapping the L1 to a region which is not L2 page table
 	res = ISSUE_DMMU_HYPERCALL_REQ(CMD_MAP_L1_PT, va, pa, 0);
 	//expect(0, "Mapping again the vm to the L1 page just created", 
 	//       12, res);
 
-	//TODO
 	//Unmapping a region of memory
 	res = ISSUE_DMMU_HYPERCALL_REQ(CMD_UNMAP_L1_PT_ENTRY, va + 0x200000, 0, 0);
 	//expect(0, "Unmap 0xC0300000 that was mapping the L1", 0, res);
@@ -268,17 +235,10 @@ void test_req_list_l1_pt_map() {
 	res = ISSUE_DMMU_HYPERCALL_REQ(CMD_MAP_L1_PT, va + 0x200000, pa, 0);
 	//expect(0, "Mapping a region which is not L1 to an L2", 
 	//       0, res);
+
 	ISSUE_DMMU_HYPERCALL_END_REQ();
 }
 
-void test_x_req_list()
-{
-	printf("HELLO\n");
-}
-
-void test_req_list_unmap_l1_entry() {
-	
-}
 
 void test_req_list_map_l2_w_nx()
 {
@@ -305,7 +265,7 @@ void test_req_list_map_l2_w_nx()
 	//Mapping 0xC0010000 to the L2 page table just creaed
 	res = ISSUE_DMMU_HYPERCALL_REQ(CMD_MAP_L1_PT, va, pa, 0);
 	//expect(3, "Mapping 0xC01... using the L2 just created", 0, res);
-	//end of L2 page table creation.
+	
 	//****************************************************
 
 	//The address where the L2 is going to be mapped to
@@ -335,6 +295,7 @@ void test_req_list_map_l2_w_nx()
 	res = ISSUE_DMMU_HYPERCALL_REQ_(CMD_MAP_L2_ENTRY, pa2, 0, pga, 0x31);
 	//expect(9, "Mapping a valid physical address into one of a valid L2",
 	//       0, res);
+
 	ISSUE_DMMU_HYPERCALL_END_REQ();
 }
 
@@ -342,9 +303,6 @@ void test_req_list_map_l2_w_nx()
 
 void main_dmmu_api_2()
 {
-#ifdef TEST_DMMU_API_2	
-	test_dmmu_api_2();
-#endif
 #ifdef TEST_DMMU_API_2_PUSH	
 	test_dmmu_api_2_push();
 #endif
@@ -359,9 +317,6 @@ void main_dmmu_api_2()
 #endif
 #ifdef TEST_REQ_LIST_L1_PT_MAP	
 	test_req_list_l1_pt_map();
-#endif
-#ifdef TEST_REQ_LIST_UNMAP_L1_ENTRY	
-	test_req_list_unmap_l1_entry();
 #endif
 #ifdef TEST_REQ_LIST_MAP_L2_W_NX	
 	test_req_list_map_l2_w_nx();

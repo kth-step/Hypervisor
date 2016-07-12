@@ -68,6 +68,69 @@ typedef __PACKED struct l1_sec {
 	uint32_t addr:12;
 } l1_sec_t;
 
+typedef enum hypercall_id_ {
+	MAP_L1PT_SECTION, UNMAP_L1PT_ENTRY, CREATE_L2PT, MAP_L1PT_PT,  MAP_L2PT_ENTRY,  UNMAP_L2PT_ENTRY, FREE_L2PT,  CREATE_L1PT, SWITCH_L1PT,  FREE_L1PT
+} hypercall_id_t;
+
+typedef struct hypercall_request_ {
+	hypercall_id_t  hypercall;
+  	uint32_t curr_l1_base_add;
+  	union {
+		struct {
+			addr_t l1_base_pa_add;
+		} switch_L1Pt;
+
+		struct {
+			addr_t l1_base_pa_add;
+		} create_L1Pt;
+
+		struct {
+			addr_t va;
+			addr_t l2_base_pa_add;
+			uint32_t attrs;
+		} map_L1Pt_pt;
+
+		struct {
+			addr_t va;
+			addr_t sec_base_add;
+			uint32_t attrs;
+		} map_L1Pt_section;
+
+		struct {
+			addr_t  va;
+		} unmap_L1Pt_entry;
+
+		struct {
+			addr_t l1_base_pa_add;
+		} free_L1Pt;
+
+		struct {
+			addr_t l2_base_pa_add;
+		} create_L2Pt;
+
+		struct {
+			addr_t l2_base_pa_add;
+			uint32_t l2_idx;
+			addr_t page_pa_add;
+			uint32_t attrs;
+		} map_L2Pt_entry;
+
+		struct {
+			addr_t l2_base_pa_add;
+			uint32_t l2_idx;
+		} unmap_L2Pt_entry;
+
+		struct {
+			addr_t l2_base_pa_add;
+		} free_L2Pt;
+	};
+} hypercall_request_t;
+
+
+enum dmmu_command {
+	CMD_MAP_L1_SECTION, CMD_UNMAP_L1_PT_ENTRY, CMD_CREATE_L2_PT, CMD_MAP_L1_PT, CMD_MAP_L2_ENTRY, CMD_UNMAP_L2_ENTRY, CMD_FREE_L2, CMD_CREATE_L1_PT, CMD_SWITCH_ACTIVE_L1, CMD_FREE_L1
+};
+
 #define MB_BITS 20
 #define MB (1UL << MB_BITS)
 #define HAL_PHYS_START (0x80000000)
@@ -107,7 +170,11 @@ typedef __PACKED struct l1_sec {
 #define GUEST_PSIZE (0x00600000)
 #define PAGE_SIZE (0x00001000)
 
+#define REQUESTS_BASE_PY  ((4*MB) + HAL_PHYS_START)
+#define REQUESTS_BASE_VA  (REQUESTS_BASE_PY - HAL_OFFSET)
+
 //Errors
+#define SUCCESS 0 	
 #define ERR_MONITOR_BLOCK_WRITABLE 64
 #define ERR_MONITOR_BLOCK_EXE 65
 #define ERR_MONITOR_PAGE_WRITABLE_AND_EXE 66
