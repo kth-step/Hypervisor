@@ -30,8 +30,6 @@ void hypercall_rpc(uint32_t rpc_op, void * arg)
 		change_guest_mode(HC_GM_TRUSTED);
 		curr_vm->current_mode_state->ctx.reg[0] = rpc_op;
 		curr_vm->current_mode_state->ctx.reg[1] = (uint32_t)arg;
-		//curr_vm->current_mode_state->ctx.reg[2] = arg1;
-		//curr_vm->current_mode_state->ctx.reg[3] = arg2;
 		curr_vm->current_mode_state->ctx.pc = handler->entry_point;
 		curr_vm->current_mode_state->ctx.psr = 0xD0;	/*USR mode, IRQ off */
 	} else {
