@@ -68,12 +68,8 @@ typedef __PACKED struct l1_sec {
 	uint32_t addr:12;
 } l1_sec_t;
 
-typedef enum hypercall_id_ {
-	MAP_L1PT_SECTION, UNMAP_L1PT_ENTRY, CREATE_L2PT, MAP_L1PT_PT,  MAP_L2PT_ENTRY,  UNMAP_L2PT_ENTRY, FREE_L2PT,  CREATE_L1PT, SWITCH_L1PT,  FREE_L1PT
-} hypercall_id_t;
-
 typedef struct hypercall_request_ {
-	hypercall_id_t  hypercall;
+	int  hypercall;
   	uint32_t curr_l1_base_add;
   	union {
 		struct {
