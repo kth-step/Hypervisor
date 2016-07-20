@@ -505,7 +505,7 @@ void test_req_list_map_l1_section_nw_x()
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va2, pa2, 0xc10);
 	//expect(8, "Mapping a valid writable page", 0, res);
 
-	int (*func)();
+	int (*func)();	
 	func = &test_x_req_list;
 	
 	//Copying the whole first MB where the function resides to another memory region.

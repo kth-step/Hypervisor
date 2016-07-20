@@ -150,16 +150,16 @@ uint32_t call_checker(uint32_t index)
 	switch (request.hypercall) {
 
 		case CMD_CREATE_L1_PT:
-			return create_l1_pt_checker(request.create_L1Pt.l1_base_pa_add);
+			return create_l1_pt_checker(request.create_L1_pt.l1_base_pa_add);
 
 		//No need for checks when freeing an L1
 		case CMD_FREE_L1:
 			return SUCCESS;
 
 		case CMD_MAP_L1_SECTION:
-			return map_l1_section_checker(request.map_L1Pt_section.va,
-					              request.map_L1Pt_section.sec_base_add,
-					              request.map_L1Pt_section.attrs);
+			return map_l1_section_checker(request.map_L1_section.va,
+					              request.map_L1_section.sec_base_add,
+					              request.map_L1_section.attrs);
 
 		//No need for checks when mapping an L1 page table
 		case CMD_MAP_L1_PT:
@@ -170,17 +170,17 @@ uint32_t call_checker(uint32_t index)
 			return SUCCESS;
 
 		case CMD_CREATE_L2_PT:
-			return create_l2_pt_checker(request.create_L2Pt.l2_base_pa_add);
+			return create_l2_pt_checker(request.create_L2_pt.l2_base_pa_add);
 
 		//No need for checks when freeing an L2
 		case CMD_FREE_L2:
 			return SUCCESS;
 
 		case CMD_MAP_L2_ENTRY:
-			return map_l2_entry_checker(request.map_L2Pt_entry.l2_base_pa_add,
-	    			                    request.map_L2Pt_entry.l2_idx,
-	    			                    request.map_L2Pt_entry.page_pa_add,
-	    			                    request.map_L2Pt_entry.attrs);	
+			return map_l2_entry_checker(request.l2_map_entry.l2_base_pa_add,
+	    			                    request.l2_map_entry.l2_idx,
+	    			                    request.l2_map_entry.page_pa_add,
+	    			                    request.l2_map_entry.attrs);	
 	
 		//No need for checks when unmapping an L2
 		case CMD_UNMAP_L2_ENTRY:

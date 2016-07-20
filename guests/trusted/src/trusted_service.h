@@ -74,51 +74,51 @@ typedef struct hypercall_request_ {
   	union {
 		struct {
 			addr_t l1_base_pa_add;
-		} switch_L1Pt;
+		} switch_mm;
 
 		struct {
 			addr_t l1_base_pa_add;
-		} create_L1Pt;
+		} create_L1_pt;
 
 		struct {
 			addr_t va;
 			addr_t l2_base_pa_add;
 			uint32_t attrs;
-		} map_L1Pt_pt;
+		} l1_pt_map;
 
 		struct {
 			addr_t va;
 			addr_t sec_base_add;
 			uint32_t attrs;
-		} map_L1Pt_section;
+		} map_L1_section;
 
 		struct {
 			addr_t  va;
-		} unmap_L1Pt_entry;
+		} unmap_L1_pageTable_entry;
 
 		struct {
 			addr_t l1_base_pa_add;
-		} free_L1Pt;
+		} unmap_L1_pt;
 
 		struct {
 			addr_t l2_base_pa_add;
-		} create_L2Pt;
+		} create_L2_pt;
 
 		struct {
 			addr_t l2_base_pa_add;
 			uint32_t l2_idx;
 			addr_t page_pa_add;
 			uint32_t attrs;
-		} map_L2Pt_entry;
+		} l2_map_entry;
 
 		struct {
 			addr_t l2_base_pa_add;
 			uint32_t l2_idx;
-		} unmap_L2Pt_entry;
+		} l2_unmap_entry;
 
 		struct {
 			addr_t l2_base_pa_add;
-		} free_L2Pt;
+		} unmap_L2_pt;
 	};
 } hypercall_request_t;
 
