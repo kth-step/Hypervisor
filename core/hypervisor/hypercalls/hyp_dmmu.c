@@ -102,19 +102,27 @@ void hypercall_dyn_free_pgd(addr_t * pgd_va)
 	uint32_t attrs = MMU_L2_TYPE_SMALL;
 	attrs |= (MMU_FLAG_B | MMU_FLAG_C);
 	attrs |= MMU_AP_USER_RW << MMU_L2_SMALL_AP_SHIFT;
-
+	
+	
 	for (i = l2_entry_idx; i < l2_entry_idx + 4; i++) {
+		/*
 		if (dmmu_l2_unmap_entry(table2_pa & L2_BASE_MASK, i))
-			printf("\n\tCould not unmap L2 entry in new PGD\n");
+			printf("\n\tCould not unmap L2 entry in new PGD\n");*/
+		push_request(request_dmmu_l2_unmap_entry(table2_pa & L2_BASE_MASK, i));
 	}
-
+	
+	/*
 	if (dmmu_unmap_L1_pt(LINUX_PA((addr_t) pgd_va)))
-		printf("\n\tCould not unmap L1 PT in free pgd\n");
+		printf("\n\tCould not unmap L1 PT in free pgd\n");*/
+	push_request(request_dmmu_unmap_L1_pt(LINUX_PA((addr_t) pgd_va)));
 
 	for (i = l2_entry_idx; i < l2_entry_idx + 4; i++, page_pa += 0x1000) {
+		/*
 		if (dmmu_l2_map_entry
 		    (table2_pa & L2_BASE_MASK, i, page_pa, attrs))
 			printf("\n\tCould not map L2 entry in new pgd\n");
+		*/
+		push_request(request_dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i, page_pa, attrs));
 
 		clean_va = LINUX_VA(MMU_L2_SMALL_ADDR(l2_page_entry[i]));
 		CacheDataInvalidateBuff(&l2_page_entry[i], 4);

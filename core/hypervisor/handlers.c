@@ -194,14 +194,14 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			res = curr_vm->current_mode_state->ctx.reg[0];
 			hypercall_end_rpc(res);
 			from_end_rpc = 0;
-counter+=1;
-if (counter % 10 == 0)
-			printf("Monitor returned with result: %d\n", res);
+			counter+=1;
+			if (counter % 100 == 0)
+				printf("Monitor returned with result: %d\n", res);
 			if (res == 0)
 			{
 				clean_and_invalidate_cache();
 				uint32_t result = execute_next_request();
-//				printf("Hypervisor returned with result: %d\n", result);
+				//printf("Hypervisor returned with result: %d\n", result);
 				from_end_rpc = 1;			
 				curr_vm->current_mode_state->ctx.reg[0] = res;
 				clean_and_invalidate_cache();
