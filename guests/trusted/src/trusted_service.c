@@ -200,7 +200,6 @@ uint32_t call_checker(uint32_t index)
 
 void handler_rpc(unsigned callNum, uint32_t param)
 {
-	finish_rpc(0);
 	//printf("Monitor invoked with parameters %d\n", param);
 	uint32_t res;
 	res = call_checker(param);
