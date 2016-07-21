@@ -56,6 +56,7 @@ void hypercall_dyn_switch_mm(addr_t table_base, uint32_t context_id)
 		printf("\n\tCould not switch MM\n");
 		dmmu_switch_mm(table_base & L1_BASE_MASK);
 	}
+	//push_request(request_dmmu_switch_mm(table_base & L1_BASE_MASK));
 	COP_WRITE(COP_SYSTEM, COP_CONTEXT_ID_REGISTER, context_id);	//Set context ID
 	isb();
 

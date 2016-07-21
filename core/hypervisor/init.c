@@ -254,12 +254,11 @@ void guests_init()
 	// initialize the mapping for the TRUESTED guest
 	// this mapping must exist in all page tables
 	// so we define the mapping in the master page table
-	uint32_t va = guests_db.guests[0].vstart;
-	uint32_t pa = guests_db.guests[0].pstart;
+	uint32_t va = guests_db.guests[1].vstart;
+	uint32_t pa = guests_db.guests[1].pstart;
 	pt_create_section(flpt_va, va, pa, MLT_TRUSTED_RAM);
 	memory_commit();
 #endif
-
 	// We pin the L2s that can be created in the 32KB are of slpt_va
 	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
 	for (i = 0; i * 4096 < 0x8000; i++) {
@@ -299,7 +298,9 @@ void guests_init()
 	memory_commit();
 
 	// Calling the create_L1_pt API to check the correctness of the L1 content and to change the page table type to 1
-	dmmu_create_L1_pt(guest_pt_pa);
+	uint32_t res = dmmu_create_L1_pt(guest_pt_pa);
+	if (res != 0)
+		printf("Failed to create the initial L1: %d\n", res);
 #ifdef DEBUG_L1_PG_TYPE
 	uint32_t index;
 	for (index = 0; index < 4; index++)
