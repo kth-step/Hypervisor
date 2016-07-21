@@ -196,7 +196,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			from_end_rpc = 0;
 			counter+=1;
 			if (counter % 100 == 0)
+			{
 				printf("Monitor returned with result: %d\n", res);
+				debug_current_request();
+			}
 			if (res == 0)
 			{
 				clean_and_invalidate_cache();

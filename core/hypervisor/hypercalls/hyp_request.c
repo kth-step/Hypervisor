@@ -98,6 +98,14 @@ void reset_requests(void) {
 	curr_vm->pending_request_index = 0;
 }
 
+void debug_current_request() {
+	if (curr_vm->pending_request_counter >= MAX_PENDING_REQUESTS)
+    		return;
+	hypercall_request_t * pending_requests = (hypercall_request_t *)REQUESTS_BASE_VA;
+	hypercall_request_t request = pending_requests[curr_vm->pending_request_index];
+	printf("Request %d\n", request.hypercall);
+}
+
 void push_request(hypercall_request_t request) {
 	if (curr_vm->pending_request_counter >= MAX_PENDING_REQUESTS)
     		return;

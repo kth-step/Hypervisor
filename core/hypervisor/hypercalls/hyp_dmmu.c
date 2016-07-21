@@ -173,18 +173,22 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 		isb();
 
 		/*Clear the SECTION entry mapping and replace it with a L2PT */
+		/*
 		if ((err = dmmu_unmap_L1_pageTable_entry((addr_t) linux_va)))
 			printf
 			    ("\n\tCould not unmap L1 entry in new pgd err:%d\n",
-			     err);
+			     err);*/
+		push_request(request_dmmu_unmap_L1_pageTable_entry((addr_t) linux_va));
 
 		table2_pa = linux_pt_get_empty_l2();	/*pointer to private L2PTs in guest */
 
 		/*Small page with cache and buffer RW */
 		uint32_t attrs = MMU_L1_TYPE_PT;
 		attrs |= (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
+		/*
 		if ((err = dmmu_l1_pt_map((addr_t) linux_va, table2_pa, attrs)))
-			printf("\n\tCould not map L1PT in new PGD %x \n", err);
+			printf("\n\tCould not map L1PT in new PGD %x \n", err);*/
+		push_request(request_dmmu_l1_pt_map((addr_t) linux_va, table2_pa, attrs));
 
 		/*Remap each individual small page to the same address */
 		uint32_t page_pa = MMU_L1_SECTION_ADDR(l1_desc_entry);
@@ -208,17 +212,21 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 				uint32_t ro_attrs =
 				    0xE | (MMU_AP_USER_RO <<
 					   MMU_L2_SMALL_AP_SHIFT);
+				/*
 				if (dmmu_l2_map_entry
 				    (table2_pa, i, page_pa, ro_attrs))
 					printf
-					    ("\n\tCould not map L2 entry in new pgd\n");
+					    ("\n\tCould not map L2 entry in new pgd\n");*/
+				push_request(request_dmmu_l2_map_entry(table2_pa, i, page_pa, ro_attrs));
 				//printf("Hypercall new PGD if L2:%x page_pa:%x i:%x attrs:%x \n", table2_pa, page_pa, i, ro_attrs);
 				continue;
 			} else {
+				/*
 				if (dmmu_l2_map_entry
 				    (table2_pa, i, page_pa, attrs))
 					printf
-					    ("\n\tCould not map L2 entry in new pgd\n");
+					    ("\n\tCould not map L2 entry in new pgd\n");*/
+				push_request(request_dmmu_l2_map_entry(table2_pa, i, page_pa, attrs));
 			}
 		}
 
@@ -251,19 +259,24 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 		addr_t clean_va;
 		for (i = l2_entry_idx; i < l2_entry_idx + 4;
 		     i++, page_pa += 0x1000) {
+			/*
 			if ((err =
 			     dmmu_l2_unmap_entry(table2_pa & L2_BASE_MASK, i)))
 				printf
 				    ("\n\tCould not unmap L2 entry in new PGD err:%x\n",
-				     err);
+				     err);*/
+			push_request(request_dmmu_l2_unmap_entry(table2_pa & L2_BASE_MASK, i));
 			uint32_t ro_attrs =
 			    0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
+			/*
 			if ((err =
 			     dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i,
 					       page_pa, ro_attrs)))
 				printf
 				    ("\n\tCould not map L2 entry in new pgd err:%x\n",
-				     err);
+				     err);*/
+			push_request(request_dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i,
+					       page_pa, ro_attrs));
 
 			clean_va =
 			    LINUX_VA(MMU_L2_SMALL_ADDR(l2_page_entry[i]));
@@ -290,12 +303,14 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 	       (uint32_t *) ((uint32_t) (master_pgd_va) + 0x2fc0), 0x1040);
 	/*Clean dcache on whole table */
 	clean_and_invalidate_cache();
+	/*
 	if ((err = dmmu_create_L1_pt(LINUX_PA((addr_t) pgd_va)))) {
 		printf("\n\tCould not create L1 pt in new pgd err:%x\n", err);
 		printf("\n\tMaster PGT:%x\n", LINUX_PA((addr_t) master_pgd_va));
 		print_all_pointing_L1(LINUX_PA((addr_t) pgd_va), 0xfff00000);
 		while (1) ;
-	}
+	}*/
+	push_request(request_dmmu_create_L1_pt(LINUX_PA((addr_t) pgd_va)));
 }
 
 /*In ARM linux pmd refers to pgd, ARM L1 Page table
