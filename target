@@ -7,8 +7,8 @@
 PLATFORM=beaglebone
 
 #SOFTWARE=minimal
-#SOFTWARE = trusted linux
-SOFTWARE = linux
+SOFTWARE = trusted linux
+#SOFTWARE = linux
 
 #SOFTWARE = dtest trusted
 

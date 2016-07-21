@@ -35,7 +35,7 @@ void clean_and_invalidate_cache()
 
 uint32_t counter = 0;
 
-//#define MONITOR_ENABLED
+#define MONITOR_ENABLED
 
 void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		 uint32_t hypercall_number)
