@@ -200,6 +200,8 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 				curr_vm->current_mode_state->ctx.reg[0] = res;
 				clean_and_invalidate_cache();
 			}
+			else
+				reset_requests();
 			break;
 			//  /*VFP Test**********************/
 			//case HYPERCALL_VFP:
@@ -244,20 +246,16 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			params.p2 = param2;
 			dmmu_handler_2(param0, param1, param2);
 			break;
-		case HYPERCALL_END_REQ:
-			if (curr_vm->pending_request_index < curr_vm->pending_request_counter)
-			{
-				hypercall_end_request();				
-			}	
-			break;
 		default:
 			hypercall_num_error(hypercall_number);
 		}
 
-		if (curr_vm->pending_request_index < curr_vm->pending_request_counter && from_end_rpc == 1)
+		if (curr_vm->pending_request_index < curr_vm->pending_request_counter)
 		{
 			hypercall_end_request();
 		}
+		else
+			reset_requests();
 			
 	}
 

@@ -203,7 +203,7 @@ void handler_rpc(unsigned callNum, uint32_t param)
 	//printf("Monitor invoked with parameters %d\n", param);
 	uint32_t res;
 	res = call_checker(param);
-	res = 0;
+	//res = 0;
 	finish_rpc(res);
 }
 

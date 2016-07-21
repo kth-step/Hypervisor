@@ -154,7 +154,7 @@ void test_req_list_create_empty_l2()
 	//expect(10, "Mapping a valid physical address into one of a non valid L2",
 	//       12, res);
 
-	ISSUE_DMMU_HYPERCALL_END_REQ();
+	//ISSUE_DMMU_HYPERCALL_END_REQ();
 }
 
 void test_req_list_create_l1_pt()
@@ -266,7 +266,7 @@ void test_req_list_unmap_l1_entry() {
 	res = ISSUE_DMMU_HYPERCALL(CMD_MAP_L1_SECTION, va2, pstart, 0xc10);
 	//expect(3, "Mapping a valid writable page", 65, res);
 
-	ISSUE_DMMU_HYPERCALL_END_REQ();
+	//ISSUE_DMMU_HYPERCALL_END_REQ();
 }
 
 
@@ -578,7 +578,7 @@ void test_req_list_create_l1_pt_w_nx()
 	       a section mapped to a writable memory region.", 
 	//       64, res);
 
-	ISSUE_DMMU_HYPERCALL_END_REQ();
+	//ISSUE_DMMU_HYPERCALL_END_REQ();
 
 }
 
