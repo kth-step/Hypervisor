@@ -774,8 +774,10 @@ uint32_t l2PT_checker(addr_t l2_base_pa_add, l2_small_t * pg_desc)
 		if (!guest_pa_range_checker
 		    (START_PA_OF_SPT(pg_desc), PAGE_SIZE))
 			return ERR_MMU_OUT_OF_RANGE_PA;
-		if (bft_entry->refcnt >= (MAX_REFCNT - 512))
+		if (bft_entry->refcnt >= (MAX_REFCNT - 512)) {
+			printf("Overflow (rc=%d) in creating an L2 for the bloxk at the address %x\n", bft_entry->refcnt, START_PA_OF_SPT(pg_desc));
 			return ERR_MMU_REF_OVERFLOW;
+		}
 	}
 	if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
 	{

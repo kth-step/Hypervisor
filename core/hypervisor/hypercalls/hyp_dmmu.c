@@ -435,8 +435,8 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 	uint32_t err;
 	if (desc != 0) {
 		if ((err = (dmmu_create_L2_pt(MMU_L2_SMALL_ADDR(desc))))) {
-			printf("\n\tCould not create L2PT in set pmd %x\n",
-			       err);
+			printf("\n\tCould not create L2PT in set pmd at %x %d\n",
+			       MMU_L2_SMALL_ADDR(desc), err);
 
 #ifdef DEBUG_MMU_SET_L1
 			printf("Hypercall set PMD pmd:%x val:%x \n", pmd, desc);
