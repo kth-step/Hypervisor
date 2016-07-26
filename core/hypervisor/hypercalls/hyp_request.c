@@ -104,6 +104,52 @@ void debug_current_request() {
 	hypercall_request_t * pending_requests = (hypercall_request_t *)REQUESTS_BASE_VA;
 	hypercall_request_t request = pending_requests[curr_vm->pending_request_index];
 	printf("Request %d\n", request.hypercall);
+	if (request.hypercall == CMD_UNMAP_L2_ENTRY)
+		printf("Unmap L2 entry base pa addr is: %x\n", request.l2_unmap_entry.l2_base_pa_add);
+	/*
+	switch (request.hypercall) {
+
+		case CMD_CREATE_L1_PT:
+			printf("create l1 pt l1 base addr is: %x\n", request.create_L1_pt.l1_base_pa_add);
+
+		//No need for checks when freeing an L1
+		case CMD_FREE_L1:
+			printf("free L1 base addr is: %x\n", request.unmap_L1_pt.l1_base_pa_add);
+
+		case CMD_MAP_L1_SECTION:
+			printf("map_l1_section va is: %x\nmap_l1_section sec_base_add is: %x\nmap_l1_section attrs is: %x\n  ",
+			        request.map_L1_section.va, request.map_L1_section.sec_base_add, request.map_L1_section.attrs);
+
+		//No need for checks when mapping an L1 page table
+		case CMD_MAP_L1_PT:
+			printf("Map L1 base addr is: %x\n", request.unmap_L1_pt.l1_base_pa_add);
+
+		//No need for checks when unmapping an entry
+		case CMD_UNMAP_L1_PT_ENTRY:
+			printf("Unmap L1 pt entry va is: %x\n", request.unmap_L1_pageTable_entry.va);
+
+		case CMD_CREATE_L2_PT:
+			printf("Create l2 pt, l2 pa base addr is: %x\n", request.create_L2_pt.l2_base_pa_add);
+
+		//No need for checks when freeing an L2
+		case CMD_FREE_L2:
+			printf("Free L2 l2 base pa addr is: %x\n", request.unmap_L2_pt.l2_base_pa_add);
+
+		case CMD_MAP_L2_ENTRY:
+			printf("map_l2_entry l2_base pa addr is: %x\nmap_l2_entry page_pa_add is: %x\nmap_l2_entry attrs is: %x\n  ",
+			        request.l2_map_entry.l2_base_pa_add, request.l2_map_entry.page_pa_add, request.l2_map_entry.attrs);	
+	
+		//No need for checks when unmapping an L2
+		case CMD_UNMAP_L2_ENTRY:
+			printf("Unmap L2 entry base pa addr is: %x\n", request.l2_unmap_entry.l2_base_pa_add);
+
+		//No need for checks when switching pages
+		case CMD_SWITCH_ACTIVE_L1:
+			printf("Switch l1 base pa addr is: %x\n", request.switch_mm.l1_base_pa_add);
+
+		default:
+			printf("Default\n");
+	}*/
 }
 
 void push_request(hypercall_request_t request) {
@@ -129,64 +175,68 @@ hypercall_request_t get_request(uint32_t index) {
 	return pending_requests[index];
 }
 
-void execute_next_request() {
+uint32_t execute_next_request() {
 	hypercall_request_t * pending_requests = (hypercall_request_t *)REQUESTS_BASE_VA;
 	if (curr_vm->pending_request_index >= curr_vm->pending_request_counter)
-		return;
+		return 0;
+	uint32_t res = 0;
 	hypercall_request_t request = pending_requests[curr_vm->pending_request_index];
 	switch(request.hypercall) {
 		case CMD_SWITCH_ACTIVE_L1:
-			dmmu_switch_mm(request.switch_mm.l1_base_pa_add);
+			res = dmmu_switch_mm(request.switch_mm.l1_base_pa_add);
 			break;
 		case CMD_CREATE_L1_PT:
-			dmmu_create_L1_pt(request.create_L1_pt.l1_base_pa_add);
+			res = dmmu_create_L1_pt(request.create_L1_pt.l1_base_pa_add);
 			break;
 		case CMD_MAP_L1_PT:
-			dmmu_l1_pt_map(request.l1_pt_map.va,
+			res = dmmu_l1_pt_map(request.l1_pt_map.va,
 			               request.l1_pt_map.l2_base_pa_add,
 			               request.l1_pt_map.attrs);
 			break;
 		case CMD_MAP_L1_SECTION:
-			dmmu_map_L1_section(request.map_L1_section.va,
+			res = dmmu_map_L1_section(request.map_L1_section.va,
 			                      request.map_L1_section.sec_base_add,
 			                      request.map_L1_section.attrs);
 			break;
 		case CMD_UNMAP_L1_PT_ENTRY:
-			dmmu_unmap_L1_pageTable_entry(request.unmap_L1_pageTable_entry.va);
+			res = dmmu_unmap_L1_pageTable_entry(request.unmap_L1_pageTable_entry.va);
 			break;
 		case CMD_FREE_L1:
-			dmmu_unmap_L1_pt(request.unmap_L1_pt.l1_base_pa_add);
+			res = dmmu_unmap_L1_pt(request.unmap_L1_pt.l1_base_pa_add);
 			break;
 		case CMD_CREATE_L2_PT:
-			dmmu_create_L2_pt(request.create_L2_pt.l2_base_pa_add);
+			res = dmmu_create_L2_pt(request.create_L2_pt.l2_base_pa_add);
 			break;
 		case CMD_MAP_L2_ENTRY:
-			dmmu_l2_map_entry(request.l2_map_entry.l2_base_pa_add,
+			res = dmmu_l2_map_entry(request.l2_map_entry.l2_base_pa_add,
 			                    request.l2_map_entry.l2_idx,
 			                    request.l2_map_entry.page_pa_add,
 			                    request.l2_map_entry.attrs);
 			break;
 		case CMD_UNMAP_L2_ENTRY:
-			dmmu_l2_unmap_entry(request.l2_unmap_entry.l2_base_pa_add,
+			res = dmmu_l2_unmap_entry(request.l2_unmap_entry.l2_base_pa_add,
 			                    request.l2_unmap_entry.l2_idx);
 			break;
 		case CMD_FREE_L2:
-			dmmu_unmap_L2_pt(request.unmap_L2_pt.l2_base_pa_add);
+			res = dmmu_unmap_L2_pt(request.unmap_L2_pt.l2_base_pa_add);
 			break;
 	}
 	curr_vm->pending_request_index++; 
-	return;
+	return res;
 }
 
 
-void execute_all_requests() {
+uint32_t execute_all_requests() {
 	uint32_t req_index;
+	uint32_t res = 0;
 	for (req_index = curr_vm->pending_request_index; req_index < curr_vm->pending_request_counter ; req_index++)
 	{
-		execute_next_request();
+		uint32_t res1 = execute_next_request();
+		if (res1 != 0)
+			res = res1;
 	}
 	reset_requests();
-	return;
+	return res;
 }
 
 

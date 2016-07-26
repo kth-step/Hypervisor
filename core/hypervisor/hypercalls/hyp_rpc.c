@@ -31,6 +31,7 @@ void hypercall_rpc(uint32_t rpc_op, void * arg)
 		curr_vm->current_mode_state->ctx.reg[0] = rpc_op;
 		curr_vm->current_mode_state->ctx.reg[1] = (uint32_t)arg;
 		curr_vm->current_mode_state->ctx.pc = handler->entry_point;
+		curr_vm->current_mode_state->ctx.sp = curr_vm->config->rpc_handlers->sp;
 		curr_vm->current_mode_state->ctx.psr = 0xD0;	/*USR mode, IRQ off */
 	} else {
 		hyper_panic("Unallowed rpc operation\n", 1);

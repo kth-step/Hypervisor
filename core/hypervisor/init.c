@@ -61,14 +61,16 @@ void dump_mmu(addr_t adr)
 {
 	uint32_t *t = (uint32_t *) adr;
 	int i;
-
+	l1_sec_t *sec;
 	for (i = 0; i < 4096; i++) {
 		uint32_t x = t[i];
 		switch (x & 3) {
 		case 2:
-			printf("SEC %x -> %x : %x DOM=%d C=%d B=%d AP=%d\n",
+ 			sec = (l1_sec_t *) (&x);
+			printf("SEC %x -> %x : %x DOM=%d C=%d B=%d AP=%d XN=%d\n",
 			       i << 20, x, (x & 0xFFF00000), (x >> 5) & 15,
-			       (x >> 3) & 1, (x >> 2) & 1, (x >> 10) & 3);
+			       (x >> 3) & 1, (x >> 2) & 1, (x >> 10) & 3,
+			       sec->xn);
 			break;
 		case 1:
 			printf("COR %x -> %x : %x DOM=%d C=%d B=%d\n",
@@ -413,6 +415,10 @@ void start_()
 	/* Initialize hypervisor guest modes and data structures
 	 * according to config file in guest*/
 	guests_init();
+
+	uint32_t value = *((uint32_t *)0xF060089C);
+	printf("value:%x \n", value);
+
 	/*Test crypto */
 
 	printf("Hypervisor initialized2.0\n Entering Guest\n");

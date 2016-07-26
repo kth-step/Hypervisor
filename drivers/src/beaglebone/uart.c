@@ -8,7 +8,7 @@
 #define UART1_BASE   0x48022000
 
 #define IO_BASE 				0xF0000000
-#define IO_OFFSET				0xB2000000
+#define IO_OFFSET				0xB5000000
 #define IO_VA_ADDRESS(x)		((x) + IO_OFFSET)
 
 #define UART_LCR_MODE_OP 0

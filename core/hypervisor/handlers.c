@@ -35,6 +35,7 @@ void clean_and_invalidate_cache()
 
 uint32_t counter = 0;
 
+
 #define MONITOR_ENABLED
 
 void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
@@ -195,16 +196,21 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			hypercall_end_rpc(res);
 			from_end_rpc = 0;
 			counter+=1;
-			if (counter % 100 == 0)
+			if (counter % 1000 == 0)
 			{
-				printf("Monitor returned with result: %d\n", res);
-				debug_current_request();
+				//printf("Monitor returned with result: %d\n", res);
+				//debug_current_request();
 			}
 			if (res == 0)
 			{
 				clean_and_invalidate_cache();
 				uint32_t result = execute_next_request();
 				//printf("Hypervisor returned with result: %d\n", result);
+				if (counter % 1000 == 0)
+				{
+					//printf("hypervisor returned with result: %d\n", res);
+					//debug_current_request();
+				}
 				from_end_rpc = 1;			
 				curr_vm->current_mode_state->ctx.reg[0] = res;
 				clean_and_invalidate_cache();
@@ -264,7 +270,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 #ifdef MONITOR_ENABLED
 			hypercall_end_request();
 #else
-			execute_all_requests();
+			clean_and_invalidate_cache();
+			res = execute_all_requests();
+			curr_vm->current_mode_state->ctx.reg[0] = res;
+			clean_and_invalidate_cache();
 #endif
 		}
 		else
@@ -488,6 +497,14 @@ return_value undef_handler(uint32_t instr, uint32_t unused, uint32_t addr)
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 #if 1
 	printf("Undefined abort\n Address:%x Instruction:%x \n", addr, instr);
+	uint32_t l1_base_add;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_base_add);
+	dump_mmu(mmu_guest_pa_to_va(l1_base_add, curr_vm->config));
+
+	printf("Undefined abort\n Address:%x Instruction:%x \n", addr, instr);
+	uint32_t value = *((uint32_t *)addr);
+	printf("value:%x requests:%d\n", value, curr_vm->pending_request_counter);
+
 #endif
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
 
