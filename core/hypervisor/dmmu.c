@@ -782,8 +782,10 @@ uint32_t l2PT_checker(addr_t l2_base_pa_add, l2_small_t * pg_desc)
 		if (!guest_pa_range_checker
 		    (START_PA_OF_SPT(pg_desc), PAGE_SIZE))
 			return ERR_MMU_OUT_OF_RANGE_PA;
-		if (bft_entry->refcnt >= (MAX_REFCNT - 512))
+		if (bft_entry->refcnt >= (MAX_REFCNT - 512)) {
+			printf("Overflow (rc=%d) in creating an L2 for the bloxk at the address %x\n", bft_entry->refcnt, START_PA_OF_SPT(pg_desc));
 			return ERR_MMU_REF_OVERFLOW;
+		}
 	}
 	if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
 	{
@@ -806,6 +808,9 @@ uint32_t l2Desc_validityChecker_dispatcher(uint32_t l2_type, uint32_t l2_desc,
 	return ERR_MMU_L2_UNSUPPORTED_DESC_TYPE;
 }
 
+
+//#define DEBUG_ADDRESS(add) ((add & 0xffff0000) == (0x86610000 & 0xffff0000))
+
 void create_L2_refs_update(addr_t l2_base_pa_add)
 {
 	uint32_t l2_desc_pa_add;
@@ -825,12 +830,23 @@ void create_L2_refs_update(addr_t l2_base_pa_add)
 			dmmu_entry_t *bft_entry =
 			    get_bft_entry_by_block_idx(ph_block);
 
+#ifdef DEBUG_ADDRESS
+			if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
+				printf("[DMMU] I am called %s mapping pa:%x using pt at:%x idx:%d attr:%x rc=%d\n", __func__, START_PA_OF_SPT(pg_desc),
+				       l2_base_pa_add, l2_idx, ap, bft_entry->refcnt);
+#endif
+
 			if ((bft_entry->type == PAGE_INFO_TYPE_DATA)
 			    && (ap == 3))
 				bft_entry->refcnt += 1;
 			if ((bft_entry->type == PAGE_INFO_TYPE_DATA)
 			    && ((ap == 3 || ap == 2) && pg_desc->xn == 0))
 				bft_entry->x_refcnt += 1;
+#ifdef DEBUG_ADDRESS
+			if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
+				printf("[DMMU] new rc=%d\n",bft_entry->refcnt);
+#endif
+
 		}
 	}
 }
@@ -953,16 +969,28 @@ int dmmu_unmap_L2_pt(addr_t l2_base_pa_add)
 		dmmu_entry_t *bft_entry_pg =
 		    get_bft_entry_by_block_idx(PA_TO_PH_BLOCK
 					       (START_PA_OF_SPT(pg_desc)));
-		ap = ((uint32_t) pg_desc->ap_3b) << 2 | pg_desc->ap_0_1bs;
+		ap = GET_L2_AP(pg_desc);
 		l2_type = l2_desc & DESC_TYPE_MASK;
 
 		if (l2_type == 0)
 			continue;
 		if ((l2_type == 2) || (l2_type == 3)) {
+#ifdef DEBUG_ADDRESS
+			if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
+				printf("[DMMU] I am called %s unmapping pa:%x using pt at:%x idx:%d attr:%x rc=%d\n", __func__, START_PA_OF_SPT(pg_desc),
+				       l2_base_pa_add, l2_idx, ap, bft_entry_pg->refcnt);
+#endif
+
 			if (ap == 3)
 				bft_entry_pg->refcnt -= 1;
 			if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
 				bft_entry_pg->x_refcnt -= 1;
+
+#ifdef DEBUG_ADDRESS
+			if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
+				printf("New rc=%d\n", bft_entry_pg->refcnt);
+#endif
+
 		}
 	}
 
@@ -1007,6 +1035,13 @@ int dmmu_l2_map_entry(addr_t l2_base_pa_add, uint32_t l2_idx,
 		return ERR_MMU_IS_NOT_L2_PT;
 
 	l2_desc = *((uint32_t *) l2_desc_va_add);
+#ifdef DEBUG_ADDRESS
+	if (DEBUG_ADDRESS(page_pa_add))
+		printf("[DMMU] I am called %s mapping pa:%x using pt at:%x idx=%d old_desx=0x%x\n", __func__, page_pa_add,
+		       l2_base_pa_add, l2_idx, l2_desc);
+#endif
+
+
 	//checks if the L2 entry is unmapped or not
 	if ((l2_desc & DESC_TYPE_MASK) != 0)
 		return ERR_MMU_PT_NOT_UNMAPPED;
@@ -1018,10 +1053,22 @@ int dmmu_l2_map_entry(addr_t l2_base_pa_add, uint32_t l2_idx,
 	//Updating page reference counter
 	l2_small_t *pg_desc = (l2_small_t *) (&new_l2_desc);
 	ap = GET_L2_AP(pg_desc);
+
+#ifdef DEBUG_ADDRESS
+	if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
+		printf("[DMMU] I am called %s mapping pa:%x using pt at:%x idx=%d attr:%x ap=%x rc=%d\n", __func__, START_PA_OF_SPT(pg_desc),
+		       l2_base_pa_add, l2_idx, attrs, ap, bft_entry_pg->refcnt);
+#endif
+
 	if (ap == 3)
 		bft_entry_pg->refcnt += 1;
 	if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
 		bft_entry_pg->x_refcnt += 1;
+
+#ifdef DEBUG_ADDRESS
+	if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
+		printf("New rc=%d\n", bft_entry_pg->refcnt);
+#endif
 	//Updating page table in memory
 	*((uint32_t *) l2_desc_va_add) = new_l2_desc;
 	return SUCCESS_MMU;
@@ -1064,12 +1111,26 @@ int dmmu_l2_unmap_entry(addr_t l2_base_pa_add, uint32_t l2_idx)
 	    get_bft_entry_by_block_idx(PA_TO_PH_BLOCK
 				       (START_PA_OF_SPT(pg_desc)));
 
-	ap = ((uint32_t) pg_desc->ap_3b) << 2 | pg_desc->ap_0_1bs;
+	ap = GET_L2_AP(pg_desc);
+
+#ifdef DEBUG_ADDRESS
+	if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
+		printf("[DMMU] I am called %s unmapping pa:%x using pt at:%x ap=%x rc=%d\n", __func__, START_PA_OF_SPT(pg_desc),
+		       l2_base_pa_add, ap, bft_entry_pg->refcnt);
+#endif
+
+
 	if (ap == 3)
 		bft_entry_pg->refcnt -= 1;
 
 	if ((ap == 3 || ap == 2) && pg_desc->xn == 0)
 		bft_entry_pg->x_refcnt -= 1;
+
+#ifdef DEBUG_ADDRESS
+	if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
+		printf("New rc=%d\n", bft_entry_pg->refcnt);
+#endif
+
 	//Updating page table in memory
 	l2_desc = UNMAP_L2_ENTRY(l2_desc);
 	*((uint32_t *) l2_desc_va_add) = l2_desc;
@@ -1227,71 +1288,62 @@ void print_all_pointing_L1(uint32_t pa, uint32_t mask)
 	printf("   block ref cnt = %d\n", bft_entry_pg->refcnt);
 }
 
-void remap_region_in_all_l1_usin_l2(uint32_t pa, uint32_t table2_pa)
+extern uint32_t *slpt_va;
+
+void print_all_pointing_L2(uint32_t pa, uint32_t mask)
 {
 	uint32_t ph_block_pg = PA_TO_PH_BLOCK(pa);
 	dmmu_entry_t *bft_entry_pg = get_bft_entry_by_block_idx(ph_block_pg);
 
 	uint32_t i = 0;
-	uint32_t l1_idx;
-	uint32_t number_of_l1 = 0;
-	uint32_t l1_base_add;
+	uint32_t l2_idx;
+	uint32_t number_of_l2 = 0;
 
-	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0,
-		 (uint32_t) l1_base_add);
-
-	uint32_t l1_base_block = PA_TO_PH_BLOCK(l1_base_add);
-	uint32_t curr_l1_block = l1_base_block;
-
-	for (i = 0; i < (1 << 20); i += 4) {
-		uint32_t sec_mask = 0xfff00000 & 0xfff00000;
+	for (i = 0; i < (1 << 20); i += 1) {
+		uint32_t pt_mask = 0xfffff000 & mask;
 		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(i);
 
-		if (bft_entry->type != PAGE_INFO_TYPE_L1PT)
+		if (bft_entry->type != PAGE_INFO_TYPE_L2PT)
 			continue;
 
-		for (l1_idx = 0; l1_idx < 4096; l1_idx += 1) {
-			uint32_t l1_desc_pa_add =
-			    L1_IDX_TO_PA(START_PA_OF_BLOCK(i), l1_idx);
-			uint32_t l1_desc_va_add =
-			    mmu_guest_pa_to_va(l1_desc_pa_add,
-					       curr_vm->config);
-			uint32_t l1_desc = *((uint32_t *) l1_desc_va_add);
-			uint32_t l1_type = L1_TYPE(l1_desc);
-			if (l1_type == 2) {
-				l1_sec_t *l1_sec_desc = (l1_sec_t *) (&l1_desc);
-				uint32_t l1_pointed_pa_add =
-				    START_PA_OF_SECTION(l1_sec_desc);
-				uint32_t ap = GET_L1_AP(l1_sec_desc);
-				if ((l1_pointed_pa_add & sec_mask) ==
-				    (pa & sec_mask)) {
+		printf("   checking block %d\n", i);
+		uint32_t l2_desc_pa_add = L2_DESC_PA(START_PA_OF_BLOCK(i), 0);
+		uint32_t va_to_use = mmu_guest_pa_to_va(l2_desc_pa_add, curr_vm->config);
+			
+		if (!guest_pa_range_checker(START_PA_OF_BLOCK(i), PAGE_SIZE)) {
+			printf("   skipping block outside guest memory in 0x%x\n", START_PA_OF_BLOCK(i));
+			uint32_t pa = START_PA_OF_BLOCK(i);
+			uint32_t slpt_pa = GET_PHYS(slpt_va);
+			uint32_t slpt_pa_end = slpt_pa + 0x8000;
+			if (!((pa >= slpt_pa) && (pa < slpt_pa_end)))
+				continue;
+			printf("   Internal hypervisor memory\n");
+			va_to_use = ((uint32_t)slpt_va) + (pa - slpt_pa);
+		}
+
+		for (l2_idx = 0; l2_idx < 512; l2_idx += 1) {
+			uint32_t l2_desc_va_add = va_to_use + l2_idx*4;
+			uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
+			uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
+
+			if ((l2_type == 2) || (l2_type == 3)) {
+				l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+				uint32_t l2_pointed_pa_add = START_PA_OF_SPT(pg_desc);
+				uint32_t ap = GET_L2_AP(pg_desc);
+
+				if ((l2_pointed_pa_add & pt_mask) ==
+				    (pa & pt_mask)) {
+					printf
+					    ("   The L2 in 0x%x (index %d) points to 0x%x ap=%d\n",
+					     START_PA_OF_BLOCK(i), l2_idx, pa, ap);
 					if (ap == 3) {
-
-						if (curr_l1_block != i) {
-							uint32_t
-							    new_l1_base_add =
-							    START_PA_OF_BLOCK
-							    (i);
-							dmmu_switch_mm
-							    (new_l1_base_add);
-							curr_l1_block = i;
-						}
-
-						dmmu_unmap_L1_pageTable_entry
-						    (l1_idx << 20);
-						uint32_t attrs = MMU_L1_TYPE_PT;
-						attrs |=
-						    (HC_DOM_KERNEL <<
-						     MMU_L1_DOMAIN_SHIFT);
-						dmmu_l1_pt_map(l1_idx << 20,
-							       table2_pa,
-							       attrs);
+						number_of_l2 += 1;
 					}
 				}
 			}
 		}
 	}
 
-	if (curr_l1_block != l1_base_block)
-		dmmu_switch_mm(l1_base_add);
+	printf("   number of L2s = %d\n", number_of_l2);
+	printf("   block ref cnt = %d\n", bft_entry_pg->refcnt);
 }

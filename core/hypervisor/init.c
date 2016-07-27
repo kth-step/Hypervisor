@@ -332,7 +332,7 @@ void guests_init()
 
 #endif
 	printf("vm_0 pagetable after initialization:\n");	// DEBUG
-	dump_mmu(guest_pt_va); // DEBUG
+	//dump_mmu(guest_pt_va); // DEBUG
 
 	mem_mmu_tlb_invalidate_all(TRUE, TRUE);
 	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
