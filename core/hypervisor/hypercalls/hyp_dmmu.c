@@ -154,121 +154,60 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 	    (addr_t *) & master_pgd_va[(addr_t) pgd_va >> MMU_L1_SECTION_SHIFT];
 	uint32_t l1_desc_entry = *l1_pt_entry_for_desc;
 
-	if (l1_desc_entry & MMU_L1_TYPE_SECTION) {	/*Section page, replace it with lvl 2 pages */
-		linux_va =
-		    MMU_L1_SECTION_ADDR(l1_desc_entry) - phys_start +
-		    page_offset;
-		COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, linux_va);
-		COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, linux_va);
-		dsb();
-		isb();
+	if (l1_desc_entry & MMU_L1_TYPE_SECTION){ 
+		printf("****ERROR: Linux 1-to-1 memory mapped by section\n");
+		return -1;
+	}
+	
+	//TODO: Exit if the l1 descriptor is unmapped.
 
-		/*Clear the SECTION entry mapping and replace it with a L2PT */
-		if ((err = dmmu_unmap_L1_pageTable_entry((addr_t) linux_va)))
+	/*Get the index of the page entry to make read only */
+
+	table2_pa = MMU_L1_PT_ADDR(l1_desc_entry);
+	table2_idx =
+	    (table2_pa - (table2_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
+	table2_idx *= 0x100;	/*256 pages per L2PT */
+
+	uint32_t l2_entry_idx =
+	    (((uint32_t) pgd_va << 12) >> 24) + table2_idx;
+
+	uint32_t *l2_page_entry =
+	    (addr_t *) (mmu_guest_pa_to_va(table2_pa & L2_BASE_MASK,
+					   (curr_vm->config)));
+	uint32_t page_pa =
+	    MMU_L2_SMALL_ADDR(l2_page_entry[l2_entry_idx]);
+
+	addr_t clean_va;
+
+	//TODO: This must be done only if the ap is 3 (RW)
+#ifdef DEBUG_MMU_L1_CREATE
+	printf("\n\tRemapping as read only the page:%x\n",page_pa);
+#endif
+	for (i = l2_entry_idx; i < l2_entry_idx + 4;
+	     i++, page_pa += 0x1000) {
+		if ((err =
+		     dmmu_l2_unmap_entry(table2_pa & L2_BASE_MASK, i)))
 			printf
-			    ("\n\tCould not unmap L1 entry in new pgd err:%d\n",
+			    ("\n\tCould not unmap L2 entry in new PGD err:%d\n",
+			     err);
+		uint32_t ro_attrs =
+		    0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
+		if ((err =
+		     dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i,
+				       page_pa, ro_attrs)))
+			printf
+			    ("\n\tCould not map L2 entry in new pgd err:%d\n",
 			     err);
 
-		table2_pa = linux_pt_get_empty_l2();	/*pointer to private L2PTs in guest */
-
-		/*Small page with cache and buffer RW */
-		uint32_t attrs = MMU_L1_TYPE_PT;
-		attrs |= (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
-		if ((err = dmmu_l1_pt_map((addr_t) linux_va, table2_pa, attrs)))
-			printf("\n\tCould not map L1PT in new PGD %d \n", err);
-
-		/*Remap each individual small page to the same address */
-		uint32_t page_pa = MMU_L1_SECTION_ADDR(l1_desc_entry);
-		/*Small page with CB on and RW */
-		attrs = MMU_L2_TYPE_SMALL;
-		attrs |= (MMU_FLAG_B | MMU_FLAG_C);
-		attrs |= MMU_AP_USER_RW << MMU_L2_SMALL_AP_SHIFT;
-
-		/*Get index of physical L2PT */
-		table2_idx =
-		    (table2_pa - (table2_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
-		table2_idx *= 0x100;	/*256 pages per L2PT */
-		end = table2_idx + 0x100;
-
-		/*Get the index of the page entry to make read only */
-		uint32_t l2_entry_idx =
-		    (((uint32_t) pgd_va << 12) >> 24) + table2_idx;
-
-		for (i = table2_idx; i < end; i++, page_pa += 0x1000) {
-			if (i >= l2_entry_idx && i < l2_entry_idx + 4) {	/*4 small pages RO 16KB PGD */
-				uint32_t ro_attrs =
-				    0xE | (MMU_AP_USER_RO <<
-					   MMU_L2_SMALL_AP_SHIFT);
-				if (dmmu_l2_map_entry
-				    (table2_pa, i, page_pa, ro_attrs))
-					printf
-					    ("\n\tCould not map L2 entry in new pgd\n");
-				//printf("Hypercall new PGD if L2:%x page_pa:%x i:%x attrs:%x \n", table2_pa, page_pa, i, ro_attrs);
-				continue;
-			} else {
-				if (dmmu_l2_map_entry
-				    (table2_pa, i, page_pa, attrs))
-					printf
-					    ("\n\tCould not map L2 entry in new pgd\n");
-			}
-		}
-
-		// EMULATION that remapp all existing L1s
-		remap_region_in_all_l1_usin_l2(LINUX_PA((addr_t) pgd_va),
-					       table2_pa);
-
-		/*Invalidate updated entry */
-		CacheDataInvalidateBuff(l1_pt_entry_for_desc, 4);
+		clean_va =
+		    LINUX_VA(MMU_L2_SMALL_ADDR(l2_page_entry[i]));
+		CacheDataInvalidateBuff(&l2_page_entry[i], 4);
 		dsb();
-	}
-	/*Here we already got a L2PT */
-	else {
-		/*Get the index of the page entry to make read only */
 
-		uint32_t table2_pa = MMU_L1_PT_ADDR(l1_desc_entry);
-		uint32_t table2_idx =
-		    (table2_pa - (table2_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
-		table2_idx *= 0x100;	/*256 pages per L2PT */
-
-		uint32_t l2_entry_idx =
-		    (((uint32_t) pgd_va << 12) >> 24) + table2_idx;
-
-		uint32_t *l2_page_entry =
-		    (addr_t *) (mmu_guest_pa_to_va(table2_pa & L2_BASE_MASK,
-						   (curr_vm->config)));
-		uint32_t page_pa =
-		    MMU_L2_SMALL_ADDR(l2_page_entry[l2_entry_idx]);
-
-		addr_t clean_va;
-#ifdef DEBUG_MMU_L1_CREATE
-		printf("\n\tRemapping as read only the page:%x\n",page_pa);
-#endif
-		for (i = l2_entry_idx; i < l2_entry_idx + 4;
-		     i++, page_pa += 0x1000) {
-			if ((err =
-			     dmmu_l2_unmap_entry(table2_pa & L2_BASE_MASK, i)))
-				printf
-				    ("\n\tCould not unmap L2 entry in new PGD err:%d\n",
-				     err);
-			uint32_t ro_attrs =
-			    0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
-			if ((err =
-			     dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i,
-					       page_pa, ro_attrs)))
-				printf
-				    ("\n\tCould not map L2 entry in new pgd err:%d\n",
-				     err);
-
-			clean_va =
-			    LINUX_VA(MMU_L2_SMALL_ADDR(l2_page_entry[i]));
-			CacheDataInvalidateBuff(&l2_page_entry[i], 4);
-			dsb();
-
-			COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, clean_va);
-			COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, clean_va);	/*Update cache with new values */
-			dsb();
-			isb();
-		}
+		COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, clean_va);
+		COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, clean_va);	/*Update cache with new values */
+		dsb();
+		isb();
 	}
 
 	/* Page table 0x0 - 0x4000
@@ -347,64 +286,13 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 	    (addr_t *) ((addr_t) pgd_va + l1_pt_idx_for_desc + page_offset_idx);
 	l1_desc_entry = *l1_pt_entry_for_desc;
 
-	addr_t *desc_va = LINUX_VA(MMU_L1_PT_ADDR(l1_entry));
-
-	if (l1_desc_entry & MMU_L1_TYPE_SECTION) {	/*SECTION page, replace with lvl2 pages */
-
-		/*Clear the SECTION entry mapping and replace it with a L2PT */
-		if (dmmu_unmap_L1_pageTable_entry((addr_t) desc_va))
-			printf("\n\tCould not unmap L1 entry in set PMD\n");
-		uint32_t table2_pa = linux_pt_get_empty_l2();	/*pointer to private L2PTs in guest */
-
-		/*Small page with cache and buffer RW */
-		attrs = MMU_L1_TYPE_PT;
-		attrs |= (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
-		if (dmmu_l1_pt_map((addr_t) desc_va, table2_pa, attrs))
-			printf("\n\tCould not map L1 PT in set PMD\n");
-
-		/*Remap each individual small page to the same address */
-		uint32_t page_pa = MMU_L1_SECTION_ADDR(l1_desc_entry);
-		/*Small page with CB on and RW */
-
-		int i, end, table2_idx;
-		/*This is the idx of the physical address that needs to be RO future new (L2PT) */
-		uint32_t l2_idx = ((uint32_t) l1_entry << 12) >> 24;
-
-		/*Get index of physical L2PT */
-		table2_idx =
-		    (table2_pa - (table2_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
-		table2_idx *= 0x100;	/*256 pages per L2PT */
-		end = table2_idx + 0x100;
-
-		for (i = table2_idx; i < end; i++, page_pa += 0x1000) {
-			if (i == l2_idx + (table2_idx)) {
-				uint32_t ro_attrs =
-				    0xE | (MMU_AP_USER_RO <<
-					   MMU_L2_SMALL_AP_SHIFT);
-				if (dmmu_l2_map_entry
-				    (table2_pa, i, page_pa, ro_attrs))
-					printf
-					    ("\n\tCould not map L2 entry in set PMD\n");
-			} else
-			    if (dmmu_l2_map_entry
-				(table2_pa, i, page_pa, l2_rw_attrs))
-				printf
-				    ("\n\tCould not map L2 entry in set PMD\n");
-		}
-
-		// EMULATION that remapp all existing L1s
-		remap_region_in_all_l1_usin_l2(MMU_L2_SMALL_ADDR(desc),
-					       table2_pa);
-
-		/*Invalidate updated entry */
-#ifdef AGGRESSIVE_FLUSHING_HANDLERS
-		COP_WRITE(COP_SYSTEM, COP_DCACHE_INVALIDATE_MVA,
-			  l1_pt_entry_for_desc);
-		dsb();
-#endif
-		dsb();
-		l1_desc_entry = *l1_pt_entry_for_desc;
+	if (l1_desc_entry & MMU_L1_TYPE_SECTION){ 
+		printf("****ERROR: Linux 1-to-1 memory mapped by section\n");
+		return -1;
 	}
+	//TODO: Exit if the l1 entry is unmapped.
+
+	addr_t *desc_va = LINUX_VA(MMU_L1_PT_ADDR(l1_entry));
 
 	COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, desc_va);
 	COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, desc_va);
@@ -430,6 +318,7 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 	    (l2pt_pa - (l2pt_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
 	table2_idx *= 0x100;	/*256 pages per L2PT */
 
+	//TODO: Fix the method to read the ap
 	/*If page entry for L2PT is RW, unmap it and make it RO so we can create a L2PT */
 	if (((l2entry_desc >> 4) & 0xff) == 3) {
 #ifdef DEBUG_SET_PMD
