@@ -131,6 +131,7 @@ void hypercall_dyn_free_pgd(addr_t * pgd_va)
 
 /*New pages for processes, copys kernel space from master pages table
  *and cleans the cache, set these pages read only for user */
+//#define DEBUG_MMU_L1_CREATE 
 void hypercall_dyn_new_pgd(addr_t * pgd_va)
 {
 #ifdef DEBUG_MMU_L1_CREATE
@@ -174,7 +175,7 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 		uint32_t attrs = MMU_L1_TYPE_PT;
 		attrs |= (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
 		if ((err = dmmu_l1_pt_map((addr_t) linux_va, table2_pa, attrs)))
-			printf("\n\tCould not map L1PT in new PGD %x \n", err);
+			printf("\n\tCould not map L1PT in new PGD %d \n", err);
 
 		/*Remap each individual small page to the same address */
 		uint32_t page_pa = MMU_L1_SECTION_ADDR(l1_desc_entry);
@@ -239,12 +240,15 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 		    MMU_L2_SMALL_ADDR(l2_page_entry[l2_entry_idx]);
 
 		addr_t clean_va;
+#ifdef DEBUG_MMU_L1_CREATE
+		printf("\n\tRemapping as read only the page:%x\n",page_pa);
+#endif
 		for (i = l2_entry_idx; i < l2_entry_idx + 4;
 		     i++, page_pa += 0x1000) {
 			if ((err =
 			     dmmu_l2_unmap_entry(table2_pa & L2_BASE_MASK, i)))
 				printf
-				    ("\n\tCould not unmap L2 entry in new PGD err:%x\n",
+				    ("\n\tCould not unmap L2 entry in new PGD err:%d\n",
 				     err);
 			uint32_t ro_attrs =
 			    0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
@@ -252,7 +256,7 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 			     dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i,
 					       page_pa, ro_attrs)))
 				printf
-				    ("\n\tCould not map L2 entry in new pgd err:%x\n",
+				    ("\n\tCould not map L2 entry in new pgd err:%d\n",
 				     err);
 
 			clean_va =
@@ -281,8 +285,8 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 	/*Clean dcache on whole table */
 	clean_and_invalidate_cache();
 	if ((err = dmmu_create_L1_pt(LINUX_PA((addr_t) pgd_va)))) {
-		printf("\n\tCould not create L1 pt in new pgd err:%x\n", err);
-		printf("\n\tMaster PGT:%x\n", LINUX_PA((addr_t) master_pgd_va));
+		printf("\n\tCould not create L1 pt in new pgd in %x err:%d\n", LINUX_PA((addr_t) pgd_va), err);
+		printf("\n\tMaster PGT:%d\n", LINUX_PA((addr_t) master_pgd_va));
 		print_all_pointing_L1(LINUX_PA((addr_t) pgd_va), 0xfff00000);
 		while (1) ;
 	}
@@ -290,8 +294,13 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 
 /*In ARM linux pmd refers to pgd, ARM L1 Page table
  *Linux maps 2 pmds at a time  */
+// #define DEBUG_SET_PMD
 void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 {
+#ifdef DEBUG_SET_PMD
+	printf("*** Hypercall set_pmd: va:0x%x pa:0x%x\n", pmd,
+	       LINUX_PA((addr_t) pmd));
+#endif
 	uint32_t switch_back = 0;
 	addr_t l1_entry, *l1_pt_entry_for_desc;
 	addr_t curr_pgd_pa, *pgd_va, attrs;
@@ -403,7 +412,10 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 	isb();
 
 	/*We need to make sure the new L2 PT is unreferenced */
-
+#ifdef DEBUG_SET_PMD
+	printf("\t desc is 0x%x\n", desc);
+	printf("\t desc_va is 0x%x\n", desc_va);
+#endif
 	addr_t desc_va_idx = MMU_L1_SECTION_IDX((addr_t) desc_va);
 
 	addr_t l2pt_pa = MMU_L1_PT_ADDR(pgd_va[desc_va_idx]);
@@ -420,6 +432,14 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 
 	/*If page entry for L2PT is RW, unmap it and make it RO so we can create a L2PT */
 	if (((l2entry_desc >> 4) & 0xff) == 3) {
+#ifdef DEBUG_SET_PMD
+		printf("\n\tRemapping as read only the page:%x\n",l2entry_desc);
+#endif
+		uint32_t ph_block = PA_TO_PH_BLOCK(l2entry_desc);
+		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
+#ifdef DEBUG_SET_PMD
+		printf("\n\tCounter :%d\n",bft_entry->refcnt);
+#endif
 		if (dmmu_l2_unmap_entry
 		    ((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx))
 			printf("\n\tCould not unmap L2 entry in set PMD\n");
@@ -444,6 +464,9 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 
 			print_all_pointing_L1(MMU_L2_SMALL_ADDR(desc),
 					      0xfffff000);
+			print_all_pointing_L2(MMU_L2_SMALL_ADDR(desc),
+					      0xfffff000);
+			
 			while (1) ;
 		}
 	}

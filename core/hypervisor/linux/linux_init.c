@@ -151,7 +151,7 @@ addr_t linux_pt_get_empty_l2()
 		return 0;
 	} else {
 		addr_t index = linux_l2_index_p * 0x400;
-		memset((uint32_t *) ((uint32_t) va_l2_pt + index), 0, 0x400);
+		// memset((uint32_t *) ((uint32_t) va_l2_pt + index), 0, 0x400);
 		uint32_t l2_base_add = (uint32_t) (pa_l2_pt + index);
 
 		// assuming that va_l2_pt is 4kb aligned
@@ -164,7 +164,7 @@ addr_t linux_pt_get_empty_l2()
 
 }
 
-//#define MAP_LINUX_USING_L2
+#define MAP_LINUX_USING_L2
 
 void linux_init_dmmu()
 {
@@ -207,14 +207,14 @@ void linux_init_dmmu()
 	    mmu_guest_pa_to_va(reserved_l2_pts_pa, curr_vm->config);
 
 	/*Memory setting the reserved L2 pages to 0
-	 *There is a lot of garbage occupying the L2 page address in real HW
-	 *Only using 0x10000 and not whole MB   */
-	memset((addr_t *) reserved_l2_pts_va, 0, 0x10000);
+	 *We clean not the whole MB   */
+	memset((addr_t *) reserved_l2_pts_va, 0, 0x100000);
 	for (i = reserved_l2_pts_pa; i < reserved_l2_pts_pa + 0x10000;
 	     i += PAGE_SIZE) {
 		if ((error = dmmu_create_L2_pt(i)))
 			printf("\n\tCould not map L2 PT: %d %x\n", error, i);
 	}
+	
 
 	uint32_t offset;
 	/*Can't map from offset = 0 because start addresses contains page tables */
@@ -237,7 +237,6 @@ void linux_init_dmmu()
 #else
 	for (offset = SECTION_SIZE;
 	     offset + SECTION_SIZE <= guest_psize; offset += SECTION_SIZE) {
-
 		table2_pa = linux_pt_get_empty_l2(); /*pointer to private L2PTs in guest*/
 		dmmu_create_L2_pt(table2_pa & L2_BASE_MASK);
 		dmmu_l1_pt_map(guest_pstart + offset, table2_pa, page_attrs);
@@ -299,7 +298,7 @@ void linux_init_dmmu()
 	uint32_t end = table2_idx + 0x100;
 
 	for(i = table2_idx; i < end; i++, page_pa+=0x1000) {
-    		if((i%256) >=1 && (i%256) <=7) {
+    		if((i%256) >=4 && (i%256) <=7) {
 			uint32_t ro_attrs =
 			    0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
 			dmmu_l2_map_entry(table2_pa, i, page_pa, ro_attrs);
