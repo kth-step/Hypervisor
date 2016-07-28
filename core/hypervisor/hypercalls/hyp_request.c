@@ -98,15 +98,15 @@ void reset_requests(void) {
 	curr_vm->pending_request_index = 0;
 }
 
+//#define ADV_DEBUG_CUR_REQ
 void debug_current_request() {
 	if (curr_vm->pending_request_counter >= MAX_PENDING_REQUESTS)
     		return;
 	hypercall_request_t * pending_requests = (hypercall_request_t *)REQUESTS_BASE_VA;
 	hypercall_request_t request = pending_requests[curr_vm->pending_request_index];
 	printf("Request %d\n", request.hypercall);
-	if (request.hypercall == CMD_UNMAP_L2_ENTRY)
-		printf("Unmap L2 entry base pa addr is: %x\n", request.l2_unmap_entry.l2_base_pa_add);
-	/*
+		
+#ifdef ADV_DEBUG_CUR_REQ
 	switch (request.hypercall) {
 
 		case CMD_CREATE_L1_PT:
@@ -120,18 +120,15 @@ void debug_current_request() {
 			printf("map_l1_section va is: %x\nmap_l1_section sec_base_add is: %x\nmap_l1_section attrs is: %x\n  ",
 			        request.map_L1_section.va, request.map_L1_section.sec_base_add, request.map_L1_section.attrs);
 
-		//No need for checks when mapping an L1 page table
 		case CMD_MAP_L1_PT:
 			printf("Map L1 base addr is: %x\n", request.unmap_L1_pt.l1_base_pa_add);
 
-		//No need for checks when unmapping an entry
 		case CMD_UNMAP_L1_PT_ENTRY:
 			printf("Unmap L1 pt entry va is: %x\n", request.unmap_L1_pageTable_entry.va);
 
 		case CMD_CREATE_L2_PT:
 			printf("Create l2 pt, l2 pa base addr is: %x\n", request.create_L2_pt.l2_base_pa_add);
 
-		//No need for checks when freeing an L2
 		case CMD_FREE_L2:
 			printf("Free L2 l2 base pa addr is: %x\n", request.unmap_L2_pt.l2_base_pa_add);
 
@@ -139,17 +136,16 @@ void debug_current_request() {
 			printf("map_l2_entry l2_base pa addr is: %x\nmap_l2_entry page_pa_add is: %x\nmap_l2_entry attrs is: %x\n  ",
 			        request.l2_map_entry.l2_base_pa_add, request.l2_map_entry.page_pa_add, request.l2_map_entry.attrs);	
 	
-		//No need for checks when unmapping an L2
 		case CMD_UNMAP_L2_ENTRY:
 			printf("Unmap L2 entry base pa addr is: %x\n", request.l2_unmap_entry.l2_base_pa_add);
 
-		//No need for checks when switching pages
 		case CMD_SWITCH_ACTIVE_L1:
 			printf("Switch l1 base pa addr is: %x\n", request.switch_mm.l1_base_pa_add);
 
 		default:
 			printf("Default\n");
-	}*/
+	}
+#endif
 }
 
 void push_request(hypercall_request_t request) {
@@ -232,8 +228,11 @@ uint32_t execute_all_requests() {
 	for (req_index = curr_vm->pending_request_index; req_index < curr_vm->pending_request_counter ; req_index++)
 	{
 		uint32_t res1 = execute_next_request();
-		if (res1 != 0)
-			res = res1;
+		if (res1 != 0){
+			if (res == 0)
+				res = res1;
+			printf("Index of failed request is: %d\n", req_index);
+		}
 	}
 	reset_requests();
 	return res;

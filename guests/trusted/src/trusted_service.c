@@ -197,10 +197,12 @@ uint32_t call_checker(uint32_t index)
 	return SUCCESS;
 }
 
-
+//#define DEBUG_MONITOR
 void handler_rpc(unsigned callNum, uint32_t param)
 {
-	//printf("Monitor invoked with parameters %d\n", param);
+#ifdef DEBUG_MONITOR
+	printf("Monitor invoked with parameters %d\n", param);
+#endif
 	finish_rpc(0);
 	//printf("Monitor invoked.\n");
 	uint32_t res;
