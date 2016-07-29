@@ -252,12 +252,18 @@ void guests_init()
 
 	printf("HV pagetable after guests initialization:\n");	// DEBUG
 	//    dump_mmu(flpt_va); // DEBUG
+
+uint32_t trusted_index = 0;
 #ifdef TRUSTED
+
+#ifdef LINUX
+	trusted_index = 1;
+#endif	
 	// initialize the mapping for the TRUESTED guest
 	// this mapping must exist in all page tables
 	// so we define the mapping in the master page table
-	uint32_t va = guests_db.guests[1].vstart;
-	uint32_t pa = guests_db.guests[1].pstart;
+	uint32_t va = guests_db.guests[trusted_index].vstart;
+	uint32_t pa = guests_db.guests[trusted_index].pstart;
 	pt_create_section(flpt_va, va, pa, MLT_TRUSTED_RAM);
 	memory_commit();
 #endif
