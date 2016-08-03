@@ -15,6 +15,14 @@ cpu_callback interrupt_handlers[IRQ_COUNT];
 	return RV_OK;
 }
 
+//Added this dummy function to make integratorCP compilable.
+/*Returns the first true bit*/
+uint32_t check_pending_interrupts()
+{
+#warning "check_pending_interrupts IS UNIMPLEMENTED!"
+	return (uint32_t) - 1;	/*No pending interrupts */
+}
+
 /* 
  */
 int cpu_irq_get_count()

@@ -4,15 +4,24 @@
 #include "soc_defs.h"
 
     .global _interrupt_vector_table
-    .extern interrupt_handlers
-    .extern impl_reset
+#    .extern interrupt_handlers	//Commented out to make u8500 compilable.
+#    .extern impl_reset			//Commented out to make u8500 compilable
+
+/* Inserted the following symbols since core/hw/cpu/arm/armv7a/boot.S refer to these symbols in this file. This is needed to make u8500 compilable. */
+	.global impl_irq
+	.global impl_fiq
+	.global impl_swi
+	.global impl_undef
+	.global impl_dabort
+	.global impl_pabort
 
     .code 32
     .align 4
 
     .section .startup,"ax"
 
-
+/*
+	Commented out since duplicate declaration with core/hw/cpu/arm/armv7a/boot.S in order to make u8500 compilable.
 _interrupt_vector_table:
     b impl_reset
     b impl_undef
@@ -22,6 +31,7 @@ _interrupt_vector_table:
     nop
     b impl_irq
     b impl_fiq
+*/
  /*
   * system exception handlers
   */

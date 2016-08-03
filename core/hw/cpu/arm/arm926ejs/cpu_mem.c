@@ -55,6 +55,30 @@ static void mem_icache_clean_and_invalidate()
 	    "mrc p15, 0, pc, c7, c14, 3\n" "bne .dcache_clean");
 }
 
+/* Added dummy for enabling compilation. */
+void CacheDataCleanInvalidateAll(void)
+{
+	#warning "CacheDataCleanInvalidateAll NOT IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+}
+
+/* Added dummy for enabling compilation. */
+void clean_dcache_region(addr_t start, addr_t end)
+{
+	#warning "clean_dcache_region NOT IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+}
+
+/* Added dummy for enabling compilation. */
+void inv_dcache_region(addr_t start, addr_t end)
+{
+	#warning "inv_dcache_region NOT IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+}
+
+/* Added dummy for enabling compilation. */
+void CacheDataInvalidateBuff(unsigned int startAddr, unsigned int numBytes)
+{
+	#warning "CacheDataInvalidateBuff NOT IMPLEMENTED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+}
+
 void mem_cache_invalidate(BOOL inst_inv, BOOL data_inv, BOOL data_writeback)
 {
 	uint32_t tmp = 1;

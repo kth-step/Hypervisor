@@ -10,6 +10,14 @@ static void default_handler(uint32_t r0, uint32_t r1, uint32_t r2)
 	printf("DEFAULT INTERRUPT HANDLER %x:%x:%x\n", r0, r1, r2);
 }
 
+//Added this dummy function to make integratorCP compilable.
+/*Returns the first true bit*/
+uint32_t check_pending_interrupts()
+{
+#warning "check_pending_interrupts IS UNIMPLEMENTED!"
+	return (uint32_t) - 1;	/*No pending interrupts */
+}
+
 /* 
  */
 

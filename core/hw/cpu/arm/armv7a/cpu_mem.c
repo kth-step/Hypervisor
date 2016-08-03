@@ -268,9 +268,9 @@ void inv_dcache_region(addr_t start, addr_t end)
 	//Data Synchronization Barrier acts as a special kind of memory barrier. No
 	//instruction in program order after this instruction executes until this
 	//instruction completes. This instruction completes when:
-	//¢ All explicit memory accesses before this instruction complete.
-	//¢ All Cache, Branch predictor and TLB maintenance operations before this
-	//  instruction complete.
+	//-All explicit memory accesses before this instruction complete.
+	//-All Cache, Branch predictor and TLB maintenance operations before this
+	// instruction complete.
 	dsb();
 }
 
@@ -334,8 +334,9 @@ void clean_dcache_region(addr_t start, addr_t end)
 	//Data Synchronization Barrier acts as a special kind of memory barrier. No
 	//instruction in program order after this instruction executes until this
 	//instruction completes. This instruction completes when:
-	//¢ All explicit memory accesses before this instruction complete.
-	//¢ All Cache, Branch predictor and TLB maintenance operations before this
-	//  instruction complete.
+	//-All explicit memory accesses before this instruction complete.
+	//-All Cache, Branch predictor and TLB maintenance operations before this
+	// instruction complete.
 	dsb();
 }
+//////////////

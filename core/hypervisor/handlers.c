@@ -6,7 +6,6 @@
 
 extern virtual_machine *curr_vm;
 
-extern BOOL soc_check_cpsw_access(uint32_t, uint32_t);
 #define USE_DMMU
 
 // Disabling aggressive flushing
