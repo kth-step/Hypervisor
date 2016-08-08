@@ -37,6 +37,7 @@ typedef enum memory_layout_type_ {
 	MLT_IO_RW_REG,
 	MLT_IO_RO_REG,
 	MLT_IO_HYP_REG,
+	MLT_TRUSTED_READABLE_RAM,
 } memory_layout_type;
 
 typedef enum memory_layout_flags_ {

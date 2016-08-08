@@ -173,6 +173,7 @@ int dmmu_switch_mm(addr_t l1_base_pa_add);
 int dmmu_create_L1_pt(addr_t l1_base_pa_add);
 int dmmu_l1_pt_map(addr_t va, addr_t l2_base_pa_add, uint32_t attrs);
 int dmmu_unmap_L1_pt(addr_t l1_base_pa_add);
+uint32_t dmmu_map_L1_section(addr_t va, addr_t sec_base_add, uint32_t attrs);
 uint32_t dmmu_unmap_L1_pageTable_entry(addr_t va);
 
 uint32_t dmmu_create_L2_pt(addr_t l2_base_pa_add);

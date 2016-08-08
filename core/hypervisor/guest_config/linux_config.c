@@ -1,8 +1,7 @@
 #include "hyper_config_base.h"
 #include "hyper_config.h"
 
-// #define GUEST_LOCATION 0xF1000000
-#define TRUSTED_LOCATION 0xF0500000
+#define TRUSTED_LOCATION 0xF0600000
 #define TRUSTED_ENTRY (TRUSTED_LOCATION)
 #define TRUSTED_RPC   ((TRUSTED_LOCATION) + 4)
 #define TRUSTED_SP    ((TRUSTED_LOCATION) + 0x00100000 - 4)	/* ??? */
@@ -18,12 +17,6 @@
 /*
  * Guest mode access to certain domains
  * ********************************************************/
-
-#define HC_DOMAC_ALL				\
-  ((1 << (2 * HC_DOM_DEFAULT)) |		\
-   (1 << (2 * HC_DOM_TASK)) |			\
-   (1 << (2 * HC_DOM_KERNEL)) |			\
-   (1 << (2 * HC_DOM_TRUSTED)))
 
 #define HC_DOMAC_KERNEL				\
   ((1 << (2 * HC_DOM_DEFAULT)) |		\

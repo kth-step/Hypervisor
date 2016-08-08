@@ -9,12 +9,9 @@ extern uint32_t *slpt_va;
 /* Change hypervisor guest mode. Domain AP and page AP will change .*/
 void change_guest_mode(uint32_t mode)
 {
-	uint32_t domac;
 	curr_vm->current_mode_state = &curr_vm->mode_states[mode];
 	cpu_context_current_set(&(curr_vm->current_mode_state->ctx));
 	curr_vm->current_guest_mode = mode;
-	domac = curr_vm->current_mode_state->mode_config->domain_ac;
-	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 }
 
 uint32_t boot = 0;

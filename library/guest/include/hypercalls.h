@@ -55,4 +55,5 @@
      /*RPC*/
 #define HYPERCALL_RPC					1020
 #define HYPERCALL_END_RPC				1021
+#define HYPERCALL_END_REQ		1044
 #endif				/* GUEST_HYPERCALLS_H_ */

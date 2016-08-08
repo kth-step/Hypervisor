@@ -10,6 +10,16 @@ extern virtual_machine *curr_vm;
 
 // Disabling aggressive flushing
 #define AGGRESSIVE_FLUSHING_HANDLERS
+#define HC_DOMAC_ALL 0x55555555
+
+typedef struct data
+{
+	uint32_t p0;
+	uint32_t p1;
+	uint32_t p2;
+};
+
+struct data params;
 
 void clean_and_invalidate_cache()
 {
@@ -21,24 +31,25 @@ void clean_and_invalidate_cache()
 #endif
 }
 
+
+uint32_t counter = 0;
+
+
+#define MONITOR_ENABLED
+//#define DEBUG_MONITOR_CALL
+
 void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		 uint32_t hypercall_number)
 {
+
+	//Enabling all the domains
+	uint32_t domac = HC_DOMAC_ALL;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 //  if ((hypercall_number == HYPERCALL_RESTORE_REGS) || (hypercall_number == HYPERCALL_RESTORE_LINUX_REGS) && (hypercall_number != HYPERCALL_SET_TLS_ID) ){
 //      printf("SWI ENTER hypercall_number = %d %x %x %x\n", hypercall_number, param0, param1, param2);
 //  }
 	/*TODO Added check that controls if it comes from user space, makes it pretty inefficient, remake later */
 	/*Testing RPC from user space, remove later */
-	if (curr_vm->current_guest_mode == HC_GM_TASK) {
-		if (hypercall_number == 1020) {
-			//ALLOWED RPC OPERATION
-			hypercall_rpc(param0, (uint32_t *) param1);
-			return;
-		} else if (hypercall_number == 1021) {
-			hypercall_end_rpc();
-			return;
-		}
-	}
 	if (curr_vm->current_guest_mode == HC_GM_TASK) {
 /////////////////////
 		if ((curr_vm->current_mode_state->ctx.psr & IRQ_MASK) != 0)
@@ -102,95 +113,113 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			    curr_vm->exception_vector[V_ARM_SYSCALL];
 		}
 	} else if (curr_vm->current_guest_mode != HC_GM_TASK) {
-		//    printf("\tHypercallnumber: %d (%x, %x) called\n", hypercall_number, param0, param);
+		// printf("\tHypercallnumber: %d (%x) called\n", hypercall_number, param0);
 		uint32_t res;
+		uint32_t from_end_rpc = 0;
 		switch (hypercall_number) {
 			/* TEMP: DMMU TEST */
 		case 666:
-
-			clean_and_invalidate_cache();
-
-			res = dmmu_handler(param0, param1, param2);
-			curr_vm->current_mode_state->ctx.reg[0] = res;
-
-			clean_and_invalidate_cache();
-
-			return;
+			params.p0 = param0;
+			params.p1 = param1;
+			params.p2 = param2;
+			dmmu_handler_2(param0, param1, param2);
+			break;
 		case HYPERCALL_DBG:
 			printf("To here %x\n", param0);
-			return;
+			break;
 		case HYPERCALL_GUEST_INIT:
 			hypercall_guest_init(param0);
-			return;
+			break;
 		case HYPERCALL_INTERRUPT_SET:
 			hypercall_interrupt_set(param0, param1);
-			return;
+			break;
 		case HYPERCALL_END_INTERRUPT:
 			hypercall_end_interrupt(param0);
-			return;
+			break;
 		case HYPERCALL_INTERRUPT_CTRL:
 			hypercall_interrupt_ctrl(param0, param1);
-			return;
+			break;
 		case HYPERCALL_CACHE_OP:
 			hypercall_cache_op(param0, param1, param2);
-			return;
+			break;
 		case HYPERCALL_SET_TLS_ID:
 			hypercall_set_tls(param0);
 			return;
 		case HYPERCALL_SET_CTX_ID:
 			COP_WRITE(COP_SYSTEM, COP_CONTEXT_ID_REGISTER, param0);
 			isb();
-			return;
+			break;
 			/*Context */
 		case HYPERCALL_RESTORE_LINUX_REGS:
 			hypercall_restore_linux_regs(param0, param1);
-			return;
+			break;
 		case HYPERCALL_RESTORE_REGS:
 			hypercall_restore_regs((uint32_t *) param0);
-			return;
+			break;
 
 			/*Page table operations */
 		case HYPERCALL_SWITCH_MM:
 			clean_and_invalidate_cache();
 			hypercall_dyn_switch_mm(param0, param1);
 			//clean_and_invalidate_cache();
-			return;
+			break;
 
 		case HYPERCALL_NEW_PGD:
 			clean_and_invalidate_cache();
 			hypercall_dyn_new_pgd((uint32_t *) param0);
 			//clean_and_invalidate_cache();
-			return;
+			break;
 		case HYPERCALL_FREE_PGD:
 			clean_and_invalidate_cache();
 			hypercall_dyn_free_pgd((uint32_t *) param0);
 			//clean_and_invalidate_cache();
-			return;
+			break;
 		case HYPERCALL_CREATE_SECTION:
 			{
 				//printf("SWI ENTER hypercall_number = %d %x %x %x\n", hypercall_number, param0, param1, param2);
-				return;
+				break;
 			}
 
 		case HYPERCALL_SET_PMD:
 			clean_and_invalidate_cache();
 			hypercall_dyn_set_pmd(param0, param1);
 			//clean_and_invalidate_cache();
-			return;
+			break;
 		case HYPERCALL_SET_PTE:
 			clean_and_invalidate_cache();
 			hypercall_dyn_set_pte((uint32_t *) param0, param1,
 					      param2);
 			//clean_and_invalidate_cache();
-			return;
-
-    /****************************/
-		 /*RPC*/ case HYPERCALL_RPC:
-			hypercall_rpc(param0, (uint32_t *) param1);
-			return;
+			break;
 		case HYPERCALL_END_RPC:
-			hypercall_end_rpc();
-			return;
+			res = curr_vm->current_mode_state->ctx.reg[0];
+			hypercall_end_rpc(res);
+			from_end_rpc = 0;
+#ifdef DEBUG_MONITOR_CALL
+			counter+=1;
+			if (counter % 100 == 0)
+			{
+				printf("Monitor returned with result: %d\n", res);
+				debug_current_request();
+			}
+#endif
+			if (res == 0)
+			{
+				clean_and_invalidate_cache();
+				uint32_t result = execute_next_request();
+#ifdef DEBUG_MONITOR_CALL
+				if (counter % 100 == 0)
+				{
+					printf("hypervisor returned with result: %d\n", result);
+				}
+#endif
+				from_end_rpc = 1;			
+				curr_vm->current_mode_state->ctx.reg[0] = res;
+				clean_and_invalidate_cache();
+			}
+			else
+				reset_requests();
+			break;
 			//  /*VFP Test**********************/
 			//case HYPERCALL_VFP:
 			//  hypercall_vfp_op(param0, param1, param2);
@@ -216,16 +245,46 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 				curr_vm->mode_states[HC_GM_KERNEL].ctx.reg[0] =
 				    0;
 
-				return;
+				break;
 			}
 		case HYPERCALL_QUERY_BFT:
 			res = dmmu_query_bft(param0);
 			curr_vm->current_mode_state->ctx.reg[0] = res;
-			return;			
+			break;
+		case HYPERCALL_PING_MONITOR:
+			params.p0 = param0;
+			params.p1 = param1;
+			params.p2 = param2;
+			hypercall_rpc(0, param0);
+			break;
+		case HYPERCALL_MAKE_REQ:
+			params.p0 = param0;
+			params.p1 = param1;
+			params.p2 = param2;
+			dmmu_handler_2(param0, param1, param2);
+			break;
 		default:
 			hypercall_num_error(hypercall_number);
 		}
+
+		if (curr_vm->pending_request_index < curr_vm->pending_request_counter)
+		{
+#ifdef MONITOR_ENABLED
+			hypercall_end_request();
+#else
+			clean_and_invalidate_cache();
+			res = execute_all_requests();
+			if (res != 0)
+				printf("Hypervisor returned with result: %d\n", res);
+			curr_vm->current_mode_state->ctx.reg[0] = res;
+			clean_and_invalidate_cache();
+#endif
+		}
+		else
+			reset_requests();
+			
 	}
+
 	/*Control of virtual PSR */
 #if 1
 	if ((curr_vm->current_mode_state->ctx.psr & 0x1F) == 0x13 && curr_vm->current_guest_mode != HC_GM_KERNEL) {	/*virtual SVC mode */
@@ -235,11 +294,26 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		   && (curr_vm->current_guest_mode == HC_GM_KERNEL))
 		hyper_panic("PSR in USR mode but guest mode is in KERNEL\n", 0);
 #endif
+
+	domac = curr_vm->current_mode_state->mode_config->domain_ac;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
+}
+
+void hypercall_end_request()
+{
+	hypercall_request_t request = get_request(curr_vm->pending_request_index);
+	uint32_t l1_base_add;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_base_add);
+	request.curr_l1_base_add = l1_base_add;
+	change_request(request, curr_vm->pending_request_index);
+	hypercall_rpc(0, curr_vm->pending_request_index);
 }
 
 return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 				    uint32_t unused)
 {
+	uint32_t domac = HC_DOMAC_ALL;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 #if 1
 	if (addr >= 0xc0000000)
 		printf("Pabort:%x Status:%x, u=%x \n", addr, status, unused);
@@ -248,6 +322,7 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 
 	/*Need to be in virtual kernel mode to access data abort handler */
 	change_guest_mode(HC_GM_KERNEL);
+	
 #ifdef LINUX
 	/*Set uregs, Linux kernel ususally sets these up in exception vector
 	 * which we have to handle now*/
@@ -278,22 +353,18 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 
 	curr_vm->current_mode_state->ctx.pc = *pabt_handler;
 #endif
+	domac = curr_vm->current_mode_state->mode_config->domain_ac;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 	return RV_OK;
 }
 
 return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 {
-#if 0
-	if (addr >= 0xc0000000)
-		printf("Dabort:%x Status:%x, u=%x \n", addr, status, unused);
-#endif
-////////
-//  printf("Hypervisor, data abort handler: VA of addressed word:%x Information about data abort:%x, VA of faulting instruction: %x\n", addr, status, unused);
-////////
+	uint32_t domac = HC_DOMAC_ALL;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
 
-////////
 #if defined(LINUX) && defined(CPSW)
 	//If accessed address is within the mapped Ethernet Subsystem memory
 	//regions.
@@ -314,11 +385,12 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 		//failing one.
 		curr_vm->current_mode_state->ctx.pc += 4;
 
-		//Returns to exception_bottom which restores the guest to exeucte the
-		//instruction following the failed one.
-		return RV_OK;
-	} else if (addr >= 0xc0000000)
-		printf("Dabort:%x Status:%x, u=%x \n", addr, status, unused);
+	}
+	//Returns to exception_bottom which restores the guest to exeucte the
+	//instruction following the failed one.
+	else {
+		if (addr >= 0xc0000000)
+			printf("Dabort:%x Status:%x, u=%x \n", addr, status, unused);
 #endif
 ////////
 	/*Must be in virtual kernel mode to access kernel handlers */
@@ -352,32 +424,23 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 	uint32_t *dabt_handler =
 	    (uint32_t *) (curr_vm->exception_vector[V_DATA_ABORT]);
 	if (interrupted_mode == HC_GM_TASK) {
-////////
-//    printf("HYPERVISOR: core/hypervisor/handlers.c:data_abort_handler(): The data abort occurred in a task!\n");
-////////
 		dabt_handler++;	//DABT_USR located +4
 	}
-////////
-//  else {
-//    printf("HYPERVISOR: core/hypervisor/handlers.c:data_abort_handler(): The data abort occurred in the kernel!\n");
-//  }
-////////
 
 	curr_vm->current_mode_state->ctx.pc = *dabt_handler;
-#if 0	 /*DEBUG*/
-////////
-	    //   printf("Task PC:%x LR:%x \n",curr_vm->mode_states[HC_GM_TASK].ctx.pc, curr_vm->mode_states[HC_GM_TASK].ctx.lr);
-////////
-	    printf("Kernel PC:%x LR:%x \n",
-		   curr_vm->mode_states[HC_GM_KERNEL].ctx.pc,
-		   curr_vm->mode_states[HC_GM_KERNEL].ctx.lr);
 #endif
+#if defined(LINUX) && defined(CPSW)
+	}
 #endif
+	domac = curr_vm->current_mode_state->mode_config->domain_ac;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 	return RV_OK;
 }
 
 return_value irq_handler(uint32_t irq, uint32_t r1, uint32_t r2)
 {
+	uint32_t domac = HC_DOMAC_ALL;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 //      printf("IRQ handler called %d\n", irq);
 	if (curr_vm->current_mode_state->ctx.psr & 0x80) {	/*Interrupts are off, return */
 
@@ -385,55 +448,67 @@ return_value irq_handler(uint32_t irq, uint32_t r1, uint32_t r2)
 		for (;;) ;
 
 //              mask_interrupt(irq, 1); //Mask interrupt and mark pending
-		return RV_OK;
 	}
+	else{
+		uint32_t interrupted_mode = curr_vm->current_guest_mode;
+		change_guest_mode(HC_GM_KERNEL);
+	#ifdef LINUX
+		/*Prepare stack for nested irqs */
+		uint32_t i;
 
-	uint32_t interrupted_mode = curr_vm->current_guest_mode;
-	change_guest_mode(HC_GM_KERNEL);
-#ifdef LINUX
-	/*Prepare stack for nested irqs */
-	uint32_t i;
+		uint32_t *context = curr_vm->mode_states[interrupted_mode].ctx.reg;
+		uint32_t *sp_push = (uint32_t *) (curr_vm->mode_states[HC_GM_KERNEL].ctx.sp - 72);	//FRAME_SIZE (18 registers to be saved)
 
-	uint32_t *context = curr_vm->mode_states[interrupted_mode].ctx.reg;
-	uint32_t *sp_push = (uint32_t *) (curr_vm->mode_states[HC_GM_KERNEL].ctx.sp - 72);	//FRAME_SIZE (18 registers to be saved)
+		for (i = 0; i < 17; i++) {
+			*sp_push++ = *context++;
+		}
+		*sp_push = 0xFFFFFFFF;	//ORIG_R0
+		curr_vm->mode_states[HC_GM_KERNEL].ctx.sp -= (72);	//FRAME_SIZE (18 registers to be saved)
 
-	for (i = 0; i < 17; i++) {
-		*sp_push++ = *context++;
+	#if 0	 /*DEBUG*/
+		    printf("IRQ handler called %x:%x:\n", irq,
+			   curr_vm->mode_states[HC_GM_KERNEL].ctx.sp);
+	#endif
+		curr_vm->interrupted_mode = interrupted_mode;
+
+		curr_vm->current_mode_state->ctx.reg[0] = irq;
+		curr_vm->current_mode_state->ctx.reg[1] =
+		    curr_vm->mode_states[HC_GM_KERNEL].ctx.sp;
+		curr_vm->mode_states[HC_GM_KERNEL].ctx.reg[5] = (uint32_t) curr_vm->mode_states[HC_GM_KERNEL].ctx.psr;	/*spsr in r5 for linux kernel vector */
+
+		uint32_t *irq_handler = (uint32_t *) (curr_vm->exception_vector[V_IRQ]);
+
+		if (interrupted_mode == HC_GM_TASK)
+			irq_handler++;	//IRQ_USR located +4
+
+		curr_vm->current_mode_state->ctx.pc = *irq_handler;
+		curr_vm->current_mode_state->ctx.psr |= IRQ_MASK;
+		curr_vm->current_mode_state->ctx.sp =
+		    curr_vm->mode_states[HC_GM_KERNEL].ctx.sp;
+
+#endif
+	//      unmask_interrupt(irq, 0);
 	}
-	*sp_push = 0xFFFFFFFF;	//ORIG_R0
-	curr_vm->mode_states[HC_GM_KERNEL].ctx.sp -= (72);	//FRAME_SIZE (18 registers to be saved)
-
-#if 0	 /*DEBUG*/
-	    printf("IRQ handler called %x:%x:\n", irq,
-		   curr_vm->mode_states[HC_GM_KERNEL].ctx.sp);
-#endif
-	curr_vm->interrupted_mode = interrupted_mode;
-
-	curr_vm->current_mode_state->ctx.reg[0] = irq;
-	curr_vm->current_mode_state->ctx.reg[1] =
-	    curr_vm->mode_states[HC_GM_KERNEL].ctx.sp;
-	curr_vm->mode_states[HC_GM_KERNEL].ctx.reg[5] = (uint32_t) curr_vm->mode_states[HC_GM_KERNEL].ctx.psr;	/*spsr in r5 for linux kernel vector */
-
-	uint32_t *irq_handler = (uint32_t *) (curr_vm->exception_vector[V_IRQ]);
-
-	if (interrupted_mode == HC_GM_TASK)
-		irq_handler++;	//IRQ_USR located +4
-
-	curr_vm->current_mode_state->ctx.pc = *irq_handler;
-	curr_vm->current_mode_state->ctx.psr |= IRQ_MASK;
-	curr_vm->current_mode_state->ctx.sp =
-	    curr_vm->mode_states[HC_GM_KERNEL].ctx.sp;
-
-#endif
-//      unmask_interrupt(irq, 0);
+	domac = curr_vm->current_mode_state->mode_config->domain_ac;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 	return RV_OK;
 }
 
 /*Used for floating point emulation in Linux*/
 return_value undef_handler(uint32_t instr, uint32_t unused, uint32_t addr)
 {
+	uint32_t domac = HC_DOMAC_ALL;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 #if 1
 	printf("Undefined abort\n Address:%x Instruction:%x \n", addr, instr);
+	uint32_t l1_base_add;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_base_add);
+	dump_mmu(mmu_guest_pa_to_va(l1_base_add, curr_vm->config));
+
+	printf("Undefined abort\n Address:%x Instruction:%x \n", addr, instr);
+	uint32_t value = *((uint32_t *)addr);
+	printf("value:%x requests:%d\n", value, curr_vm->pending_request_counter);
+
 #endif
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
 
@@ -469,5 +544,7 @@ return_value undef_handler(uint32_t instr, uint32_t unused, uint32_t addr)
 
 	curr_vm->current_mode_state->ctx.pc = *und_handler;
 #endif
+	domac = curr_vm->current_mode_state->mode_config->domain_ac;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 	return RV_OK;
 }

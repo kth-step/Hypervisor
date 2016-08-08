@@ -4,229 +4,221 @@
  *  Created on: 30 mar 2011
  *      Author: Master
  */
+#include <types.h>
 #include "trusted_service.h"
-//#include "dmacRegisters.h"
 #include "hypercalls.h"
 
-#include "rsa.h"
-#include "aescbc.h"
-#include "aes/sha2.h"
-#include "mpi/mprsa.h"
-#include "mpi/mwc.h"
 
-#include <memlib.h>
-
-//TODO remove buffer and use only decrypted for immediate storage? Check string lengths in program.
-//TODO Use memset to reset sensitive memory
-FLASH_DATA static unsigned char encrypted[50000 + 16];	//data in flash memory is encrypted (16 is size of IV added to message)
-
-static char decrypted[50000];
-static unsigned char buffer[50000 + 16];	//buffer to hold the transfered data from flash
-static char contract[50000];
-
-static unsigned char encryptedAESKey[128];	//key is encrypted with RSA
-static unsigned char decryptedAESKey[128];	//key is encrypted with RSA
-static unsigned int nbytes;
-
-// 1024-bit RSA keys in HEX
-static char *g_modulus =
-    "f0f4fa85b4ad3f6d9171995085b31640c4c8ed28e5c9eb5106f62acea46ee83c"
-    "0c575f03ab918d9aee62fdd5fc7b5a350d4775618f646583ef6a0c50985123ac"
-    "4271ae3cdaba97f5d6527217971f2cc0bdbbfa2886afedfe783e1b170ca5e279"
-    "e6fd07e9efffd99c1f4f35c30644f86227cfc32a5253a89ebfb22862f1085b35";
-
-static char *g_d =
-    "e2d4cc0e18834b859af8c4ea6fa2a29d406322177112bfaa9c921ac4433980f8"
-    "1e6a15b0ffcf5aedf1e250b12428ff479803a035c26631c69d18491589fe4043"
-    "f2cf8d591c93256dda125bb1466a2199fab20081b6806ddda740b73e35e73c63"
-    "e794ba34197aa423064286feb2e019b4521a05405b27b2f232619a00bedeac95";
-
-static char *g_e = "10001";
-
-/////////////////////   MACROS   ///////////////////
-
-#define LOGT(_FMT, ...)  printf( "TEST DMA - TASK: " _FMT,  ## __VA_ARGS__)
-////////////////////////////////////////////////////
-
-static void useDMA();
-void trustedRPCHandler(unsigned callNum, void *params);
-static void finishRPC();
-//XXX put back static
-void initFlashData();
-
-static count = 0;
-
-static void getContract(TrustedContractArgs * args)
+dmmu_entry_t *get_bft_entry_by_block_idx(addr_t ph_block)
 {
-	int rsaErr = 0, aesErr = 0;
-	//hello(REP_TRUSTED_NAME);
-	printf("In trusted mode getContract()");
-
-	//X1XXuseDMA(); //DMA the encrypted data into trusted space
-	rsaErr = rsaDecrypt(encryptedAESKey, g_d, g_modulus, decryptedAESKey);
-	if (rsaErr != 0) {
-		printf("RSA encryption failed.\n");
-		//*args->success = 0;
-	} else {
-		aesErr =
-		    aesDecrypt(decryptedAESKey, encrypted, decrypted, nbytes);
-	}
-
-	if (aesErr != 0) {
-		printf("AES encryption failed.\n");
-		//*args->success = 0;
-	} else if (aesErr == 0 && rsaErr == 0) {
-		//*(args)->success = 1;
-		memcpy(contract, decrypted, nbytes);
-	}
-
+	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
+	return &bft[ph_block];
 }
 
-static char data[50000] =
-    "Until modern times cryptography referred almost exclusively to encryption, which is the process of converting ordinary information (called plaintext) into unintelligible gibberish (called ciphertext).[7] Decryption is the reverse, in other words, moving from the unintelligible ciphertext back to plaintext. A cipher (or cypher) is a pair of algorithms that create the encryption and the reversing decryption. The detailed operation of a cipher is controlled both by the algorithm and in each instance by a key. This is a secret (ideally known only to the communicants), usually a short string of characters, which is needed to decrypt the ciphertext. A cryptosystem is the ordered list of elements of finite possible plaintexts, finite possible cyphertexts, finite possible keys, and the encryption and decryption algorithms which correspond to each key. Keys are important, as ciphers without variable keys can be trivially broken with only the knowledge of the cipher used and are therefore useless (or even counter-productive) for most purposes. Historically, ciphers were often used directly for encryption or decryption without additional procedures such as authentication or integrity checks.\n";
-void read()
+uint32_t guest_pa_range_checker(pa, size)
 {
-	printf("%s\n", contract);
+	// TODO: we are not managing the spatial isolation with the TRUSTED MODE
+	uint32_t guest_start_pa = GUEST_PASTART;
+	/*Added 1MB to range check, Last +1MB after guest physical address is reserved for L1PT */
+	uint32_t guest_end_pa =
+	    GUEST_PASTART +
+	    GUEST_PSIZE + SECTION_SIZE;
+	if (!((pa >= (guest_start_pa)) && (pa + size <= guest_end_pa)))
+		return 0;
+	return 1;
 }
 
-void initFlashData(int *success)
+uint32_t mmu_guest_pa_to_va(uint32_t padr, uint32_t guest_pstart, uint32_t va_for_pt_access_start)
 {
-	int aesErr = 0;		//error handling
-	int rsaErr = 0;
+	return padr - guest_pstart + va_for_pt_access_start;
+}
 
-//  hello(REP_TRUSTED_NAME);
-	printf("In trusted mode initFlashData\n");
-//  TRUSTED_DATA static char data[50000] = "Messenger: Choose your next words carefully, Leonidas. They may be your last as king.\nKing Leonidas: [to himself: thinking] \"Earth and water\"?\n[Leonidas unsheathes and points his sword at the Messenger's throat]\nMessenger: Madman! You're a madman!\nKing Leonidas: Earth and water? You'll find plenty of both down there.\nMessenger: No man, Persian or Greek, no man threatens a messenger!\nKing Leonidas: You bring the crowns and heads of conquered kings to my city steps. You insult my queen. You threaten my people with slavery and death! Oh, I've chosen my words carefully, Persian. Perhaps you should have done the same!\nMessenger: This is blasphemy! This is madness!\nKing Leonidas: Madness...?\n[shouting]\nKing Leonidas: THIS IS SPARTA!\n[Kicks the messenger down the well]\n";
+uint32_t section_checker(uint32_t l1_desc)
+{
+	l1_sec_t *l1_sec_desc = (l1_sec_t *) (&l1_desc);
+	uint32_t ap = GET_L1_AP(l1_sec_desc);
+	
+	uint32_t sec_idx;
+	for (sec_idx = 0; (sec_idx < 256); sec_idx++) {
+		uint32_t ph_block =
+			    PA_TO_PH_BLOCK(START_PA_OF_SECTION(l1_sec_desc)) | (sec_idx);
+		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
 
-//  32 bytes HEX key digits used as key to AES-128
-//  TRUSTED_DATA static char sessionKey[33] = "0123456789abcdeffedcba9876543210"; AES key
-	char sessionKey[32];
-	generateAESKey(sessionKey);	//generates a random 16 byte AES key (AES-128)
-
-	nbytes = strlen(data);	//setting the global variable, used in aesDecrypt
-
-	printf
-	    ("\nEncrypting message with random generated AES-128 one time session key:\n%s",
-	     sessionKey);
-	aesErr = aesEncrypt(sessionKey, data, encrypted);
-	memcpy(contract, encrypted, nbytes);
-#if 1
-	if (aesErr != 0) {
-		printf("AES encryption failed.\n");
-//    *success = 0;
-	} else {
-		printf("\nTry to print encrypted data! \n %s \n\n", encrypted);
-		printf("\n Encrypting AES session key with RSA\n");
-		rsaErr =
-		    rsaEncrypt(sessionKey, g_e, g_modulus, encryptedAESKey);
+		if ((bft_entry->refcnt > 0 || bft_entry->dev_refcnt > 0) && l1_sec_desc->xn == 0)
+			return ERR_MONITOR_BLOCK_WRITABLE;
+		else if ((bft_entry->x_refcnt > 0 || bft_entry->dev_refcnt > 0) && ap == 3)
+			return ERR_MONITOR_BLOCK_EXE;
+		else if (l1_sec_desc->xn == 0 && ap == 3)
+			return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;	
 	}
-	if (rsaErr != 0) {
-		printf("RSA encryption failed.\n");
-		//*success = 0;
-	} else if (aesErr == 0 && rsaErr == 0) {
-		//  *success = 1;
+	return SUCCESS;
+}
+
+uint32_t map_l2_entry_checker(uint32_t l2_base_pa_add, uint32_t l2_idx, uint32_t page_pa_add, uint32_t attrs)
+{
+	uint32_t new_l2_desc = CREATE_L2_DESC(page_pa_add, attrs);
+	l2_small_t *pg_desc = (l2_small_t *) (&new_l2_desc);
+	uint32_t ap = GET_L2_AP(pg_desc);
+	uint32_t ph_block = PA_TO_PH_BLOCK(page_pa_add);
+
+	dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
+
+	if ((bft_entry->refcnt > 0 || bft_entry->dev_refcnt > 0) && pg_desc->xn == 0)
+		return ERR_MONITOR_BLOCK_WRITABLE;
+	else if ((bft_entry->x_refcnt > 0 || bft_entry->dev_refcnt > 0) && ap == 3)
+		return ERR_MONITOR_BLOCK_EXE;
+	else if (pg_desc->xn == 0 && ap == 3)
+		return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;
+	return SUCCESS;
+}
+
+uint32_t map_l1_section_checker(uint32_t va, uint32_t sec_base_add, uint32_t attrs)
+{
+	uint32_t l1_desc = CREATE_L1_SEC_DESC(sec_base_add, attrs);
+	return section_checker(l1_desc);
+}
+
+uint32_t create_l1_pt_checker(uint32_t l1_base_pa_add)
+{
+	uint32_t l1_desc_pa_add;
+	uint32_t l1_desc_va_add;
+	uint32_t l1_desc;
+	uint32_t l1_type;
+	uint32_t l1_idx;
+	uint32_t res = 0;
+	if (!guest_pa_range_checker(l1_base_pa_add, 4 * PAGE_SIZE))
+		return ERR_MMU_OUT_OF_RANGE_PA;
+
+	//Iterates through each entry of the to be L1 page table.
+	for (l1_idx = 0; l1_idx < 4096; l1_idx++) {
+		l1_desc_pa_add = L1_IDX_TO_PA(l1_base_pa_add, l1_idx);
+		l1_desc_va_add =
+		    mmu_guest_pa_to_va(l1_desc_pa_add, GUEST_PASTART, VA_FOR_PT_ACCESS_START);
+		l1_desc = *((uint32_t *) l1_desc_va_add);
+		l1_type = l1_desc & DESC_TYPE_MASK;
+		//If the type of the entry is 2 => Section descriptor, the section it is mapping is checked.
+		if (l1_type == 2)
+		{
+			uint32_t value = section_checker(l1_desc);
+			if (value != 0)
+				res = value;
+		}
 	}
+	return res;
+}
+
+uint32_t create_l2_pt_checker(uint32_t l2_base_pa_add)
+{
+	uint32_t l2_desc_pa_add;
+	uint32_t l2_desc_va_add;
+	int l2_idx;
+
+	if (!guest_pa_range_checker(l2_base_pa_add, PAGE_SIZE))
+		return ERR_MMU_OUT_OF_RANGE_PA;
+
+	//Iterates through all the entries of the to be L1.
+	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
+		l2_desc_pa_add = L2_DESC_PA(l2_base_pa_add, l2_idx);
+		l2_desc_va_add =
+		    mmu_guest_pa_to_va(l2_desc_pa_add, GUEST_PASTART, VA_FOR_PT_ACCESS_START);
+		uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
+		uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
+		l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+		//If the type is 2 or 3 => a page table. The page table it is mapping is checked.
+		if ((l2_type == 2) || (l2_type == 3)) {
+			uint32_t ap = GET_L2_AP(pg_desc);
+			uint32_t ph_block =
+			    PA_TO_PH_BLOCK(START_PA_OF_SPT(pg_desc));
+			dmmu_entry_t *bft_entry =
+			    get_bft_entry_by_block_idx(ph_block);
+			if ((bft_entry->refcnt > 0 || bft_entry->dev_refcnt > 0) && pg_desc->xn == 0)
+				return ERR_MONITOR_BLOCK_WRITABLE;
+			else if ((bft_entry->x_refcnt > 0 || bft_entry->dev_refcnt > 0) && ap == 3)
+				return ERR_MONITOR_BLOCK_EXE;
+			else if (pg_desc->xn == 0 && ap == 3)
+				return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;
+		}
+	}
+	return SUCCESS;
+}
+
+
+uint32_t call_checker(uint32_t index)
+{
+	hypercall_request_t * pending_requests = (hypercall_request_t *)REQUESTS_BASE_VA;
+	hypercall_request_t request = pending_requests[index];
+	switch (request.hypercall) {
+
+		case CMD_CREATE_L1_PT:
+			return create_l1_pt_checker(request.create_L1_pt.l1_base_pa_add);
+
+		//No need for checks when freeing an L1
+		case CMD_FREE_L1:
+			return SUCCESS;
+
+		case CMD_MAP_L1_SECTION:
+			return map_l1_section_checker(request.map_L1_section.va,
+					              request.map_L1_section.sec_base_add,
+					              request.map_L1_section.attrs);
+
+		//No need for checks when mapping an L1 page table
+		case CMD_MAP_L1_PT:
+			return SUCCESS;
+
+		//No need for checks when unmapping an entry
+		case CMD_UNMAP_L1_PT_ENTRY:
+			return SUCCESS;
+
+		case CMD_CREATE_L2_PT:
+			return create_l2_pt_checker(request.create_L2_pt.l2_base_pa_add);
+
+		//No need for checks when freeing an L2
+		case CMD_FREE_L2:
+			return SUCCESS;
+
+		case CMD_MAP_L2_ENTRY:
+			return map_l2_entry_checker(request.l2_map_entry.l2_base_pa_add,
+	    			                    request.l2_map_entry.l2_idx,
+	    			                    request.l2_map_entry.page_pa_add,
+	    			                    request.l2_map_entry.attrs);	
+	
+		//No need for checks when unmapping an L2
+		case CMD_UNMAP_L2_ENTRY:
+			return SUCCESS;
+
+		//No need for checks when switching pages
+		case CMD_SWITCH_ACTIVE_L1:
+			return SUCCESS;
+
+		default:
+			return SUCCESS;
+	}
+	
+	return SUCCESS;
+}
+
+//#define DEBUG_MONITOR
+//#define ENABLE_MONITOR
+void handler_rpc(unsigned callNum, uint32_t param)
+{
+#ifdef DEBUG_MONITOR
+	printf("Monitor invoked with parameters %d\n", param);
 #endif
 
+#ifndef ENABLE_MONITOR
+	finish_rpc(0);
+#endif
+	uint32_t res;
+	res = call_checker(param);
+	finish_rpc(res);
 }
 
-static void calculateSHA(char *message, unsigned char *hval)
-{
-	sha256_ctx sha_ctx[1];
 
-	sha256_begin(sha_ctx);
-	sha256_hash(message, strlen(decrypted), sha_ctx);
-	sha256_end(hval, sha_ctx);
+void finish_rpc(uint32_t value)
+{
+	ISSUE_HYPERCALL_REG1(HYPERCALL_END_RPC, value);
 }
 
-static void verifyContract(TrustedSignArgs * args)
+void _main(uint32_t param)
 {
-	//hello(REP_TRUSTED_NAME);
-	printf("In trusted mode verifyContract()");
-
-	char *ptx;
-	int olen;
-
-	unsigned char *g_e = "10001";	//public key is always 0x10001, will not effect security
-
-	mp_int modulus, e;
-	mp_err err;
-	mp_init(&modulus);
-	mp_init(&e);
-
-	mp_read_radix(&modulus, (args->modulus), 16);
-	mp_read_radix(&e, g_e, 16);
-
-	err =
-	    mp_pkcs1v15_verify(args->signature, 128, &e, &modulus, &ptx, &olen);
-	if (err != 0) {
-		printf("Verify contract failed\n");
-	} else {
-		printf("\nThis is the hash value we got from sender\n");
-		pr_hex(ptx, SHA256_DIGEST_SIZE, 1);	//print hashvalue that we got from signature //crashes here sometimes
-
-		args->contract[30] = 'g';	//sabotage message
-		printf("\nThis is our own calculated hash value!\n");
-		unsigned char hval[SHA256_DIGEST_SIZE];
-		calculateSHA(args->contract, hval);	//input contact, output hvalue
-
-		printf("\nSHA-256 TRUSTED DIGEST: \n");
-		pr_hex(hval, SHA256_DIGEST_SIZE, 1);
-
-		if (!strncmp(hval, ptx, 32)) {
-			printf("Message signature is valid!\n");
-		} else
-			printf
-			    ("Message signature is wrong. Signature failed\n");
-		printf("Size of message:%d\n", nbytes);
-
-		mp_clear(&e);
-		mp_clear(&modulus);
-
-	}
-
-}
-
-// void trusted_rpc_handler(unsigned callNum, void *params)
-void handler_rpc(unsigned callNum, void *params)
-{
-	switch (callNum) {
-	case 0:
-		printf("Initializing Trusted Service\n");
-		_main((uint32_t) params);
-		break;
-	case 1:
-		initFlashData(params);
-		break;
-	case 2:
-		verifyContract(params);
-		break;
-	case 3:
-		getContract(params);
-		break;
-	case 4:
-		read();
-		break;
-	default:
-		printf("Unknown trusted operation: %d\n", callNum);
-	}
-	finish_rpc();
-}
-
-void finish_rpc()
-{
-	ISSUE_HYPERCALL(HYPERCALL_END_RPC);
-}
-
-void _main(int seed)
-{
-	int success;
-	printf("Seed value: %x", seed);
-	srand_mwc(seed);
-	/*Initialize the heap */
-	init_heap();
-	if (count == 0) {
-		memcpy(contract, data, nbytes);
-		count++;
-	}
 }

@@ -61,14 +61,16 @@ void dump_mmu(addr_t adr)
 {
 	uint32_t *t = (uint32_t *) adr;
 	int i;
-
+	l1_sec_t *sec;
 	for (i = 0; i < 4096; i++) {
 		uint32_t x = t[i];
 		switch (x & 3) {
 		case 2:
-			printf("SEC %x -> %x : %x DOM=%d C=%d B=%d AP=%d\n",
+ 			sec = (l1_sec_t *) (&x);
+			printf("SEC %x -> %x : %x DOM=%d C=%d B=%d AP=%d XN=%d\n",
 			       i << 20, x, (x & 0xFFF00000), (x >> 5) & 15,
-			       (x >> 3) & 1, (x >> 2) & 1, (x >> 10) & 3);
+			       (x >> 3) & 1, (x >> 2) & 1, (x >> 10) & 3,
+			       sec->xn);
 			break;
 		case 1:
 			printf("COR %x -> %x : %x DOM=%d C=%d B=%d\n",
@@ -134,8 +136,8 @@ void memory_init()
 		case MLT_USER_RAM:
 			/* do this later */
 			break;
+		case MLT_TRUSTED_READABLE_RAM:
 		case MLT_HYPER_RAM:
-		case MLT_TRUSTED_RAM:
 			/* own memory */
 			j = (list->page_start) >> 8;	/*Get L1 Page index */
 			for (; j < ((list->page_count) >> 8); j++) {
@@ -237,7 +239,7 @@ void guests_init()
 		uint32_t va =
 		    vm_0.config->reserved_va_for_pt_access_start + va_offset;
 		uint32_t pa = guest_pstart + va_offset;
-		pt_create_section(flpt_va, va, pa, MLT_HYPER_RAM);
+		pt_create_section(flpt_va, va, pa, MLT_TRUSTED_READABLE_RAM);
 
 		/* Invalidate the new created entries */
 		offset = ((va >> MMU_L1_SECTION_SHIFT) * 4);
@@ -251,6 +253,20 @@ void guests_init()
 	printf("HV pagetable after guests initialization:\n");	// DEBUG
 	//    dump_mmu(flpt_va); // DEBUG
 
+uint32_t trusted_index = 0;
+#ifdef TRUSTED
+
+#ifdef LINUX
+	trusted_index = 1;
+#endif	
+	// initialize the mapping for the TRUESTED guest
+	// this mapping must exist in all page tables
+	// so we define the mapping in the master page table
+	uint32_t va = guests_db.guests[trusted_index].vstart;
+	uint32_t pa = guests_db.guests[trusted_index].pstart;
+	pt_create_section(flpt_va, va, pa, MLT_TRUSTED_RAM);
+	memory_commit();
+#endif
 	// We pin the L2s that can be created in the 32KB are of slpt_va
 	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
 	for (i = 0; i * 4096 < 0x8000; i++) {
@@ -290,7 +306,9 @@ void guests_init()
 	memory_commit();
 
 	// Calling the create_L1_pt API to check the correctness of the L1 content and to change the page table type to 1
-	dmmu_create_L1_pt(guest_pt_pa);
+	uint32_t res = dmmu_create_L1_pt(guest_pt_pa);
+	if (res != 0)
+		printf("Failed to create the initial L1: %d\n", res);
 #ifdef DEBUG_L1_PG_TYPE
 	uint32_t index;
 	for (index = 0; index < 4; index++)
@@ -350,8 +368,8 @@ void guests_init()
 		for (i = 0; i < HC_NGUESTMODES; i++) {
 			curr_vm->mode_states[i].mode_config =
 			    (curr_vm->config->guest_modes[i]);
-			//curr_vm->mode_states[i].rpc_for = MODE_NONE;
-			//curr_vm->mode_states[i].rpc_to  = MODE_NONE;
+			curr_vm->mode_states[i].rpc_for = MODE_NONE;
+			curr_vm->mode_states[i].rpc_to  = MODE_NONE;
 		}
 		curr_vm->current_guest_mode = MODE_NONE;
 		curr_vm->interrupted_mode = MODE_NONE;
@@ -376,6 +394,8 @@ void start_guest()
 
 	/*Change guest mode to KERNEL before going into guest */
 	change_guest_mode(HC_GM_KERNEL);
+	uint32_t domac = curr_vm->current_mode_state->mode_config->domain_ac;
+	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 
 	/*Starting Guest */
 	start();
@@ -395,9 +415,16 @@ void start_()
 	setup_handlers();
 	/* dmmu init */
 	dmmu_init();
+
+	pending_requests_init();
+
 	/* Initialize hypervisor guest modes and data structures
 	 * according to config file in guest*/
 	guests_init();
+
+	uint32_t value = *((uint32_t *)0xF060089C);
+	printf("value:%x \n", value);
+
 	/*Test crypto */
 
 	printf("Hypervisor initialized2.0\n Entering Guest\n");

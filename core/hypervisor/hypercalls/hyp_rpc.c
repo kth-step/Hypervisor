@@ -4,7 +4,7 @@
 
 extern virtual_machine *curr_vm;
 
-void hypercall_rpc(uint32_t rpc_op, void *arg)
+void hypercall_rpc(uint32_t rpc_op, void * arg)
 {
 	const hc_rpc_handler *handler;
 
@@ -22,26 +22,25 @@ void hypercall_rpc(uint32_t rpc_op, void *arg)
 		hyper_panic
 		    ("Guest trying to send RPC to a mode that is already handling a RPC",
 		     1);
-
 	if (rpc_op <= 4) {
-
 		curr_vm->current_mode_state->rpc_to = handling_mode;
 		curr_vm->mode_states[handling_mode].rpc_for =
 		    curr_vm->current_guest_mode;
-
+	
 		change_guest_mode(HC_GM_TRUSTED);
 		curr_vm->current_mode_state->ctx.reg[0] = rpc_op;
-		curr_vm->current_mode_state->ctx.reg[1] = (uint32_t) arg;
+		curr_vm->current_mode_state->ctx.reg[1] = (uint32_t)arg;
 		curr_vm->current_mode_state->ctx.pc = handler->entry_point;
+		curr_vm->current_mode_state->ctx.sp = curr_vm->config->rpc_handlers->sp;
 		curr_vm->current_mode_state->ctx.psr = 0xD0;	/*USR mode, IRQ off */
 	} else {
 		hyper_panic("Unallowed rpc operation\n", 1);
 
 	}
-
+		
 }
 
-void hypercall_end_rpc()
+void hypercall_end_rpc(uint32_t res)
 {
 
 	uint32_t calling_mode = curr_vm->current_mode_state->rpc_for;
@@ -61,4 +60,6 @@ void hypercall_end_rpc()
 
 	change_guest_mode(calling_mode);
 
+	curr_vm->current_mode_state->ctx.reg[0] = res;
+	
 }
