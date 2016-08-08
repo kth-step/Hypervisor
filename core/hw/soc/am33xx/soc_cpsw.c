@@ -2,6 +2,8 @@
 #include <types.h>
 //Includes declarations for data structures related to the data structure virtual_machine.
 #include <hyper.h>
+//Includes declarations for the macros of block types, the data structure dmmu_entry_t and the function get_bft_entry_by_block_idx.
+#include <dmmu.h>
 
 //printf declaration.
 //extern void printf();
@@ -149,10 +151,11 @@ extern virtual_machine *curr_vm;
 #define is_rx_buffer_offset_virtual_address(address) (address == phys_to_virt(RX_BUFFER_OFFSET_PHYSICAL_ADDRESS))
 #define RX_BUFFER_OFFSET (word_at_phys_addr(RX_BUFFER_OFFSET_PHYSICAL_ADDRESS))
 
+//Maximum value of rho_nic.
+#define MAX_RHO_NIC 15
+
 //Enums used to denote what sort of overlap a CPPI_RAM does with respect to a queue.
-typedef enum OVERLAP { ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP,
-	ILLEGAL_OVERLAP, NO_OVERLAP
-} bd_overlap;
+typedef enum OVERLAP { ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP, ILLEGAL_OVERLAP, NO_OVERLAP} bd_overlap;
 
 //Physical addresses of buffer descriptors of the hypervisor's view of where
 //the transmitter and receiver are in processing buffer descriptors. That is,
@@ -164,10 +167,7 @@ typedef enum OVERLAP { ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP,
 //
 //tx0_active_queue and rx0_active_queue always point to a SOP.
 static uint32_t tx0_active_queue = 0, rx0_active_queue = 0;
-static BOOL initialized = FALSE, tx0_hdp_initialized =
-    FALSE, rx0_hdp_initialized = FALSE, tx0_cp_initialized =
-    FALSE, rx0_cp_initialized = FALSE, tx0_tearingdown =
-    FALSE, rx0_tearingdown = FALSE;
+static BOOL initialized = FALSE, tx0_hdp_initialized = FALSE, rx0_hdp_initialized = FALSE, tx0_cp_initialized = FALSE, rx0_cp_initialized = FALSE, tx0_tearingdown = FALSE, rx0_tearingdown = FALSE;
 
 //For each 32-bit word aligned word in CPPI_RAM, true means that word is a part of an active queue, and false not.
 #define alpha_SIZE 64
@@ -193,16 +193,13 @@ Optimized:
  2. bit_offset := (((CPPI_RAM_WORD - CPPI_RAM_START) >> 2) & 0x1F)
  3. (alpha[(CPPI_RAM_WORD - CPPI_RAM_START) >> 7] & (1 << (((CPPI_RAM_WORD - CPPI_RAM_START) >> 2) & 0x1F)))
 */
-#define IS_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) \
-  (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 7] & (1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2) & 0x1F)))
+#define IS_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 7] & (1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2) & 0x1F)))
 
 //Input is a word aligned address in CPPI_RAM. The corresponding bit in alpha is set to 1.
-#define SET_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) \
-  alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 7] |= (1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2) & 0x1F))
+#define SET_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 7] |= (1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2) & 0x1F)))
 
 //Input is a word aligned address in CPPI_RAM. The corresponding bit in alpha is set to 0.
-#define CLEAR_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) \
-  alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 7] &= (~(1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2) & 0x1F)))
+#define CLEAR_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 7] &= (~(1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2) & 0x1F))))
 
 /*
  *  Local functions only used in this file.
@@ -223,21 +220,20 @@ static BOOL rx_buffer_offset_handler(uint32_t);
 static void initialization_performed(void);
 static void update_active_queue(BOOL);
 static void handle_potential_misqueue_condition(BOOL, uint32_t, uint32_t);
-static void update_rho_nic_alpha_queue(uint32_t, BOOL, BOOL);
-static void update_rho_nic_alpha(uint32_t, BOOL, BOOL);
-static void update_rho_nic(uint32_t, BOOL);
-static void inline update_writable_reference_counter(uint32_t);	//MUST FIX!!!!!!!!!!!!!!!!!
+static void decrement_rho_nic_update_alpha_queue(uint32_t, BOOL, BOOL);
+static void decrement_rho_nic_update_alpha(uint32_t, BOOL, BOOL);
+static void decrement_rho_nic(uint32_t);
+static BOOL no_overflow_and_updated_rho_nic(uint32_t);
 static BOOL is_queue_secure(uint32_t, BOOL);
-static BOOL
-is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap(uint32_t);
+static BOOL is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap(uint32_t);
 static BOOL is_queue_self_overlap(uint32_t bd_ptr);
 static BOOL is_transmit_SOP_EOP_packet_length_fields_set_correctly(uint32_t);
 static BOOL is_data_buffer_secure_queue(uint32_t, BOOL);
 static BOOL is_data_buffer_secure(uint32_t, BOOL);
 static BOOL is_secure_linux_memory(BOOL, uint32_t, uint32_t);
-static BOOL inline is_L1_L2_or_D_block(uint32_t);	//MUST FIX!!!!!!!!!!!!!!!!!!!!!!
-static BOOL inline is_D_block(uint32_t);	//MUST FIX!!!!!!!!!!!!!!!!!!!!!!
-static BOOL inline is_executable_block(uint32_t);	//MUST FIX!!!!!!!!!!!!!!!!!!!!!!
+static BOOL inline is_L1_or_L2_block(uint32_t);
+static BOOL inline is_D_block(uint32_t);
+static BOOL inline is_executable_block(uint32_t);
 static bd_overlap type_of_cppi_ram_access_overlap(uint32_t, uint32_t);
 static void set_and_clear_word(uint32_t, uint32_t, uint32_t, uint32_t);
 static void set_and_clear_word_on_sop_or_eop(uint32_t, uint32_t, uint32_t,
@@ -391,14 +387,12 @@ BOOL soc_check_cpsw_access(uint32_t accessed_va, uint32_t instruction_va)
 		return FALSE;
 		break;
 	default:
-		printf
-		    ("STH CPSW ERROR: UNKNOWN INSTRUCTION TYPE WHEN ACCESSING CPSW REGISTER!\n");
+		printf("STH CPSW ERROR: UNKNOWN INSTRUCTION TYPE WHEN ACCESSING CPSW REGISTER!\n");
 		return FALSE;
 		break;
 	}
 
-	printf
-	    ("STH CPSW ERROR: UNREACHABLE POINT WAS REACHED IN HYPERVISOR CPSW DRIVER!\n");
+	printf("STH CPSW ERROR: UNREACHABLE POINT WAS REACHED IN HYPERVISOR CPSW DRIVER!\n");
 	return FALSE;
 }
 
@@ -532,8 +526,7 @@ static BOOL tx0_hdp_handler(uint32_t bd_ptr)
 			TX0_HDP = 0;	//bd_ptr = 0
 			tx0_hdp_initialized = TRUE;
 
-			if (rx0_hdp_initialized && tx0_cp_initialized
-			    && rx0_cp_initialized)
+			if (rx0_hdp_initialized && tx0_cp_initialized && rx0_cp_initialized)
 				initialization_performed();
 
 			return TRUE;
@@ -548,8 +541,7 @@ static BOOL tx0_hdp_handler(uint32_t bd_ptr)
 			update_active_queue(TRANSMIT);
 			if (is_queue_secure(bd_ptr, TRANSMIT)) {
 				tx0_active_queue = bd_ptr;
-				update_rho_nic_alpha_queue(bd_ptr, TRANSMIT,
-							   ADD);
+				decrement_rho_nic_update_alpha_queue(bd_ptr, TRANSMIT, ADD);
 				TX0_HDP = bd_ptr;
 				return TRUE;
 			} else
@@ -575,8 +567,7 @@ static BOOL rx0_hdp_handler(uint32_t bd_ptr)
 			RX0_HDP = 0;	//bd_ptr = 0
 			rx0_hdp_initialized = TRUE;
 
-			if (tx0_hdp_initialized && tx0_cp_initialized
-			    && rx0_cp_initialized)
+			if (tx0_hdp_initialized && tx0_cp_initialized && rx0_cp_initialized)
 				initialization_performed();
 
 			return TRUE;
@@ -591,8 +582,7 @@ static BOOL rx0_hdp_handler(uint32_t bd_ptr)
 			update_active_queue(RECEIVE);
 			if (is_queue_secure(bd_ptr, RECEIVE)) {
 				rx0_active_queue = bd_ptr;
-				update_rho_nic_alpha_queue(bd_ptr, RECEIVE,
-							   ADD);
+				decrement_rho_nic_update_alpha_queue(bd_ptr, RECEIVE, ADD);
 				RX0_HDP = bd_ptr;
 				return TRUE;
 			} else
@@ -621,8 +611,7 @@ static BOOL tx0_cp_handler(uint32_t val)
 			TX0_CP = 0;	//val = 0.
 			tx0_cp_initialized = TRUE;
 
-			if (tx0_hdp_initialized && rx0_hdp_initialized
-			    && rx0_cp_initialized)
+			if (tx0_hdp_initialized && rx0_hdp_initialized && rx0_cp_initialized)
 				initialization_performed();
 
 			return TRUE;
@@ -634,8 +623,7 @@ static BOOL tx0_cp_handler(uint32_t val)
 		}
 
 		update_active_queue(TRANSMIT);	//If tx0_active_queue is 0, then is the teardown complete.
-		if (tx0_tearingdown && tx0_active_queue == 0
-		    && TX0_CP == TD_INT && TX0_HDP == 0 && val == TD_INT) {
+		if (tx0_tearingdown && tx0_active_queue == 0 && TX0_CP == TD_INT && TX0_HDP == 0 && val == TD_INT) {
 			TX0_CP = TD_INT;	//val = TD_INT
 			tx0_tearingdown = FALSE;
 			return TRUE;
@@ -664,8 +652,7 @@ static BOOL rx0_cp_handler(uint32_t val)
 			RX0_CP = 0;
 			rx0_cp_initialized = TRUE;
 
-			if (tx0_hdp_initialized && rx0_hdp_initialized
-			    && tx0_cp_initialized)
+			if (tx0_hdp_initialized && rx0_hdp_initialized && tx0_cp_initialized)
 				initialization_performed();
 
 			return TRUE;
@@ -677,8 +664,7 @@ static BOOL rx0_cp_handler(uint32_t val)
 		}
 
 		update_active_queue(RECEIVE);
-		if (rx0_tearingdown && rx0_active_queue == 0
-		    && RX0_CP == TD_INT && RX0_HDP == 0 && val == TD_INT) {
+		if (rx0_tearingdown && rx0_active_queue == 0 && RX0_CP == TD_INT && RX0_HDP == 0 && val == TD_INT) {
 			RX0_CP = TD_INT;
 			rx0_tearingdown = FALSE;
 			return TRUE;
@@ -748,8 +734,7 @@ static BOOL rx_teardown_handler(uint32_t channel)
 static BOOL cppi_ram_handler(uint32_t pa, uint32_t val)
 {
 	if (!initialized || tx0_tearingdown || rx0_tearingdown) {
-		printf("INIT = %x | TX_TEARDOWN = %x | RX_TEARDOWN = %x\n",
-		       initialized, tx0_tearingdown, rx0_tearingdown);
+		printf("INIT = %x | TX_TEARDOWN = %x | RX_TEARDOWN = %x\n", initialized, tx0_tearingdown, rx0_tearingdown);
 		return FALSE;
 	}
 	//Updates the tx0_active_queue and rx0_active_queue variables. This gives
@@ -768,8 +753,7 @@ static BOOL cppi_ram_handler(uint32_t pa, uint32_t val)
 		return TRUE;
 	}
 	//Checks what kind of overlap the CPPI_RAM access made.
-	bd_overlap transmit_overlap =
-	    type_of_cppi_ram_access_overlap(pa, tx0_active_queue);
+	bd_overlap transmit_overlap = type_of_cppi_ram_access_overlap(pa, tx0_active_queue);
 
 	//An access cannot overlap both the active transmit and receive queue since
 	//they are word aligned, the access is word aligned, and the transmit and
@@ -785,7 +769,7 @@ static BOOL cppi_ram_handler(uint32_t pa, uint32_t val)
 	//Otherwise the receive case is checked in a similar manner.
 	if (transmit_overlap == ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP) {
 		if (is_queue_secure(val, TRANSMIT)) {
-			update_rho_nic_alpha_queue(val, TRANSMIT, ADD);
+			decrement_rho_nic_update_alpha_queue(val, TRANSMIT, ADD);
 			word_at_phys_addr(pa) = val;
 			handle_potential_misqueue_condition(TRANSMIT, pa, val);
 			return TRUE;
@@ -794,11 +778,9 @@ static BOOL cppi_ram_handler(uint32_t pa, uint32_t val)
 		printf("STH CPSW: ILLEGAL TRANSMISSION OVERLAP!\n");
 		return FALSE;
 	} else {
-		bd_overlap receive_overlap =
-		    type_of_cppi_ram_access_overlap(pa, rx0_active_queue);
-		if (receive_overlap == ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP
-		    && is_queue_secure(val, RECEIVE)) {
-			update_rho_nic_alpha_queue(val, RECEIVE, ADD);
+		bd_overlap receive_overlap = type_of_cppi_ram_access_overlap(pa, rx0_active_queue);
+		if (receive_overlap == ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP && is_queue_secure(val, RECEIVE)) {
+			decrement_rho_nic_update_alpha_queue(val, RECEIVE, ADD);
 			word_at_phys_addr(pa) = val;
 			handle_potential_misqueue_condition(RECEIVE, pa, val);
 			return TRUE;
@@ -843,8 +825,8 @@ static BOOL rx_buffer_offset_handler(uint32_t val)
  */
 static void initialization_performed(void)
 {
-	update_rho_nic_alpha_queue(tx0_active_queue, TRANSMIT, REMOVE);
-	update_rho_nic_alpha_queue(rx0_active_queue, RECEIVE, REMOVE);
+	decrement_rho_nic_update_alpha_queue(tx0_active_queue, TRANSMIT, REMOVE);
+	decrement_rho_nic_update_alpha_queue(rx0_active_queue, RECEIVE, REMOVE);
 	tx0_active_queue = 0;
 	rx0_active_queue = 0;
 	initialized = TRUE;
@@ -880,20 +862,20 @@ static void update_active_queue(BOOL transmit)
 		//Checks teardown bit. If it is set then the buffer descriptors are
 		//released and alpha must be updated.
 		else if (is_td(bd_ptr) && tearingdown) {
-			update_rho_nic_alpha_queue(bd_ptr, transmit, REMOVE);
+			decrement_rho_nic_update_alpha_queue(bd_ptr, transmit, REMOVE);
 			no_teardown = FALSE;
 			bd_ptr = 0;
 		} else {
 			//Advances bd_ptr to point to the last buffer descriptor of the
 			//current frame. That is one with EOP set.
 			while (!is_eop(bd_ptr)) {
-				update_rho_nic_alpha(bd_ptr, transmit, REMOVE);
+				decrement_rho_nic_update_alpha(bd_ptr, transmit, REMOVE);
 				bd_ptr = get_next_descriptor_pointer(bd_ptr);
 			}
 
 			//Advances the buffer descriptor pointer to the next frame's SOP
 			//buffer descriptor if there is one.
-			update_rho_nic_alpha(bd_ptr, transmit, REMOVE);
+			decrement_rho_nic_update_alpha(bd_ptr, transmit, REMOVE);
 			bd_ptr = get_next_descriptor_pointer(bd_ptr);
 		}
 	}
@@ -918,9 +900,7 @@ static void update_active_queue(BOOL transmit)
  *
  *  Function: Handles a misqueue condition if it has occurred.
  */
-static void handle_potential_misqueue_condition(BOOL transmit,
-						uint32_t last_bd_ptr,
-						uint32_t new_queue)
+static void handle_potential_misqueue_condition(BOOL transmit, uint32_t last_bd_ptr, uint32_t new_queue)
 {
 	uint32_t bd_ptr = transmit ? tx0_active_queue : rx0_active_queue;
 	uint32_t sop, eop = 0;
@@ -932,17 +912,14 @@ static void handle_potential_misqueue_condition(BOOL transmit,
 
 	//If the buffer descriptor to write is a released SOP with no EOQ bit set,
 	//then has no misqueue condition occurred.
-	if ((is_sop(last_bd_ptr) && is_released(last_bd_ptr)
-	     && !is_eoq(last_bd_ptr)))
+	if ((is_sop(last_bd_ptr) && is_released(last_bd_ptr) && !is_eoq(last_bd_ptr)))
 		return;
 	//If the buffer descriptor to write is a released SOP with the EOQ bit set,
 	//then has a misqueue condition occurred. Therefore is its EOQ bit cleared
 	//to enable the simulation proof and the HDP register written with the new
 	//queue.
-	else if (is_sop(last_bd_ptr) && is_released(last_bd_ptr)
-		 && is_eoq(last_bd_ptr)) {
-		word_at_phys_addr(last_bd_ptr + FLAGS) =
-		    (word_at_phys_addr(last_bd_ptr + FLAGS)) & (~EOQ);
+	else if (is_sop(last_bd_ptr) && is_released(last_bd_ptr) && is_eoq(last_bd_ptr)) {
+		word_at_phys_addr(last_bd_ptr + FLAGS) = (word_at_phys_addr(last_bd_ptr + FLAGS)) & (~EOQ);
 
 		if (transmit)
 			TX0_HDP = new_queue;
@@ -981,8 +958,7 @@ static void handle_potential_misqueue_condition(BOOL transmit,
 	//register written with the physical address of the queue that was supposed
 	//to be appended to the original queue.
 	if (is_released(sop) && is_eoq(eop)) {
-		word_at_phys_addr(eop + FLAGS) =
-		    (word_at_phys_addr(eop + FLAGS)) & (~EOQ);
+		word_at_phys_addr(eop + FLAGS) = (word_at_phys_addr(eop + FLAGS)) & (~EOQ);
 
 		if (transmit)
 			TX0_HDP = new_queue;
@@ -993,13 +969,14 @@ static void handle_potential_misqueue_condition(BOOL transmit,
 
 /*
  *  @bd_ptr: The physical address of the first buffer descriptor in a queue, in
- *  which all buffer descriptors are added or removed according to @add.
- *  alpha gets updated accordingly for all buffer descriptors.
+ *  which all buffer descriptors are added or removed according to @add. For
+ *	all buffer descriptors, rho_nic is decremented if @add is false, and alpha
+ *	is updated depending on whether the buffer descriptors are added or removed.
  */
-static void update_rho_nic_alpha_queue(uint32_t bd_ptr, BOOL transmit, BOOL add)
+static void decrement_rho_nic_update_alpha_queue(uint32_t bd_ptr, BOOL transmit, BOOL add)
 {
 	while (bd_ptr) {
-		update_rho_nic_alpha(bd_ptr, transmit, add);
+		decrement_rho_nic_update_alpha(bd_ptr, transmit, add);
 		bd_ptr = get_next_descriptor_pointer(bd_ptr);
 	}
 }
@@ -1016,11 +993,12 @@ static void update_rho_nic_alpha_queue(uint32_t bd_ptr, BOOL transmit, BOOL add)
  *
  *  ASSUMES: bd_ptr is aligned and is in CPPI_RAM.
  *
- *  Function: Update alpha for @bd_ptr.
+ *  Function: If the buffer descriptor is added, alpha is updated. If the
+ *	buffer descriptor is removed, rho_nic is decremented and alpha updated.
  *
  *  return: void.
  */
-static void update_rho_nic_alpha(uint32_t bd_ptr, BOOL transmit, BOOL add)
+static void decrement_rho_nic_update_alpha(uint32_t bd_ptr, BOOL transmit, BOOL add)
 {
 	if (add) {
 		SET_ACTIVE_CPPI_RAM(bd_ptr);
@@ -1034,8 +1012,10 @@ static void update_rho_nic_alpha(uint32_t bd_ptr, BOOL transmit, BOOL add)
 		CLEAR_ACTIVE_CPPI_RAM(bd_ptr + 12);
 	}
 
-	if (!transmit)
-		update_rho_nic(bd_ptr, add);
+	//This function only updates rho_nic for removal. is_queue_secure updates
+	//rho_nic for addition.
+	if (!transmit && !add)
+		decrement_rho_nic(bd_ptr);
 }
 
 /*
@@ -1045,41 +1025,24 @@ static void update_rho_nic_alpha(uint32_t bd_ptr, BOOL transmit, BOOL add)
  *	@add: True if the buffer descriptor is added to the receive queue and false
  *	otherwise.
  *
- *	Updates the rho_wt data structure of the monitor and recv_bd_nr_blocks.
+ *	Decrements rho_nic and resets recv_bd_nr_blocks for the buffer descriptor
+ *	at @bd_ptr.
  */
-static void update_rho_nic(uint32_t bd_ptr, BOOL add)
+static void decrement_rho_nic(uint32_t bd_ptr)
 {
 	uint32_t bp = get_buffer_pointer(bd_ptr);
-	uint32_t start_bl = bp >> 12, last_bl, update;
+	uint32_t start_bl = bp >> 12, end_bl, update;
 
-	if (add) {
-		last_bl = (bp + get_rx_buffer_length(bd_ptr) - 0x1) >> 12;
-		recv_bd_nr_blocks[(bd_ptr -
-				   CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] =
-		    last_bl - start_bl + 1;
-		update = 1;
-	} else {
-		last_bl =
-		    start_bl +
-		    recv_bd_nr_blocks[(bd_ptr -
-				       CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] -
-		    1;
-		recv_bd_nr_blocks[(bd_ptr -
-				   CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] = 0;
-		update = -1;
+	end_bl = start_bl + recv_bd_nr_blocks[(bd_ptr - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] - 1;
+	recv_bd_nr_blocks[(bd_ptr - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] = 0;
+
+	dmmu_entry_t *e = get_bft_entry_by_block_idx(start_bl);
+	e->dev_refcnt--;
+
+	if (start_bl != end_bl) {
+		e = get_bft_entry_by_block_idx(end_bl);
+		e->dev_refcnt--;
 	}
-
-	int i;
-	for (i = start_bl; i <= last_bl; i++)
-		update_writable_reference_counter(update);
-}
-
-/*
- *	Updates the writable reference counter with the value update: ref += update.
- */
-static void inline update_writable_reference_counter(uint32_t update)
-{
-
 }
 
 /*
@@ -1098,19 +1061,24 @@ static void inline update_writable_reference_counter(uint32_t update)
  *  a)  It has a length of at most MAX_QUEUE_LENGTH buffer descriptors.
  *  b)  All buffer descriptors are completely located in CPPI_RAM.
  *  c)  All buffer descriptors are word aligned.
- *  d)  None of its buffer descriptors overlap each other.
- *  e)  None of its buffer descriptors overlap any buffer descriptor in any
+ *  d)  None of its buffer descriptors overlap any buffer descriptor in any
  *		active queue (tx0_active_queue or rx0_active_queue).
+ *  e)  None of its buffer descriptors overlap each other.
  *  f)  For transmission only: All buffer descriptors must have correctly
  *		matching SOP and EOP bits.
  *  g)  All buffer descriptors only access the memory of the guest and that the
  *		buffer length field is greater than zero. For the monitor and receive
  *		queues, no buffer descriptor is allowed to access executable memory.
- *  h)  For transmission only: The following fields must be set accordingly:
+ *	h)	For reception only: Check that there are no update overflows in the
+ *		reference counter rho_nic, and if so, update it. This can be done
+ *		earliest at this point since if rho_nic is updated at this point,
+ *		nothing can fail at a later stage that forces the update of rho_nic to
+ *		be reversed.
+ *  i)  For transmission only: The following fields must be set accordingly:
  *		-Ownership: 1. Only valid on SOP.
  *		-EOQ: 0. Only valid on EOP.
  *		-Teardown: 0. Only valid on SOP.
- *  i)  For reception only: The following fields must be set accordingly:
+ *  j)  For reception only: The following fields must be set accordingly:
  *		-Buffer offset: 0. Only valid on SOP but should be cleared on all
  *		 buffer descriptors.
  *		-SOP: 0. Valid on all buffer descriptors.
@@ -1127,52 +1095,50 @@ static void inline update_writable_reference_counter(uint32_t update)
  */
 static BOOL is_queue_secure(uint32_t bd_ptr, BOOL transmit)
 {
-	//The empty queue is secure.
+	//An empty queue is secure.
 	if (bd_ptr == 0)
 		return TRUE;
 
-	//a), b), c), e).
-	if (!is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap
-	    (bd_ptr)) {
-		printf
-		    ("STH CPSW ERROR: Not valid length, in CPPI_RAM or alignment for queue at %x\n",
-		     bd_ptr);
+	//a), b), c), d).
+	if (!is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap(bd_ptr)) {
+		printf("STH CPSW ERROR: Not valid length, in CPPI_RAM or alignment for queue at %x\n", bd_ptr);
 		return FALSE;
 	}
-	//d).
+	//e).
 	if (is_queue_self_overlap(bd_ptr)) {
-		printf
-		    ("STH CPSW ERROR: Queue overlaps itself for queue beginning at %x\n",
-		     bd_ptr);
+		printf("STH CPSW ERROR: Queue overlaps itself for queue beginning at %x\n", bd_ptr);
 		return FALSE;
 	}
 	//f).
-	if (transmit
-	    && !is_transmit_SOP_EOP_packet_length_fields_set_correctly(bd_ptr))
-	{
-		printf
-		    ("STH CPSW ERROR: Queue is of transmit type and does not have"
-		     " correctly matching SOP and EOP bits for queue beginning at"
-		     " %x\n", bd_ptr);
+	if (transmit && !is_transmit_SOP_EOP_packet_length_fields_set_correctly(bd_ptr)) {
+		printf("STH CPSW ERROR: Queue is of transmit type and does not have correctly matching SOP and EOP bits for queue starting at %x\n", bd_ptr);
 		return FALSE;
 	}
 	//g).
 	if (!is_data_buffer_secure_queue(bd_ptr, transmit)) {
-		printf
-		    ("STH CPSW ERROR: Queue accesses memory outside the guest or"
-		     " buffer length is zero for queue beginning at %x\n",
-		     bd_ptr);
+		printf("STH CPSW ERROR: Queue accesses memory outside the guest or buffer length is zero for queue starting at %x\n", bd_ptr);
 		return FALSE;
 	}
+
 	//Now that it is known that the buffer descriptors are not overlapping,
-	//or used by the NIC, the buffer descriptor and are word aligned, can they
-	//be manipulated to have correctly configured bits.
-	if (transmit) {		//h).
-		set_and_clear_word_on_sop_or_eop(bd_ptr, FLAGS, OWNER, 0, SOP_BD);	//Sets Owner bit on SOP.
-		set_and_clear_word_on_sop_or_eop(bd_ptr, FLAGS, 0, EOQ, EOP_BD);	//Clears EOQ bit on EOP.
-		set_and_clear_word_on_sop_or_eop(bd_ptr, FLAGS, 0, TD, SOP_BD);	//Clears TD bit on SOP.
-	} else {		//i).
-		set_and_clear_word(bd_ptr, BOBL, 0, RX_BO);	//Clears buffer offset.
+	//nor used by the NIC, and the buffer descriptors are word aligned, they
+	//can be recorded as given to the NIC (rho_nic and recv_bd_nr_blocks) and
+	//manipulated to have correctly configured bits.
+
+	//h).
+	if (!transmit && !no_overflow_and_updated_rho_nic(bd_ptr)) {
+		printf("STH CPSW ERROR: Too many buffer descriptors in new queue addresses the same memory block for queue starting at %x. Limit is %d.\n", bd_ptr, MAX_RHO_NIC);
+		return FALSE;
+	}
+	//i).
+	if (transmit) {
+		set_and_clear_word_on_sop_or_eop(bd_ptr, FLAGS, OWNER, 0, SOP_BD);		//Sets Owner bit on SOP.
+		set_and_clear_word_on_sop_or_eop(bd_ptr, FLAGS, 0, EOQ, EOP_BD);		//Clears EOQ bit on EOP.
+		set_and_clear_word_on_sop_or_eop(bd_ptr, FLAGS, 0, TD, SOP_BD);			//Clears TD bit on SOP.
+	}
+	//j).
+	else {
+		set_and_clear_word(bd_ptr, BOBL, 0, RX_BO);								//Clears buffer offset.
 		set_and_clear_word(bd_ptr, FLAGS, OWNER, SOP | EOP | EOQ | TD | CRC);	//Sets owner, clears SOP, EOP, EOQ, TD, CRC.
 	}
 
@@ -1211,16 +1177,12 @@ static BOOL is_queue_secure(uint32_t bd_ptr, BOOL transmit)
  *
  *  Returns: void.
  */
-static void set_and_clear_word_on_sop_or_eop(uint32_t bd_ptr, uint32_t offset,
-					     uint32_t set, uint32_t clear,
-					     BOOL modify_sop_or_eop)
+static void set_and_clear_word_on_sop_or_eop(uint32_t bd_ptr, uint32_t offset, uint32_t set, uint32_t clear, BOOL modify_sop_or_eop)
 {
 	while (bd_ptr) {
 		//Remember that a buffer descriptor can be both of type SOP and EOP.
-		if ((is_sop(bd_ptr) && modify_sop_or_eop)
-		    || (is_eop(bd_ptr) && !modify_sop_or_eop))
-			word_at_phys_addr(bd_ptr + offset) =
-			    (word_at_phys_addr(bd_ptr + offset) | set) & ~clear;
+		if ((is_sop(bd_ptr) && modify_sop_or_eop) || (is_eop(bd_ptr) && !modify_sop_or_eop))
+			word_at_phys_addr(bd_ptr + offset) = (word_at_phys_addr(bd_ptr + offset) | set) & ~clear;
 		bd_ptr = get_next_descriptor_pointer(bd_ptr);
 	}
 }
@@ -1247,12 +1209,10 @@ static void set_and_clear_word_on_sop_or_eop(uint32_t bd_ptr, uint32_t offset,
  *  Function: For each buffer descriptor in the queue pointed to by bd_ptr the
  *  fourth word is set to: word := (word | set) & ~clear
  */
-static void set_and_clear_word(uint32_t bd_ptr, uint32_t offset, uint32_t set,
-			       uint32_t clear)
+static void set_and_clear_word(uint32_t bd_ptr, uint32_t offset, uint32_t set, uint32_t clear)
 {
 	while (bd_ptr) {
-		word_at_phys_addr(bd_ptr + offset) =
-		    (word_at_phys_addr(bd_ptr + offset) | set) & ~clear;
+		word_at_phys_addr(bd_ptr + offset) = (word_at_phys_addr(bd_ptr + offset) | set) & ~clear;
 		bd_ptr = get_next_descriptor_pointer(bd_ptr);
 	}
 }
@@ -1269,44 +1229,36 @@ static void set_and_clear_word(uint32_t bd_ptr, uint32_t offset, uint32_t set,
  *  a)  It has a length of at most MAX_QUEUE_LENGTH buffer descriptors.
  *  b)  All buffer descriptors are completely located in CPPI_RAM.
  *  c)  All buffer descriptors are word aligned.
- *  e)  No overlap with an active queue.
+ *  d)  No overlap with an active queue.
  *
  *  Returns: True if and only if the queue headed by @bd_ptr is of valid,
  *  length, located in CPPI_RAM, word aligned, and does not overlap an active
  *  queue.
  */
-static BOOL
-is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap(uint32_t bd_ptr)
+static BOOL is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap(uint32_t bd_ptr)
 {
 	int length = 0;
 	while (bd_ptr != 0 && length < MAX_QUEUE_LENGTH)
 		//Subtracts fifteen bytes from 0x4A104000 instead from bd_ptr to avoid
 		//overflow, which would create a false truth value. Also checks that
 		//all buffer descriptor pointers are word aligned.
-		if ((0x4A102000 <= bd_ptr) && (bd_ptr < (0x4A104000 - 15))
-		    && is_word_aligned(bd_ptr)) {
-			if (IS_ACTIVE_CPPI_RAM(bd_ptr)
-			    || IS_ACTIVE_CPPI_RAM(bd_ptr + 4)
-			    || IS_ACTIVE_CPPI_RAM(bd_ptr + 8)
-			    || IS_ACTIVE_CPPI_RAM(bd_ptr + 12)) {
-				printf
-				    ("STH CPSW: New buffer descriptor overlaps active buffer descriptor.\n");
+		if ((0x4A102000 <= bd_ptr) && (bd_ptr < (0x4A104000 - 15)) && is_word_aligned(bd_ptr)) {
+			if (IS_ACTIVE_CPPI_RAM(bd_ptr) || IS_ACTIVE_CPPI_RAM(bd_ptr + 4) || IS_ACTIVE_CPPI_RAM(bd_ptr + 8) || IS_ACTIVE_CPPI_RAM(bd_ptr + 12)) {
+				printf("STH CPSW: New buffer descriptor overlaps active buffer descriptor.\n");
 				return FALSE;
 			}
 
 			length += 1;
 			bd_ptr = get_next_descriptor_pointer(bd_ptr);
 		} else {
-			printf
-			    ("STH CPSW: Buffer descriptor not completely located in CPPI_RAM or is not word aligned.\n");
+			printf("STH CPSW: Buffer descriptor not completely located in CPPI_RAM or is not word aligned.\n");
 			return FALSE;
 		}
 
 	//If the queue consists of more than MAX_QUEUE_LENGTH buffer descriptors,
 	//the function returns false.
 	if (bd_ptr) {
-		printf("STH CPSW: New queue is longer than %d!\n",
-		       MAX_QUEUE_LENGTH);
+		printf("STH CPSW: New queue is longer than %d!\n", MAX_QUEUE_LENGTH);
 		return FALSE;
 	}
 	//No policy violations and true is returned.
@@ -1324,7 +1276,7 @@ is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap(uint32_t bd_ptr)
  *  Termination: Guaranteed.
  *
  *  Function: Checks that the queue headed by @bd_ptr satisfies:
- *  d)  None of its buffer descriptors overlap each other.
+ *  e)  None of its buffer descriptors overlap each other.
  *
  *  Returns: True if and only if the queue pointed to by @bd_ptr overlaps itself.
  */
@@ -1336,16 +1288,11 @@ static BOOL is_queue_self_overlap(uint32_t bd_ptr)
 		//Compares bd_ptr with all buffer descriptors following it.
 		uint32_t other_bd_ptr = get_next_descriptor_pointer(bd_ptr);
 		while (other_bd_ptr)
-			if ((bd_ptr <= other_bd_ptr
-			     && other_bd_ptr < bd_ptr + 0x10)
-			    || (other_bd_ptr <= bd_ptr
-				&& bd_ptr < other_bd_ptr + 0x10)) {
-				printf
-				    ("STH CPSW: Buffer descriptor queue overlaps itself!\n");
+			if ((bd_ptr <= other_bd_ptr && other_bd_ptr < bd_ptr + 0x10) || (other_bd_ptr <= bd_ptr && bd_ptr < other_bd_ptr + 0x10)) {
+				printf("STH CPSW: Buffer descriptor queue overlaps itself!\n");
 				return TRUE;
 			} else
-				other_bd_ptr =
-				    get_next_descriptor_pointer(other_bd_ptr);
+				other_bd_ptr = get_next_descriptor_pointer(other_bd_ptr);
 
 		//Advances bd_ptr to the next buffer descriptor that should be compared
 		//with the buffer descriptors following it.
@@ -1421,8 +1368,7 @@ static BOOL is_queue_self_overlap(uint32_t bd_ptr)
  *  SOP bit is followed by an EOP bit (could be in same buffer descriptor)
  *  before the next SOP bit and the queue always ends with an EOP bit.
  */
-static BOOL is_transmit_SOP_EOP_packet_length_fields_set_correctly(uint32_t
-								   bd_ptr)
+static BOOL is_transmit_SOP_EOP_packet_length_fields_set_correctly(uint32_t bd_ptr)
 {
 	//Goes through each frame's buffer descriptors, that is the whole queue but
 	//one SOP ... EOP sequence at a time.
@@ -1430,9 +1376,7 @@ static BOOL is_transmit_SOP_EOP_packet_length_fields_set_correctly(uint32_t
 	while (bd_ptr) {
 		//If the first buffer descriptor is not a SOP, then there is an error.
 		if (!is_sop(bd_ptr)) {
-			printf
-			    ("STH CPSW: Transmit queue is rejected due to invalid"
-			     " SOP/EOP sequence of buffer descriptors!\n");
+			printf("STH CPSW: Transmit queue is rejected due to invalid SOP/EOP sequence of buffer descriptors!\n");
 			return FALSE;
 		}
 		uint32_t buffer_length_sum = get_tx_buffer_length(bd_ptr);
@@ -1447,31 +1391,24 @@ static BOOL is_transmit_SOP_EOP_packet_length_fields_set_correctly(uint32_t
 
 			//Until a null pointer, SOP or EOP buffer descriptor is found, bd_ptr
 			//is advanced.
-			while (bd_ptr != 0 && !is_sop(bd_ptr)
-			       && !is_eop(bd_ptr)) {
-				buffer_length_sum +=
-				    get_tx_buffer_length(bd_ptr);
+			while (bd_ptr != 0 && !is_sop(bd_ptr) && !is_eop(bd_ptr)) {
+				buffer_length_sum += get_tx_buffer_length(bd_ptr);
 				bd_ptr = get_next_descriptor_pointer(bd_ptr);
 			}
 			if (bd_ptr)
-				buffer_length_sum +=
-				    get_tx_buffer_length(bd_ptr);
+				buffer_length_sum += get_tx_buffer_length(bd_ptr);
 
 			//If it wasn't an EOP that stopped the processing, then it is an error.
 			//Even if EOP was set, SOP must not be set for a valid matching.
 			if (bd_ptr == 0 || is_sop(bd_ptr)) {
-				printf
-				    ("STH CPSW: Transmit queue is rejected due to invalid"
-				     " SOP/EOP sequence of buffer descriptors!\n");
+				printf("STH CPSW: Transmit queue is rejected due to invalid SOP/EOP sequence of buffer descriptors!\n");
 				return FALSE;
 			}
 		}
 		//Checks that the sum of the buffer length fields are equal to the
 		//packet length field.
 		if (packet_length != buffer_length_sum) {
-			printf
-			    ("STH CPSW: Transmit queue is rejected due to invalid packet"
-			     " length field of a transmit SOP buffer descriptors!\n");
+			printf("STH CPSW: Transmit queue is rejected due to invalid packet length field of a transmit SOP buffer descriptors!\n");
 			return FALSE;
 		}
 		//At this point, bd_ptr is an EOP buffer descriptor. Hence bd_ptr is
@@ -1510,8 +1447,7 @@ static BOOL is_data_buffer_secure_queue(uint32_t bd_ptr, BOOL transmit)
 {
 	while (bd_ptr) {
 		if (!is_data_buffer_secure(bd_ptr, transmit)) {
-			printf
-			    ("STH CPSW: Insecure buffer descriptor rejected!\n");
+			printf("STH CPSW: Insecure buffer descriptor rejected!\n");
 			return FALSE;
 		}
 
@@ -1557,8 +1493,7 @@ static BOOL is_data_buffer_secure_queue(uint32_t bd_ptr, BOOL transmit)
  */
 static BOOL is_data_buffer_secure(uint32_t bd_ptr, BOOL transmit)
 {
-	uint32_t buffer_pointer =
-	    get_buffer_pointer(bd_ptr), buffer_offset, buffer_length;
+	uint32_t buffer_pointer = get_buffer_pointer(bd_ptr), buffer_offset, buffer_length;
 	uint32_t buffer_offset_length = get_buffer_offset_and_length(bd_ptr);
 	uint32_t guest_start_address, guest_end_address;
 
@@ -1582,9 +1517,7 @@ static BOOL is_data_buffer_secure(uint32_t bd_ptr, BOOL transmit)
 
 	//Checks that buffer length is greater than zero.
 	if (buffer_length == 0) {
-		printf
-		    ("STH CPSW: Buffer length is zero for buffer descriptor at"
-		     " %x!\n", bd_ptr);
+		printf("STH CPSW: Buffer length is zero for buffer descriptor at %x!\n", bd_ptr);
 		return FALSE;
 	}
 	//Checks overflow condition.
@@ -1600,11 +1533,9 @@ static BOOL is_data_buffer_secure(uint32_t bd_ptr, BOOL transmit)
 	}
 
 	uint32_t start_bl = buffer_pointer >> 12;
-	uint32_t end_bl =
-	    (buffer_pointer + buffer_offset + buffer_length - 1) >> 12;
+	uint32_t end_bl = (buffer_pointer + buffer_offset + buffer_length - 1) >> 12;
 	if (!is_secure_linux_memory(transmit, start_bl, end_bl)) {
-		printf
-		    ("STH CPSW: Buffer descriptor is not addressing legal memory.\n");
+		printf("STH CPSW: Buffer descriptor is not addressing legal memory.\n");
 		return FALSE;
 	}
 	//No errors, and hence the buffer descriptor is valid.
@@ -1624,19 +1555,17 @@ static BOOL is_data_buffer_secure(uint32_t bd_ptr, BOOL transmit)
  *	end_bl, inclusive, only access Linux RAM, and for reception also no page
  *	tables, NIC registers or executable memory.
  */
-static BOOL is_secure_linux_memory(BOOL transmit, uint32_t start_bl,
-				   uint32_t end_bl)
+static BOOL is_secure_linux_memory(BOOL transmit, uint32_t start_bl, uint32_t end_bl)
 {
 	uint32_t current_bl;
 	for (current_bl = start_bl; current_bl <= end_bl; current_bl++) {
 		if (transmit) {
 			//The type of the block is not L1, L2 or D.
-			if (!is_L1_L2_or_D_block(current_bl))
+			if (!(is_L1_or_L2_block(current_bl) || is_D_block(current_bl)))
 				return FALSE;
 		} else {
 			//The type of the block is either not D, or it is of type D but executable.
-			if (!is_D_block(current_bl)
-			    || is_executable_block(current_bl))
+			if (!is_D_block(current_bl) || is_executable_block(current_bl))
 				return FALSE;
 		}
 	}
@@ -1647,26 +1576,48 @@ static BOOL is_secure_linux_memory(BOOL transmit, uint32_t start_bl,
 
 /*
  *	@bl: Block index of the block whose type is to be checked.
+ *
+ *	@return: True if and only if the block with index @bl is of type L1 or L2.
  */
-static BOOL inline is_L1_L2_or_D_block(uint32_t bl)
+static BOOL inline is_L1_or_L2_block(uint32_t bl)
 {
-	return TRUE;
+	dmmu_entry_t *e = get_bft_entry_by_block_idx(bl);
+
+	if (e->type == PAGE_INFO_TYPE_L1PT || e->type == PAGE_INFO_TYPE_L2PT)
+		return TRUE;
+	else
+		return FALSE;
 }
 
 /*
  *	@bl: Block index of the block that shall be checked to be of type D.
+ *
+ *	@return: True if and only if the block with index @bl is of type D.
  */
 static BOOL inline is_D_block(uint32_t bl)
 {
-	return TRUE;
+	dmmu_entry_t *e = get_bft_entry_by_block_idx(bl);
+
+	if (e->type == PAGE_INFO_TYPE_DATA)
+		return TRUE;
+	else
+		return FALSE;
 }
 
 /*
  *	@bl: Block index of the block whose execute permissions is to be checked.
+ *
+ *	@return: True if and only if the block with index @bl is mapped by the MMU
+ *	as executable.
  */
 static BOOL inline is_executable_block(uint32_t bl)
 {
-	return FALSE;
+	dmmu_entry_t *e = get_bft_entry_by_block_idx(bl);
+
+	if (e->x_refcnt > 0)
+		return TRUE;
+	else
+		return FALSE;
 }
 
 /*
@@ -1689,8 +1640,7 @@ static BOOL inline is_executable_block(uint32_t bl)
  *  *NO_OVERLAP: @physical_address does not access any byte of any buffer
  *   descriptor.
  */
-static bd_overlap type_of_cppi_ram_access_overlap(uint32_t accessed_address,
-						  uint32_t bd_ptr)
+static bd_overlap type_of_cppi_ram_access_overlap(uint32_t accessed_address, uint32_t bd_ptr)
 {
 	while (bd_ptr)
 		if (bd_ptr == accessed_address) {
@@ -1698,13 +1648,100 @@ static bd_overlap type_of_cppi_ram_access_overlap(uint32_t accessed_address,
 				return ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP;
 			else
 				return ILLEGAL_OVERLAP;
-		} else if (bd_ptr < accessed_address
-			   && accessed_address <= bd_ptr + 0xF)
+		} else if (bd_ptr < accessed_address && accessed_address <= bd_ptr + 0xF)
 			return ILLEGAL_OVERLAP;
 		else
 			bd_ptr = get_next_descriptor_pointer(bd_ptr);
 
 	return NO_OVERLAP;
+}
+
+/*
+ *	@bd_ptr: Physical address of the first buffer descriptor in a reception
+ *	queue to be given to the NIC.
+ *
+ *	@return: If there is no entry in rho_nic that is overflowing as a result of
+ *	updating rho_nic by giving the queue to the NIC, rho_nic and
+ *	recv_bd_nr_blocks are updated and true is returned. If some entry would
+ *	overflow as a result of an update, rho_nic nor recv_bd_nr_blocks are
+ *	updated and false is returned.
+ */
+static BOOL no_overflow_and_updated_rho_nic(uint32_t bd_ptr)
+{
+	uint32_t initial_bd_ptr = bd_ptr, overflow_bd_ptr = 0;
+
+	while (bd_ptr && !overflow_bd_ptr) {
+		//1. Identify which blocks the buffer descriptor addresses.
+		uint32_t buffer_pointer = get_buffer_pointer(bd_ptr);
+		uint32_t start_bl = buffer_pointer >> 12;
+		uint32_t end_bl = (buffer_pointer + get_rx_buffer_length(bd_ptr) - 1) >> 12;
+
+		//2. Check overflow of rho_nic (reference counter of NIC/devices) for
+		//first addressed block.
+		dmmu_entry_t *e1 = get_bft_entry_by_block_idx(start_bl);
+		if (e1->dev_refcnt == MAX_RHO_NIC)
+			overflow_bd_ptr = bd_ptr;	//Incrementing max value is an error.
+
+		//3. Check if the buffer descriptor addresses a second block. A
+		//reception buffer descriptor can address at most two blocks.
+		dmmu_entry_t *e2;
+		if (start_bl != end_bl) {
+			e2 = get_bft_entry_by_block_idx(end_bl);
+			if (e2->dev_refcnt == MAX_RHO_NIC)
+				overflow_bd_ptr = bd_ptr;	//Incrementing max value is an error.
+		}
+
+		//4. If no overflow will occur by updating rho_nic, rho_nic is updated.
+		if (!overflow_bd_ptr)
+			e1->dev_refcnt++;
+		if (!overflow_bd_ptr && start_bl != end_bl)
+			e2->dev_refcnt++;
+
+		//5. Update recv_bd_nr_blocks.
+		recv_bd_nr_blocks[(bd_ptr - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] = end_bl - start_bl + 1;
+
+		//6. Process next buffer descriptor.
+		bd_ptr = get_next_descriptor_pointer(bd_ptr);
+	}
+
+	//If there was an overflow, then the update of rho_nic must be reversed.
+	//This means that all buffer descriptors up to but excluding the one
+	//causing the overflow (which did not update rho_nic) must be processed to
+	//decrement rho_nic.
+	if (overflow_bd_ptr) {
+		bd_ptr = initial_bd_ptr;
+
+		while (bd_ptr != overflow_bd_ptr) {
+			//1. Identify which blocks the buffer descriptor addresses.
+			uint32_t buffer_pointer = get_buffer_pointer(bd_ptr);
+			uint32_t start_bl = buffer_pointer >> 12;
+			uint32_t end_bl = (buffer_pointer + get_rx_buffer_length(bd_ptr) - 1) >> 12;
+
+			//2. Decrement rho_nic (reference counter of NIC/devices) for first
+			//addressed block.
+			dmmu_entry_t *e1 = get_bft_entry_by_block_idx(start_bl);
+			e1->dev_refcnt--;
+
+			//3. Check if the buffer descriptor addresses a second block. A
+			//reception buffer descriptor can address at most two blocks.
+			if (start_bl != end_bl) {
+				dmmu_entry_t *e2 = get_bft_entry_by_block_idx(end_bl);
+				e2->dev_refcnt--;
+			}
+
+			//4. Reset recv_bd_nr_blocks.
+			recv_bd_nr_blocks[(bd_ptr - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] = 0;
+
+			//5. Process next buffer descriptor.
+			bd_ptr = get_next_descriptor_pointer(bd_ptr);
+		}
+
+		//Overflow and rho_nic is not updated. False is therefore returned.
+		return FALSE;
+	}
+	//No overflow and updated rho_nic. True is therefore returned.
+	else
+		return TRUE;
 }
 
 /*
