@@ -218,6 +218,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 
 				return;
 			}
+		case HYPERCALL_QUERY_BFT:
+			res = dmmu_query_bft(param0);
+			curr_vm->current_mode_state->ctx.reg[0] = res;
+			return;			
 		default:
 			hypercall_num_error(hypercall_number);
 		}
