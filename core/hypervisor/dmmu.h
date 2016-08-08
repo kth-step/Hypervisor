@@ -167,6 +167,7 @@ int mmu_lookup_guest(addr_t vadr, addr_t * padr, int user_write);
 int mmu_lookup_hv(addr_t vadr, addr_t * padr, int hv_write);
 
 /*Function prototypes*/
+dmmu_entry_t *get_bft_entry_by_block_idx(addr_t ph_block); /* Used by networking code in soc_cpsw.c */
 int dmmu_switch_mm(addr_t l1_base_pa_add);
 
 int dmmu_create_L1_pt(addr_t l1_base_pa_add);
