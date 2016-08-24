@@ -75,6 +75,6 @@ hc_config linux_config = {
 	//.always_cached_offset = 0x0,
 	//.always_cached_size = (0x6A00000 - 0x0)
 	.initial_kernel_ex_va_top = 0xc2000000,
-	//.initial_kernel_ex_va_top = 0xc07c8000,
 	.runtime_kernel_ex_va_top = 0xc0469000,
+	.init_kernel_ex_va_top = 0xc07c8000,
 };

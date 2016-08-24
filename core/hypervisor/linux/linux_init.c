@@ -67,6 +67,10 @@ void clear_linux_mappings()
 	}
 }
 
+#define number_of_1to1_l2s (curr_vm->config->firmware->psize >> 20)
+#define pa_in_kernel_code_and_init(pa) (pa < curr_vm->config->firmware->pstart + (curr_vm->config->init_kernel_ex_va_top - curr_vm->config->firmware->vstart))
+#define pa_in_kernel_code(pa) (pa < curr_vm->config->firmware->pstart + (curr_vm->config->runtime_kernel_ex_va_top - curr_vm->config->firmware->vstart))
+
 dmmu_clear_linux_mappings()
 {
 	addr_t guest_vstart = curr_vm->config->firmware->vstart;
@@ -95,6 +99,66 @@ dmmu_clear_linux_mappings()
 		dmmu_unmap_L1_pageTable_entry(address);
 	}
 
+	// Remove the executable flag from all L2 used for the 1-to-1 mapping
+	// if it is pointing outside the Linux TEXT (+ init?)
+	uint32_t l2block;
+	for (l2block = 0; l2block < number_of_1to1_l2s / 2; l2block++) {
+		uint32_t l2_base_pa = curr_vm->config->firmware->pstart + curr_vm->config->pa_initial_l2_offset + (l2block << 12);
+		uint32_t l2_base_va = mmu_guest_pa_to_va(l2_base_pa, curr_vm->config);
+		uint32_t l2_idx;
+		for (l2_idx=0; l2_idx<512; l2_idx++) {
+			uint32_t l2_desc_va = l2_base_va + l2_idx*4;
+			uint32_t l2_desc = *((uint32_t *) l2_desc_va);
+			uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
+
+			if ((l2_type != 2) && (l2_type != 3))
+				continue;
+
+			l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+			uint32_t l2_pointed_pa = START_PA_OF_SPT(pg_desc);
+			uint32_t ap = GET_L2_AP(pg_desc);
+			if (pa_in_kernel_code_and_init(l2_pointed_pa))
+				continue;
+
+			if (pg_desc->xn)
+				continue;
+			
+			dmmu_l2_unmap_entry(l2_base_pa, l2_idx);
+			dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc | 0b1);
+		}		
+	}
+}
+
+uint32_t hypercall_linux_init_end() {
+	// Remove the executable flag from all L2 used for the 1-to-1 mapping
+	// if it is pointing outside the Linux TEXT (+ init?)
+	uint32_t l2block;
+	for (l2block = 0; l2block < number_of_1to1_l2s / 2; l2block++) {
+		uint32_t l2_base_pa = curr_vm->config->firmware->pstart + curr_vm->config->pa_initial_l2_offset + (l2block << 12);
+		uint32_t l2_base_va = mmu_guest_pa_to_va(l2_base_pa, curr_vm->config);
+		uint32_t l2_idx;
+		for (l2_idx=0; l2_idx<512; l2_idx++) {
+			uint32_t l2_desc_va = l2_base_va + l2_idx*4;
+			uint32_t l2_desc = *((uint32_t *) l2_desc_va);
+			uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
+
+			if ((l2_type != 2) && (l2_type != 3))
+				continue;
+
+			l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+			uint32_t l2_pointed_pa = START_PA_OF_SPT(pg_desc);
+			uint32_t ap = GET_L2_AP(pg_desc);
+			if (pa_in_kernel_code(l2_pointed_pa))
+				continue;
+
+			if (pg_desc->xn)
+				continue;
+			
+			dmmu_l2_unmap_entry(l2_base_pa, l2_idx);
+			dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc | 0b1);
+		}		
+	}
+	return 0;
 }
 
 void init_linux_sigcode()

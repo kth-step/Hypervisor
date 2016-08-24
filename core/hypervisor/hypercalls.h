@@ -94,4 +94,5 @@ void hypercall_end_rpc();
      /*VFP*/
 #define HYPERCALL_UPDATE_MONITOR		1040
 #define HYPERCALL_QUERY_BFT		1041
+#define HYPERCALL_LINUX_INIT_END		1042
 #endif				/* HYPERCALLS_H_ */

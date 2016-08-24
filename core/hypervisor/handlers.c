@@ -195,6 +195,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			//case HYPERCALL_VFP:
 			//  hypercall_vfp_op(param0, param1, param2);
 			//  return;
+		case HYPERCALL_LINUX_INIT_END:
+			hypercall_linux_init_end();
+			return;
+
 		case HYPERCALL_UPDATE_MONITOR:
 			{
 				uint32_t number_of_signatures = param0;
