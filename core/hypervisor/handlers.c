@@ -241,8 +241,10 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 				    uint32_t unused)
 {
 #if 1
-	if (addr >= 0xc0000000)
+	if (addr >= 0xc0000000) {
 		printf("Pabort:%x Status:%x, u=%x \n", addr, status, unused);
+		printf("LR:%x\n", curr_vm->current_mode_state->ctx.lr);
+	}
 #endif
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
 
