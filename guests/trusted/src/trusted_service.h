@@ -160,10 +160,10 @@ enum dmmu_command {
 #define L1_IDX_TO_PA(l1_base, idx) ((l1_base & 0xFFFFC000) | (idx << 2))
 #define L2_DESC_PA(l2_base_add, l2_idx) (l2_base_add | (l2_idx << 2) | 0)
 
-#define GUEST_PASTART 0x87600000
-#define VA_FOR_PT_ACCESS_START 0x0
+#define GUEST_PASTART 0x81000000
+#define VA_FOR_PT_ACCESS_START 0xE8000000
 #define SECTION_SIZE (0x00100000)
-#define GUEST_PSIZE (0x00600000)
+#define GUEST_PSIZE  (0x07000000)
 #define PAGE_SIZE (0x00001000)
 
 #define REQUESTS_BASE_PY  ((4*MB) + HAL_PHYS_START)
