@@ -1559,6 +1559,13 @@ static BOOL is_secure_linux_memory(BOOL transmit, uint32_t start_bl, uint32_t en
 {
 	uint32_t current_bl;
 	for (current_bl = start_bl; current_bl <= end_bl; current_bl++) {
+		if (is_executable_block(current_bl)) {
+			dmmu_entry_t *e = get_bft_entry_by_block_idx(current_bl);
+			printf("\t addr %x executable reference %d\n", (current_bl << 12), e->x_refcnt);
+
+			print_all_pointing_L1(current_bl << 12, 0xfffff000);
+			print_all_pointing_L2(current_bl << 12, 0xfffff000);
+		}
 		if (transmit) {
 			//The type of the block is not L1, L2 or D.
 			if (!(is_L1_or_L2_block(current_bl) || is_D_block(current_bl)))

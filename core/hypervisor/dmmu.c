@@ -980,7 +980,7 @@ int dmmu_unmap_L2_pt(addr_t l2_base_pa_add)
 
 #ifdef DEBUG_ADDRESS
 			if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
-				printf("New rc=%d\n", bft_entry_pg->refcnt);
+				printf("New rc=%d ex=%d\n", bft_entry_pg->refcnt, bft_entry_pg->x_refcnt);
 #endif
 
 		}
@@ -1059,7 +1059,7 @@ int dmmu_l2_map_entry(addr_t l2_base_pa_add, uint32_t l2_idx,
 
 #ifdef DEBUG_ADDRESS
 	if (DEBUG_ADDRESS(START_PA_OF_SPT(pg_desc)))
-		printf("New rc=%d\n", bft_entry_pg->refcnt);
+		printf("New rc=%d ex=%d\n", bft_entry_pg->refcnt, bft_entry_pg->x_refcnt);
 #endif
 	//Updating page table in memory
 	*((uint32_t *) l2_desc_va_add) = new_l2_desc;
@@ -1266,8 +1266,8 @@ void print_all_pointing_L1(uint32_t pa, uint32_t mask)
 					printf
 					    ("   The L1 in 0x%x (index %d) points to 0x%x\n",
 					     START_PA_OF_BLOCK(i), l1_idx, pa);
-					printf("      va is %x ap=%d\n",
-					       (l1_idx << 20), ap);
+					printf("      va is %x ap=%d xn=%d\n",
+					       (l1_idx << 20), ap, l1_sec_desc->xn);
 
 					if (ap == 3) {
 						number_of_l1 += 1;
@@ -1278,6 +1278,7 @@ void print_all_pointing_L1(uint32_t pa, uint32_t mask)
 	}
 	printf("   number of L1s = %d\n", number_of_l1);
 	printf("   block ref cnt = %d\n", bft_entry_pg->refcnt);
+	printf("   block x-ref cnt = %d\n", bft_entry_pg->x_refcnt);
 }
 
 extern uint32_t *slpt_va;
@@ -1326,8 +1327,8 @@ void print_all_pointing_L2(uint32_t pa, uint32_t mask)
 				if ((l2_pointed_pa_add & pt_mask) ==
 				    (pa & pt_mask)) {
 					printf
-					    ("   The L2 in 0x%x (index %d) points to 0x%x ap=%d\n",
-					     START_PA_OF_BLOCK(i), l2_idx, pa, ap);
+					    ("   The L2 in 0x%x (index %d) points to 0x%x ap=%d xn=%d\n",
+					     START_PA_OF_BLOCK(i), l2_idx, pa, ap, pg_desc->xn);
 					if (ap == 3) {
 						number_of_l2 += 1;
 					}
@@ -1338,4 +1339,5 @@ void print_all_pointing_L2(uint32_t pa, uint32_t mask)
 
 	printf("   number of L2s = %d\n", number_of_l2);
 	printf("   block ref cnt = %d\n", bft_entry_pg->refcnt);
+	printf("   block x-ref cnt = %d\n", bft_entry_pg->x_refcnt);
 }
