@@ -224,6 +224,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			//case HYPERCALL_VFP:
 			//  hypercall_vfp_op(param0, param1, param2);
 			//  return;
+		case HYPERCALL_LINUX_INIT_END:
+			hypercall_linux_init_end();
+			return;
+
 		case HYPERCALL_UPDATE_MONITOR:
 			{
 				uint32_t number_of_signatures = param0;
@@ -315,8 +319,10 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 	uint32_t domac = HC_DOMAC_ALL;
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 #if 1
-	if (addr >= 0xc0000000)
+	if (addr >= 0xc0000000) {
 		printf("Pabort:%x Status:%x, u=%x \n", addr, status, unused);
+		printf("LR:%x\n", curr_vm->current_mode_state->ctx.lr);
+	}
 #endif
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
 

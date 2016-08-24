@@ -57,6 +57,9 @@ typedef struct hc_config_ {
 	addr_t pa_initial_l2_offset;
 	addr_t always_cached_offset;
 	addr_t always_cached_size;
+	addr_t initial_kernel_ex_va_top;
+	addr_t runtime_kernel_ex_va_top;
+	addr_t init_kernel_ex_va_top;
 } hc_config;
 
 #endif

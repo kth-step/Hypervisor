@@ -15,7 +15,37 @@ extern virtual_machine *curr_vm;
 /*Get virtual address from Linux physical address*/
 #define LINUX_VA(pa) ((pa) - (addr_t)(curr_vm->config->firmware->pstart) + (addr_t)(curr_vm->config->firmware->vstart))
 
-addr_t linux_pt_get_empty_l2();
+//uint32_t va_limit_x = 0xc2000000;
+//uint32_t va_limit_x = 0xc07c714c;
+//uint32_t va_limit_x = 0xc0469000;
+#define pa_in_kernel_code(pa) (pa < curr_vm->config->firmware->pstart + (curr_vm->config->runtime_kernel_ex_va_top - curr_vm->config->firmware->vstart))
+#define pa_below_1to1_l2s(pa) (pa < curr_vm->config->firmware->pstart + curr_vm->config->pa_initial_l2_offset)
+#define number_of_1to1_l2s (curr_vm->config->firmware->psize >> 20)
+#define size_of_1to1_l2s (number_of_1to1_l2s*2*1024)
+#define pa_above_1to1_l2s(pa) (pa >= curr_vm->config->firmware->pstart + curr_vm->config->pa_initial_l2_offset + size_of_1to1_l2s)
+
+uint32_t remove_ex_from_1to1_non_kernel_text(uint32_t table2_pa, uint32_t page_pa, uint32_t attrs) {
+	uint32_t attrs1 = attrs;
+	// We are not mapping kernel code memory
+	if (!pa_in_kernel_code(page_pa)) {
+		if (!pa_below_1to1_l2s(table2_pa)) {
+			if (!pa_above_1to1_l2s(table2_pa)) {
+				// It is one of the L2 pts built by linux_init for the 1to1 mapping
+				attrs1 |= 0b1;
+			}
+		}
+	}
+	return attrs1;
+}
+
+uint32_t L2_MAP(uint32_t table2_pa, uint32_t i, uint32_t page_pa, uint32_t attrs) {
+	return dmmu_l2_map_entry (table2_pa, i, page_pa, remove_ex_from_1to1_non_kernel_text(table2_pa, page_pa, attrs));
+}
+
+hypercall_request_t local_request_dmmu_l2_map_entry(uint32_t table2_pa, uint32_t i, uint32_t page_pa, uint32_t attrs) {
+	return request_dmmu_l2_map_entry (table2_pa, i, page_pa, remove_ex_from_1to1_non_kernel_text(table2_pa, page_pa, attrs));
+}
+
 
 void dump_L1pt(virtual_machine * curr_vm)
 {
@@ -128,13 +158,11 @@ void hypercall_dyn_free_pgd(addr_t * pgd_va)
 #endif
 
 	for (i = l2_entry_idx; i < l2_entry_idx + 4; i++, page_pa += 0x1000) {
-
 #ifndef USE_REQUEST_LIST_FREE_PGD
-		if (dmmu_l2_map_entry
-		    (table2_pa & L2_BASE_MASK, i, page_pa, attrs))
+		if (L2_MAP(table2_pa & L2_BASE_MASK, i, page_pa, attrs))
 			printf("\n\tCould not map L2 entry in new pgd\n");
 #else
-		push_request(request_dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i, page_pa, attrs));
+		push_request(local_request_dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i, page_pa, attrs));
 #endif
 
 		clean_va = LINUX_VA(MMU_L2_SMALL_ADDR(l2_page_entry[i]));
@@ -222,15 +250,14 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 		uint32_t ro_attrs =
 		    0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
 #ifndef USE_REQUEST_LIST_NEW_PGD
-		
 		if ((err =
-		     dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i,
+		     L2_MAP(table2_pa & L2_BASE_MASK, i,
 				       page_pa, ro_attrs)))
 			printf
 			    ("\n\tCould not map L2 entry in new pgd err:%x\n",
 			     err);
 #else
-		push_request(request_dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i,
+		push_request(local_request_dmmu_l2_map_entry(table2_pa & L2_BASE_MASK, i,
 				       page_pa, ro_attrs));
 #endif
 
@@ -397,12 +424,12 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 		    0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
 
 #ifndef USE_REQUEST_LIST_SET_PMD
-		if (dmmu_l2_map_entry
+		if (L2_MAP
 		    ((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx,
 		     desc_pa, ro_attrs))
 			printf("\n\tCould not map L2 entry in set PMD\n");
 #else
-		push_request(request_dmmu_l2_map_entry((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx,
+		push_request(local_request_dmmu_l2_map_entry((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx,
 		     desc_pa, ro_attrs));
 #endif
 	}
@@ -473,14 +500,15 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 			printf("\n\tCould not unmap L2 entry in set PMD\n");
 		if (dmmu_unmap_L2_pt(MMU_L2_SMALL_ADDR((uint32_t) * pmd)))
 			printf("\n\tCould not unmap L2 pt in set PMD\n");
-		if (dmmu_l2_map_entry
+
+		if (L2_MAP
 		    ((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx,
 		     MMU_L2_SMALL_ADDR((uint32_t) * pmd), l2_rw_attrs))
 			printf("\n\tCould not map L2 entry in set PMD\n");
 #else
 		push_request(request_dmmu_l2_unmap_entry((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx));
 		push_request(request_dmmu_unmap_L2_pt(MMU_L2_SMALL_ADDR((uint32_t) * pmd)));
-		push_request(request_dmmu_l2_map_entry((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx,
+		push_request(local_request_dmmu_l2_map_entry((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx,
 		     MMU_L2_SMALL_ADDR((uint32_t) * pmd), l2_rw_attrs));
 #endif
 
@@ -602,7 +630,7 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte,
 #ifndef USE_REQUEST_LIST_SET_PTE
 
 		if ((err =
-		     (dmmu_l2_map_entry
+		     (L2_MAP
 		      (l2pt_hw_entry_pa & L2_BASE_MASK, entry_idx,
 		       MMU_L1_PT_ADDR(phys_pte), attrs)))) {
 			if (err == ERR_MMU_PT_NOT_UNMAPPED) {
@@ -610,7 +638,7 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte,
 				//this is a workaround 
 				dmmu_l2_unmap_entry(l2pt_hw_entry_pa &
 						    L2_BASE_MASK, entry_idx);
-				dmmu_l2_map_entry(l2pt_hw_entry_pa &
+				L2_MAP(l2pt_hw_entry_pa &
 						  L2_BASE_MASK, entry_idx,
 						  MMU_L1_PT_ADDR(phys_pte),
 						  attrs);
@@ -623,7 +651,7 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte,
 #else
 		push_request(request_dmmu_l2_unmap_entry(l2pt_hw_entry_pa &
 						    L2_BASE_MASK, entry_idx));
-		push_request(request_dmmu_l2_map_entry(l2pt_hw_entry_pa &
+		push_request(local_request_dmmu_l2_map_entry(l2pt_hw_entry_pa &
 						  L2_BASE_MASK, entry_idx,
 						  MMU_L1_PT_ADDR(phys_pte),
 						  attrs));
