@@ -150,6 +150,7 @@ enum dmmu_command {
 #define DESC_TYPE_MASK 0b11
 
 #define PA_TO_PH_BLOCK(pa) ((pa) >> 12)
+#define PH_BLOCK_TO_PA(bl) ((bl) << 12)
 #define CREATE_L2_DESC(x, y) (L2_BASE_MASK & x) | (L2_DESC_ATTR_MASK & y) | (0b10)
 #define CREATE_L1_SEC_DESC(x, y) (L1_SEC_DESC_MASK & x) | (L1_SEC_DESC_ATTR_MASK & y) | (0b10)
 #define GET_L2_AP(pg_desc) ((((uint32_t) pg_desc->ap_3b) << 2) | ((uint32_t) pg_desc->ap_0_1bs))
