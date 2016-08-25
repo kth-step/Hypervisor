@@ -51,7 +51,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 	/*TODO Added check that controls if it comes from user space, makes it pretty inefficient, remake later */
 	/*Testing RPC from user space, remove later */
 	if (curr_vm->current_guest_mode == HC_GM_TASK) {
-/////////////////////
+///////////////////// 
 		if ((curr_vm->current_mode_state->ctx.psr & IRQ_MASK) != 0)
 			printf
 			    ("ERROR (interrupt delivered when disabled) IRQ_MASK = %x\n",
@@ -113,7 +113,16 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			    curr_vm->exception_vector[V_ARM_SYSCALL];
 		}
 	} else if (curr_vm->current_guest_mode != HC_GM_TASK) {
-		// printf("\tHypercallnumber: %d (%x) called\n", hypercall_number, param0);
+#if 0
+		if ((hypercall_number != HYPERCALL_END_RPC) &&
+		    (hypercall_number != HYPERCALL_INTERRUPT_SET) &&
+		    (hypercall_number != HYPERCALL_END_INTERRUPT) &&
+		    (hypercall_number != HYPERCALL_RESTORE_LINUX_REGS) &&
+		    (hypercall_number != HYPERCALL_SET_TLS_ID) &&
+		    (hypercall_number != HYPERCALL_CACHE_OP)
+		)
+			printf("\tHypercallnumber: %d (%x) called\n", hypercall_number, param0);
+#endif
 		uint32_t res;
 		uint32_t from_end_rpc = 0;
 		switch (hypercall_number) {

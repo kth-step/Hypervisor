@@ -28,6 +28,17 @@ uint32_t guest_pa_range_checker(pa, size)
 	return 1;
 }
 
+uint32_t kernel_pa_range_checker(pa, size)
+{
+	uint32_t guest_start_pa = GUEST_PASTART;
+	uint32_t guest_end_pa = GUEST_PASTART + 0x007c714c;
+// The following stop to wok
+//	uint32_t guest_end_pa = GUEST_PASTART + 0xc0469000;
+	if (!((pa >= (guest_start_pa)) && (pa + size <= guest_end_pa)))
+		return 0;
+	return 1;
+}
+
 uint32_t mmu_guest_pa_to_va(uint32_t padr, uint32_t guest_pstart, uint32_t va_for_pt_access_start)
 {
 	return padr - guest_pstart + va_for_pt_access_start;
@@ -67,6 +78,10 @@ uint32_t map_l2_entry_checker(uint32_t l2_base_pa_add, uint32_t l2_idx, uint32_t
 	l2_small_t *pg_desc = (l2_small_t *) (&new_l2_desc);
 	uint32_t ap = GET_L2_AP(pg_desc);
 	uint32_t ph_block = PA_TO_PH_BLOCK(page_pa_add);
+
+	// For now we do not care about the internal kernel integrity
+	if (kernel_pa_range_checker(PH_BLOCK_TO_PA(ph_block), PAGE_SIZE))
+		return SUCCESS;
 
 	dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
 
@@ -237,6 +252,10 @@ void debug_request(uint32_t index, uint32_t res) {
 			break;
 		case CMD_MAP_L2_ENTRY:
 			printf(" CMD_MAP_L2_ENTRY\n");
+			printf(" l2_base_pa_add: 0x%x\n", request.l2_map_entry.l2_base_pa_add);
+			printf(" l2_idx: %d\n", request.l2_map_entry.l2_idx);
+			printf(" page_pa_add: 0x%x\n", request.l2_map_entry.page_pa_add);
+			printf(" attrs: 0x%x\n", request.l2_map_entry.attrs);
 			break;
 		case CMD_UNMAP_L2_ENTRY:
 			printf(" CMD_UNMAP_L2_ENTRY\n");
@@ -277,13 +296,6 @@ void debug_request(uint32_t index, uint32_t res) {
 		struct {
 			addr_t l2_base_pa_add;
 		} create_L2_pt;
-
-		struct {
-			addr_t l2_base_pa_add;
-			uint32_t l2_idx;
-			addr_t page_pa_add;
-			uint32_t attrs;
-		} l2_map_entry;
 
 		struct {
 			addr_t l2_base_pa_add;
