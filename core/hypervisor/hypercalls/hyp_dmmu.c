@@ -594,6 +594,39 @@ void remove_writable_mapping_from(uint32_t pa) {
 	if (bft_entry_pg->refcnt == 0)
 		return;
 
+	uint32_t linux_va = LINUX_VA(pa);
+	/*Get master page table */
+	uint32_t page_offset = curr_vm->guest_info.page_offset;
+	addr_t *master_pgd_va = (addr_t *) (curr_vm->config->pa_initial_l1_offset + page_offset);
+	addr_t *l1_pt_entry_for_desc = (addr_t *) & master_pgd_va[(addr_t) linux_va >> MMU_L1_SECTION_SHIFT];
+	uint32_t l1_desc_entry = *l1_pt_entry_for_desc;
+	uint32_t l2_base_pa = MMU_L1_PT_ADDR(l1_desc_entry);
+	uint32_t table2_idx = (l2_base_pa - (l2_base_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
+	table2_idx *= 0x100;	/*256 pages per L2PT */
+	uint32_t l2_idx = (((uint32_t) linux_va << 12) >> 24) + table2_idx;
+
+	uint32_t *l2_page_entry = (addr_t *) (mmu_guest_pa_to_va(l2_base_pa & L2_BASE_MASK, (curr_vm->config)));
+	uint32_t l2_desc = l2_page_entry[l2_idx];
+
+	uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
+
+	if ((l2_type != 2) && (l2_type != 3))
+		return;
+
+	l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+	uint32_t l2_pointed_pa = START_PA_OF_SPT(pg_desc);
+	uint32_t ap = GET_L2_AP(pg_desc);
+
+	if ((0xfffff000 & l2_pointed_pa) != (0xfffff000 & pa))
+		return;
+	if (ap != 3)
+		return;
+	l2_desc = l2_desc & (~(0b1 << 4));
+
+	push_request(request_dmmu_l2_unmap_entry(l2_base_pa, l2_idx));
+	push_request(request_dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc));
+
+#if 0
 	uint32_t l2block;
 	for (l2block = 0; l2block < number_of_1to1_l2s / 2; l2block++) {
 		uint32_t l2_base_pa = curr_vm->config->firmware->pstart + curr_vm->config->pa_initial_l2_offset + (l2block << 12);
@@ -621,6 +654,7 @@ void remove_writable_mapping_from(uint32_t pa) {
 			push_request(request_dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc));
 		}		
 	}
+#endif
 #ifdef DEBUG_EMULATOR
 	printf("  counter %d,  ex counter %d\n", bft_entry_pg->refcnt, bft_entry_pg->x_refcnt);
 #endif
@@ -704,9 +738,11 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte,
 
 #else
 		// If it is executable, we must remove the 1-to-1 existing writable mappings
+/*
 		if ((attrs & 0b1) == 0b0) {
 			remove_writable_mapping_from(MMU_L1_PT_ADDR(phys_pte));
 		}
+*/
 		push_request(request_dmmu_l2_unmap_entry(l2pt_hw_entry_pa &
 						    L2_BASE_MASK, entry_idx));
 		push_request(local_request_dmmu_l2_map_entry(l2pt_hw_entry_pa &

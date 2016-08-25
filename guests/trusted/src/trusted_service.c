@@ -316,7 +316,7 @@ void debug_request(uint32_t index, uint32_t res) {
 }
 
 //#define DEBUG_MONITOR
-#define ENABLE_MONITOR
+//#define ENABLE_MONITOR
 //#define ALWAYS_ACCEPT
 void handler_rpc(unsigned callNum, uint32_t param)
 {

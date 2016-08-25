@@ -375,6 +375,8 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 
 return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 {
+	//printf("Dabort:%x Status:%x, u=%x, pc=%x\n", addr, status, unused, curr_vm->current_mode_state->ctx.pc);
+
 	uint32_t domac = HC_DOMAC_ALL;
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 

@@ -372,13 +372,13 @@ void linux_init_dmmu()
 	table2_idx *= 0x100; /*256 pages per L2PT*/
 	uint32_t end = table2_idx + 0x100;
 
+	uint32_t ro_attrs = 0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
 	for(i = table2_idx; i < end; i++, page_pa+=0x1000) {
     		if((i%256) >=4 && (i%256) <=7) {
-			uint32_t ro_attrs =
-			    0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
 			dmmu_l2_map_entry(table2_pa, i, page_pa, ro_attrs);
-		} else
+		} else {
 			dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
+		}
 	}
 }
 
