@@ -385,6 +385,9 @@ uint32_t emulate_current_access(uint32_t addr, BOOL wt, BOOL ex) {
 
 	dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
 	dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
+	//push_request(request_dmmu_l2_unmap_entry(l2_base_addr,l2_idx));
+	//push_request(request_dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs));
+
 	COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, addr);
 	COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, addr);
 	dsb();
@@ -412,13 +415,15 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
 
 	if (interrupted_mode == HC_GM_KERNEL) {
-#if DEBUG_EMULATOR
+#ifdef DEBUG_EMULATOR
 		printf("Pabort:%x Status:%x, u=%x \n", addr, status, unused);
 		printf("LR:%x\n", curr_vm->current_mode_state->ctx.lr);
 #endif
 		uint32_t res = emulate_current_access(addr, 0, 1);
-		if (res)
+		if (res) {
+			// hypercall_end_request();
 			return RV_OK;
+		}
 	}
 
 	/*Need to be in virtual kernel mode to access data abort handler */
@@ -472,8 +477,10 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 	// Re-enable the writable flag
 	if (interrupted_mode == HC_GM_KERNEL && addr < 0xFA400000) {
 		uint32_t res = emulate_current_access(addr, 1, 0);
-		if (res)
+		if (res) {
+			// hypercall_end_request();
 			return RV_OK;
+		}
 	}
 
 #if defined(LINUX) && defined(CPSW)
