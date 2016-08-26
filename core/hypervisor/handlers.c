@@ -1,5 +1,6 @@
 #include <hw.h>
 #include "hypercalls.h"
+#include "dmmu.h"
 #if defined(LINUX) && defined(CPSW)
 #include <soc_cpsw.h>
 #endif
@@ -32,11 +33,11 @@ void clean_and_invalidate_cache()
 }
 
 
-uint32_t counter = 0;
-
-
 #define MONITOR_ENABLED
 //#define DEBUG_MONITOR_CALL
+
+// keep track if the last monitor request has been generated due to an exception handler (i.e. the monitor emulation layer)
+uint32_t from_exception = 0;
 
 void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		 uint32_t hypercall_number)
@@ -51,7 +52,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 	/*TODO Added check that controls if it comes from user space, makes it pretty inefficient, remake later */
 	/*Testing RPC from user space, remove later */
 	if (curr_vm->current_guest_mode == HC_GM_TASK) {
-/////////////////////
+///////////////////// 
 		if ((curr_vm->current_mode_state->ctx.psr & IRQ_MASK) != 0)
 			printf
 			    ("ERROR (interrupt delivered when disabled) IRQ_MASK = %x\n",
@@ -113,7 +114,16 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			    curr_vm->exception_vector[V_ARM_SYSCALL];
 		}
 	} else if (curr_vm->current_guest_mode != HC_GM_TASK) {
-		// printf("\tHypercallnumber: %d (%x) called\n", hypercall_number, param0);
+#if 0
+		if ((hypercall_number != HYPERCALL_END_RPC) &&
+		    (hypercall_number != HYPERCALL_INTERRUPT_SET) &&
+		    (hypercall_number != HYPERCALL_END_INTERRUPT) &&
+		    (hypercall_number != HYPERCALL_RESTORE_LINUX_REGS) &&
+		    (hypercall_number != HYPERCALL_SET_TLS_ID) &&
+		    (hypercall_number != HYPERCALL_CACHE_OP)
+		)
+			printf("\tHypercallnumber: %d (%x) called\n", hypercall_number, param0);
+#endif
 		uint32_t res;
 		uint32_t from_end_rpc = 0;
 		switch (hypercall_number) {
@@ -193,37 +203,23 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			break;
 		case HYPERCALL_END_RPC:
 			res = curr_vm->current_mode_state->ctx.reg[0];
-			hypercall_end_rpc(res);
+			hypercall_end_rpc(res, !from_exception);
 			from_end_rpc = 0;
-#ifdef DEBUG_MONITOR_CALL
-			counter+=1;
-			if (counter % 100 == 0)
-			{
-				printf("Monitor returned with result: %d\n", res);
-				debug_current_request();
-			}
-#endif
+
 			if (res == 0)
 			{
 				clean_and_invalidate_cache();
 				uint32_t result = execute_next_request();
-#ifdef DEBUG_MONITOR_CALL
-				if (counter % 100 == 0)
-				{
-					printf("hypervisor returned with result: %d\n", result);
-				}
-#endif
-				from_end_rpc = 1;			
-				curr_vm->current_mode_state->ctx.reg[0] = res;
+				from_end_rpc = 1;		
+				if (!from_exception)
+					curr_vm->current_mode_state->ctx.reg[0] = result;
 				clean_and_invalidate_cache();
 			}
-			else
+			else {
 				reset_requests();
+				from_exception = 0;
+			}
 			break;
-			//  /*VFP Test**********************/
-			//case HYPERCALL_VFP:
-			//  hypercall_vfp_op(param0, param1, param2);
-			//  return;
 		case HYPERCALL_LINUX_INIT_END:
 			hypercall_linux_init_end();
 			return;
@@ -284,8 +280,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			clean_and_invalidate_cache();
 #endif
 		}
-		else
+		else {
 			reset_requests();
+			from_exception = 0;
+		}
 			
 	}
 
@@ -303,6 +301,90 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 }
 
+//#define DEBUG_EMULATOR
+// This is the monitor emulation layer
+uint32_t emulate_current_access(uint32_t addr, BOOL wt, BOOL ex) {
+	//We read from the active L1 who is mapping this virtual address
+	uint32_t l1_base_add;
+	uint32_t l1_idx;
+	uint32_t l1_desc_pa_add;
+	uint32_t l1_desc_va_add;
+	uint32_t l1_desc;
+	uint32_t l1_type;
+	uint32_t pointed_pa_add;
+	uint32_t l2_base_addr;
+	uint32_t l2_idx;
+
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, (uint32_t)l1_base_add);
+	l1_idx = VA_TO_L1_IDX(addr);
+	l1_desc_pa_add = L1_IDX_TO_PA(l1_base_add, l1_idx);
+	l1_desc_va_add = mmu_guest_pa_to_va(l1_desc_pa_add, curr_vm->config);
+	l1_desc = *((uint32_t *) l1_desc_va_add);
+	l1_type = L1_TYPE(l1_desc);
+
+	// The address is unmapped
+	if (l1_type == 0)
+		return 0;
+
+	// The address is mapped by an unkwown mechanism
+	if (l1_type == 3)
+		return 0;
+
+	// The address is mapped by a section
+	// With the new mechanism the kernel memory should be never mapped by a section
+	if (l1_type == 2)
+		return 0;
+
+	// The address is mapped by a PT, l1_type == 1
+	l1_pt_t *l1_pt_desc = (l1_pt_t *) (&l1_desc);
+	l2_base_addr = PA_OF_POINTED_PT(l1_pt_desc);
+	l2_idx = VA_TO_L2_IDX(addr);
+
+	uint32_t table2_idx = (l2_base_addr - (l2_base_addr & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
+	table2_idx *= 0x100; /*256 pages per L2PT*/
+	l2_idx = table2_idx + l2_idx;
+
+	uint32_t l2_desc_pa_add = L2_IDX_TO_PA(l2_base_addr, l2_idx);
+	uint32_t l2_desc_va_add = mmu_guest_pa_to_va(l2_desc_pa_add, (curr_vm->config));
+	uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
+
+	// Unmapped: nothing to emulate
+	if((l2_desc & DESC_TYPE_MASK) == 0)
+		return FALSE;
+
+	l2_small_t *pg_desc = (l2_small_t *) (&l2_desc) ;
+	pointed_pa_add = START_PA_OF_SPT(pg_desc);
+
+	l2_base_addr = (l2_base_addr & L2_BASE_MASK);
+
+#ifdef DEBUG_EMULATOR
+	printf("EMULATING abort on L2 WT:%d EX:%d :%x pc=%x, mode=%d\n", wt, ex, addr, curr_vm->current_mode_state->ctx.pc, curr_vm->current_guest_mode);
+#endif
+
+	uint32_t small_attrs = l2_desc;
+	if (wt) {
+		small_attrs = MAKE_WT_SMALDESC(small_attrs);
+		small_attrs |= 0b1;
+	}
+	if (ex) {
+		small_attrs &= ~(0b1);
+		small_attrs &= ~(0b1 << 4);
+	}
+
+	//dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
+	//dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
+	push_request(request_dmmu_l2_unmap_entry(l2_base_addr,l2_idx));
+	push_request(request_dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs));
+
+	COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, addr);
+	COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, addr);
+	dsb();
+	isb();
+	hypercall_dcache_clean_area(l2_desc_va_add, 0x4000);
+
+	return 1;
+}
+
 void hypercall_end_request()
 {
 	hypercall_request_t request = get_request(curr_vm->pending_request_index);
@@ -318,13 +400,20 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 {
 	uint32_t domac = HC_DOMAC_ALL;
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
-#if 1
-	if (addr >= 0xc0000000) {
+	uint32_t interrupted_mode = curr_vm->current_guest_mode;
+
+	if (interrupted_mode == HC_GM_KERNEL) {
+#ifdef DEBUG_EMULATOR
 		printf("Pabort:%x Status:%x, u=%x \n", addr, status, unused);
 		printf("LR:%x\n", curr_vm->current_mode_state->ctx.lr);
-	}
 #endif
-	uint32_t interrupted_mode = curr_vm->current_guest_mode;
+		uint32_t res = emulate_current_access(addr, 0, 1);
+		if (res) {
+			hypercall_end_request();
+			from_exception = 1;
+			return RV_OK;
+		}
+	}
 
 	/*Need to be in virtual kernel mode to access data abort handler */
 	change_guest_mode(HC_GM_KERNEL);
@@ -364,12 +453,25 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 	return RV_OK;
 }
 
+
+
+
 return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 {
 	uint32_t domac = HC_DOMAC_ALL;
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
+
+	// Re-enable the writable flag
+	if (interrupted_mode == HC_GM_KERNEL && addr < 0xFA400000) {
+		uint32_t res = emulate_current_access(addr, 1, 0);
+		if (res) {
+			hypercall_end_request();
+			from_exception = 1;
+			return RV_OK;
+		}
+	}
 
 #if defined(LINUX) && defined(CPSW)
 	//If accessed address is within the mapped Ethernet Subsystem memory

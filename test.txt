@@ -1,0 +1,3 @@
+ifconfig eth0 130.237.224.159 netmask 255.255.255.0
+python -m SimpleHTTPServer 8000
+watch "wget http://130.237.224.158:8000/sth_beaglebone.fw.img"

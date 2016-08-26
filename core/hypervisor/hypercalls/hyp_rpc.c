@@ -40,7 +40,7 @@ void hypercall_rpc(uint32_t rpc_op, void * arg)
 		
 }
 
-void hypercall_end_rpc(uint32_t res)
+void hypercall_end_rpc(uint32_t res, uint32_t update_r0_rcv)
 {
 
 	uint32_t calling_mode = curr_vm->current_mode_state->rpc_for;
@@ -60,6 +60,7 @@ void hypercall_end_rpc(uint32_t res)
 
 	change_guest_mode(calling_mode);
 
-	curr_vm->current_mode_state->ctx.reg[0] = res;
+	if (update_r0_rcv)
+		curr_vm->current_mode_state->ctx.reg[0] = res;
 	
 }

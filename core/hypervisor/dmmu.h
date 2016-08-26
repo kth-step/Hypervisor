@@ -137,6 +137,7 @@ void mmu_bft_region_set(addr_t start, size_t size, uint32_t refc, uint32_t x_ref
 #define L2_DESC_ATTR_MASK 0x00000FFD
 
 #define VA_TO_L1_IDX(va) (va >> 20)
+#define VA_TO_L2_IDX(va) ((va >> 12) & 0xff)
 #define L1_IDX_TO_PA(l1_base, idx) ((l1_base & 0xFFFFC000) | (idx << 2))
 #define L2_IDX_TO_PA(l2_base, idx) ((l2_base & 0xFFFFF000) | ((0xFFF & idx) << 2))
 
@@ -161,6 +162,8 @@ void mmu_bft_region_set(addr_t start, size_t size, uint32_t refc, uint32_t x_ref
 #define PA_TO_PH_BLOCK(pa) ((pa) >> 12)
 #define START_PA_OF_BLOCK(pa) ((pa) << 12)
 #define PT_PA_TO_PH_BLOCK(pa) ((pa) >> 2)
+
+#define MAKE_WT_SMALDESC(attrs) (attrs | 0x10)
 
 /* in tranelate.c */
 int mmu_lookup_guest(addr_t vadr, addr_t * padr, int user_write);

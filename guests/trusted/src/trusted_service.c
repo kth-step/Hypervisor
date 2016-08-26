@@ -8,6 +8,10 @@
 #include "trusted_service.h"
 #include "hypercalls.h"
 
+//#define DEBUG_MONITOR
+#define ENABLE_MONITOR
+//#define DISREGARD_KERNEL
+//#define ALWAYS_ACCEPT
 
 dmmu_entry_t *get_bft_entry_by_block_idx(addr_t ph_block)
 {
@@ -28,6 +32,17 @@ uint32_t guest_pa_range_checker(pa, size)
 	return 1;
 }
 
+uint32_t kernel_pa_range_checker(pa, size)
+{
+	uint32_t guest_start_pa = GUEST_PASTART;
+	uint32_t guest_end_pa = GUEST_PASTART + 0x007c714c;
+// The following stop to wok
+//	uint32_t guest_end_pa = GUEST_PASTART + 0xc0469000;
+	if (!((pa >= (guest_start_pa)) && (pa + size <= guest_end_pa)))
+		return 0;
+	return 1;
+}
+
 uint32_t mmu_guest_pa_to_va(uint32_t padr, uint32_t guest_pstart, uint32_t va_for_pt_access_start)
 {
 	return padr - guest_pstart + va_for_pt_access_start;
@@ -40,15 +55,22 @@ uint32_t section_checker(uint32_t l1_desc)
 	
 	uint32_t sec_idx;
 	for (sec_idx = 0; (sec_idx < 256); sec_idx++) {
+		// It is not important to check non-guest memory, since this is neither writable or executable
 		uint32_t ph_block =
 			    PA_TO_PH_BLOCK(START_PA_OF_SECTION(l1_sec_desc)) | (sec_idx);
-		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
 
-		if ((bft_entry->refcnt > 0 || bft_entry->dev_refcnt > 0) && l1_sec_desc->xn == 0)
+		if (!guest_pa_range_checker(PH_BLOCK_TO_PA(ph_block), PAGE_SIZE))
+			return SUCCESS;
+
+
+		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
+		uint32_t ex = ((ap == 3) || (ap == 2)) && (l1_sec_desc->xn == 0);
+
+		if ((bft_entry->refcnt > 0 || bft_entry->dev_refcnt > 0) && ex)
 			return ERR_MONITOR_BLOCK_WRITABLE;
-		else if ((bft_entry->x_refcnt > 0 || bft_entry->dev_refcnt > 0) && ap == 3)
+		else if (bft_entry->x_refcnt > 0 && ap == 3)
 			return ERR_MONITOR_BLOCK_EXE;
-		else if (l1_sec_desc->xn == 0 && ap == 3)
+		else if (ex && ap == 3)
 			return ERR_MONITOR_PAGE_WRITABLE_AND_EXE;	
 	}
 	return SUCCESS;
@@ -60,6 +82,12 @@ uint32_t map_l2_entry_checker(uint32_t l2_base_pa_add, uint32_t l2_idx, uint32_t
 	l2_small_t *pg_desc = (l2_small_t *) (&new_l2_desc);
 	uint32_t ap = GET_L2_AP(pg_desc);
 	uint32_t ph_block = PA_TO_PH_BLOCK(page_pa_add);
+
+#ifdef DISREGARD_KERNEL
+	// For now we do not care about the internal kernel integrity
+	if (kernel_pa_range_checker(PH_BLOCK_TO_PA(ph_block), PAGE_SIZE))
+		return SUCCESS;
+#endif
 
 	dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
 
@@ -100,8 +128,10 @@ uint32_t create_l1_pt_checker(uint32_t l1_base_pa_add)
 		if (l1_type == 2)
 		{
 			uint32_t value = section_checker(l1_desc);
-			if (value != 0)
+			if (value != 0) {
 				res = value;
+				printf(" MONITOR: error in the section mapping 0x%x\n", (l1_idx << 20));
+			}
 		}
 	}
 	return res;
@@ -197,9 +227,100 @@ uint32_t call_checker(uint32_t index)
 	return SUCCESS;
 }
 
-//#define DEBUG_MONITOR
-#define ENABLE_MONITOR
-#define ALWAYS_ACCEPT
+void debug_request(uint32_t index, uint32_t res) {
+	printf("MONITOR request_number %d\n", index);
+	hypercall_request_t * pending_requests = (hypercall_request_t *)REQUESTS_BASE_VA;
+	hypercall_request_t request = pending_requests[index];
+
+	printf(" hypercall %d\n", request.hypercall);
+	switch (request.hypercall) {
+		case CMD_CREATE_L1_PT:
+			printf(" CMD_CREATE_L1_PT\n");
+			printf(" l1_base_pa_add: 0x%x\n", request.create_L1_pt.l1_base_pa_add);
+			break;
+		case CMD_FREE_L1:
+			printf(" CMD_FREE_L1\n");
+			break;
+		case CMD_MAP_L1_SECTION:
+			printf(" CMD_MAP_L1_SECTION\n");
+			break;
+		case CMD_MAP_L1_PT:
+			printf(" CMD_MAP_L1_PT\n");
+			break;
+		case CMD_UNMAP_L1_PT_ENTRY:
+			printf(" CMD_UNMAP_L1_PT_ENTRY\n");
+			break;
+		case CMD_CREATE_L2_PT:
+			printf(" CMD_CREATE_L2_PT\n");
+			break;
+		case CMD_FREE_L2:
+			printf(" CMD_FREE_L2\n");
+			break;
+		case CMD_MAP_L2_ENTRY:
+			printf(" CMD_MAP_L2_ENTRY\n");
+			printf(" l2_base_pa_add: 0x%x\n", request.l2_map_entry.l2_base_pa_add);
+			printf(" l2_idx: %d\n", request.l2_map_entry.l2_idx);
+			printf(" page_pa_add: 0x%x\n", request.l2_map_entry.page_pa_add);
+			printf(" attrs: 0x%x\n", request.l2_map_entry.attrs);
+			break;
+		case CMD_UNMAP_L2_ENTRY:
+			printf(" CMD_UNMAP_L2_ENTRY\n");
+			break;
+		case CMD_SWITCH_ACTIVE_L1:
+			printf(" CMD_SWITCH_ACTIVE_L1\n");
+			printf(" l1_base_pa_add: 0x%x\n", request.switch_mm.l1_base_pa_add);
+			break;
+		default:
+			printf(" CMD_UNKNOWN\n");
+			break;
+	}
+/*
+		struct {
+			addr_t l1_base_pa_add;
+		} create_L1_pt;
+
+		struct {
+			addr_t va;
+			addr_t l2_base_pa_add;
+			uint32_t attrs;
+		} l1_pt_map;
+
+		struct {
+			addr_t va;
+			addr_t sec_base_add;
+			uint32_t attrs;
+		} map_L1_section;
+
+		struct {
+			addr_t  va;
+		} unmap_L1_pageTable_entry;
+
+		struct {
+			addr_t l1_base_pa_add;
+		} unmap_L1_pt;
+
+		struct {
+			addr_t l2_base_pa_add;
+		} create_L2_pt;
+
+		struct {
+			addr_t l2_base_pa_add;
+			uint32_t l2_idx;
+		} l2_unmap_entry;
+
+		struct {
+			addr_t l2_base_pa_add;
+		} unmap_L2_pt;
+	};
+} hypercall_request_t;
+
+*/
+
+	printf(" curr_l1_base_add 0x%x\n",request.curr_l1_base_add);
+
+	printf(" result %d\n", res);
+}
+
 void handler_rpc(unsigned callNum, uint32_t param)
 {
 #ifdef DEBUG_MONITOR
@@ -214,6 +335,9 @@ void handler_rpc(unsigned callNum, uint32_t param)
 #ifdef ALWAYS_ACCEPT
 	finish_rpc(0);
 #else
+	if (res != 0) {
+		debug_request(param, res);
+	}
 	finish_rpc(res);
 #endif
 }

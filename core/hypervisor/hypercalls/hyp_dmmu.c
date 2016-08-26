@@ -3,12 +3,14 @@
 #include "mmu.h"
 
 extern virtual_machine *curr_vm;
-#if 0
-#define DEBUG_MMU_L1_Free
+/*
 #define DEBUG_MMU_L1_CREATE
 #define DEBUG_MMU_L1_SWITCH
+#define DEBUG_MMU_SET_PTE
+#define DEBUG_MMU_SET_PMD
+#define DEBUG_MMU_L1_Free
 #define DEBUG_MMU_SET_L1
-#endif
+*/
 
 /*Get physical address from Linux virtual address*/
 #define LINUX_PA(va) ((va) - (addr_t)(curr_vm->config->firmware->vstart) + (addr_t)(curr_vm->config->firmware->pstart))
@@ -78,7 +80,7 @@ void dump_L2pt(addr_t l2_base, virtual_machine * curr_vm)
 void hypercall_dyn_switch_mm(addr_t table_base, uint32_t context_id)
 {
 #ifdef DEBUG_MMU_L1_SWITCH
-	printf("Hypercall switch PGD\t table_base:%x context_id:%x\n",
+	printf("*** Hypercall switch PGD\t table_base:%x context_id:%x\n",
 	       table_base, context_id);
 #endif
 
@@ -300,16 +302,16 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 
 /*In ARM linux pmd refers to pgd, ARM L1 Page table
  *Linux maps 2 pmds at a time  */
-//#define DEBUG_SET_PMD
 
 #define USE_REQUEST_LIST_SET_PMD
 #define DISABLE_CACHE
 
 void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 {
-#ifdef DEBUG_SET_PMD
+#ifdef DEBUG_MMU_SET_PMD
 	printf("*** Hypercall set_pmd: va:0x%x pa:0x%x\n", pmd,
 	       LINUX_PA((addr_t) pmd));
+	printf("   descriptor mapping 0x%x\n", (((LINUX_PA((addr_t) pmd)) % (16 * 1024)) / 4) << 20);
 #endif
 
 	uint32_t switch_back = 0;
@@ -382,7 +384,7 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 #endif
 
 	/*We need to make sure the new L2 PT is unreferenced */
-#ifdef DEBUG_SET_PMD
+#ifdef DEBUG_MMU_SET_PMD
 	printf("\t desc is 0x%x\n", desc);
 	printf("\t desc_va is 0x%x\n", desc_va);
 #endif
@@ -403,12 +405,12 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 	//TODO: Fix the method to read the ap
 	/*If page entry for L2PT is RW, unmap it and make it RO so we can create a L2PT */
 	if (((l2entry_desc >> 4) & 0xff) == 3) {
-#ifdef DEBUG_SET_PMD
+#ifdef DEBUG_MMU_SET_PMD
 		printf("\n\tRemapping as read only the page:%x\n",l2entry_desc);
 #endif
 		uint32_t ph_block = PA_TO_PH_BLOCK(l2entry_desc);
 		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
-#ifdef DEBUG_SET_PMD
+#ifdef DEBUG_MMU_SET_PMD
 		printf("\n\tCounter :%d\n",bft_entry->refcnt);
 #endif
 
@@ -422,6 +424,10 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 		uint32_t desc_pa = MMU_L2_SMALL_ADDR(desc);
 		uint32_t ro_attrs =
 		    0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
+
+#ifdef DEBUG_MMU_SET_PMD
+		printf("%x\n", desc_pa);
+#endif
 
 #ifndef USE_REQUEST_LIST_SET_PMD
 		if (L2_MAP
@@ -573,6 +579,88 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 #endif
 }
 
+
+#define number_of_1to1_l2s (curr_vm->config->firmware->psize >> 20)
+
+//#define DEBUG_EMULATOR
+
+void remove_writable_mapping_from(uint32_t pa) {
+	uint32_t ph_block_pg = PA_TO_PH_BLOCK(pa);
+	dmmu_entry_t *bft_entry_pg = get_bft_entry_by_block_idx(ph_block_pg);
+#ifdef DEBUG_EMULATOR
+	printf("****** EMULATOR, removing writable access to 0x%x\n", pa);
+	printf("  counter %d,  ex counter %d\n", bft_entry_pg->refcnt, bft_entry_pg->x_refcnt);
+#endif
+	if (bft_entry_pg->refcnt == 0)
+		return;
+
+	uint32_t linux_va = LINUX_VA(pa);
+	/*Get master page table */
+	uint32_t page_offset = curr_vm->guest_info.page_offset;
+	addr_t *master_pgd_va = (addr_t *) (curr_vm->config->pa_initial_l1_offset + page_offset);
+	addr_t *l1_pt_entry_for_desc = (addr_t *) & master_pgd_va[(addr_t) linux_va >> MMU_L1_SECTION_SHIFT];
+	uint32_t l1_desc_entry = *l1_pt_entry_for_desc;
+	uint32_t l2_base_pa = MMU_L1_PT_ADDR(l1_desc_entry);
+	uint32_t table2_idx = (l2_base_pa - (l2_base_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
+	table2_idx *= 0x100;	/*256 pages per L2PT */
+	uint32_t l2_idx = (((uint32_t) linux_va << 12) >> 24) + table2_idx;
+
+	uint32_t *l2_page_entry = (addr_t *) (mmu_guest_pa_to_va(l2_base_pa & L2_BASE_MASK, (curr_vm->config)));
+	uint32_t l2_desc = l2_page_entry[l2_idx];
+
+	uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
+
+	if ((l2_type != 2) && (l2_type != 3))
+		return;
+
+	l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+	uint32_t l2_pointed_pa = START_PA_OF_SPT(pg_desc);
+	uint32_t ap = GET_L2_AP(pg_desc);
+
+	if ((0xfffff000 & l2_pointed_pa) != (0xfffff000 & pa))
+		return;
+	if (ap != 3)
+		return;
+	l2_desc = l2_desc & (~(0b1 << 4));
+
+	push_request(request_dmmu_l2_unmap_entry(l2_base_pa, l2_idx));
+	push_request(request_dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc));
+
+#if 0
+	uint32_t l2block;
+	for (l2block = 0; l2block < number_of_1to1_l2s / 2; l2block++) {
+		uint32_t l2_base_pa = curr_vm->config->firmware->pstart + curr_vm->config->pa_initial_l2_offset + (l2block << 12);
+		uint32_t l2_base_va = mmu_guest_pa_to_va(l2_base_pa, curr_vm->config);
+		uint32_t l2_idx;
+		for (l2_idx=0; l2_idx<512; l2_idx++) {
+			uint32_t l2_desc_va = l2_base_va + l2_idx*4;
+			uint32_t l2_desc = *((uint32_t *) l2_desc_va);
+			uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
+
+			if ((l2_type != 2) && (l2_type != 3))
+				continue;
+
+			l2_small_t *pg_desc = (l2_small_t *) (&l2_desc);
+			uint32_t l2_pointed_pa = START_PA_OF_SPT(pg_desc);
+			uint32_t ap = GET_L2_AP(pg_desc);
+
+			if ((0xfffff000 & l2_pointed_pa) != (0xfffff000 & pa))
+				continue;
+			if (ap != 3)
+				continue;
+			l2_desc = l2_desc & (~(0b1 << 4));
+
+			push_request(request_dmmu_l2_unmap_entry(l2_base_pa, l2_idx));
+			push_request(request_dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc));
+		}		
+	}
+#endif
+#ifdef DEBUG_EMULATOR
+	printf("  counter %d,  ex counter %d\n", bft_entry_pg->refcnt, bft_entry_pg->x_refcnt);
+#endif
+	return 0;	
+}
+
 #define USE_REQUEST_LIST_SET_PTE
 
 /*va is the virtual address of the page table entry for linux pages
@@ -580,8 +668,8 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte,
 			   uint32_t phys_pte)
 {
-#ifdef DEBUG_MMU
-	printf("Hypercall set PTE va:%x linux_pte:%x phys_pte:%x \n",
+#ifdef DEBUG_MMU_SET_PTE
+	printf("*** Hypercall set PTE va:%x phys_pte:%x linux_pte:%x  \n",
 	       l2pt_linux_entry_va, phys_pte, linux_pte);
 #endif
 	addr_t phys_start = curr_vm->config->firmware->pstart;
@@ -649,6 +737,10 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte,
 		}
 
 #else
+		// If it is executable, we must remove the 1-to-1 existing writable mappings
+		if ((attrs & 0b1) == 0b0) {
+			remove_writable_mapping_from(MMU_L1_PT_ADDR(phys_pte));
+		}
 		push_request(request_dmmu_l2_unmap_entry(l2pt_hw_entry_pa &
 						    L2_BASE_MASK, entry_idx));
 		push_request(local_request_dmmu_l2_map_entry(l2pt_hw_entry_pa &
