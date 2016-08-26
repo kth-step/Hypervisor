@@ -208,12 +208,13 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 
 			if (res == 0)
 			{
-				clean_and_invalidate_cache();
 				uint32_t result = execute_next_request();
 				from_end_rpc = 1;		
 				if (!from_exception)
 					curr_vm->current_mode_state->ctx.reg[0] = result;
-				clean_and_invalidate_cache();
+
+				if (curr_vm->pending_request_index >= curr_vm->pending_request_counter)
+					clean_and_invalidate_cache();
 			}
 			else {
 				reset_requests();
