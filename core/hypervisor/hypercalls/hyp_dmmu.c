@@ -738,11 +738,9 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte,
 
 #else
 		// If it is executable, we must remove the 1-to-1 existing writable mappings
-/*
 		if ((attrs & 0b1) == 0b0) {
 			remove_writable_mapping_from(MMU_L1_PT_ADDR(phys_pte));
 		}
-*/
 		push_request(request_dmmu_l2_unmap_entry(l2pt_hw_entry_pa &
 						    L2_BASE_MASK, entry_idx));
 		push_request(local_request_dmmu_l2_map_entry(l2pt_hw_entry_pa &

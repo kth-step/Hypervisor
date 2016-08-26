@@ -8,6 +8,10 @@
 #include "trusted_service.h"
 #include "hypercalls.h"
 
+//#define DEBUG_MONITOR
+#define ENABLE_MONITOR
+//#define DISREGARD_KERNEL
+//#define ALWAYS_ACCEPT
 
 dmmu_entry_t *get_bft_entry_by_block_idx(addr_t ph_block)
 {
@@ -79,9 +83,11 @@ uint32_t map_l2_entry_checker(uint32_t l2_base_pa_add, uint32_t l2_idx, uint32_t
 	uint32_t ap = GET_L2_AP(pg_desc);
 	uint32_t ph_block = PA_TO_PH_BLOCK(page_pa_add);
 
+#ifdef DISREGARD_KERNEL
 	// For now we do not care about the internal kernel integrity
 	if (kernel_pa_range_checker(PH_BLOCK_TO_PA(ph_block), PAGE_SIZE))
 		return SUCCESS;
+#endif
 
 	dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
 
@@ -315,9 +321,6 @@ void debug_request(uint32_t index, uint32_t res) {
 	printf(" result %d\n", res);
 }
 
-//#define DEBUG_MONITOR
-//#define ENABLE_MONITOR
-//#define ALWAYS_ACCEPT
 void handler_rpc(unsigned callNum, uint32_t param)
 {
 #ifdef DEBUG_MONITOR

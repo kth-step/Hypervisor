@@ -1,5 +1,6 @@
 #include <hw.h>
 #include "hypercalls.h"
+#include "dmmu.h"
 #if defined(LINUX) && defined(CPSW)
 #include <soc_cpsw.h>
 #endif
@@ -312,6 +313,87 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 }
 
+//#define DEBUG_EMULATOR
+
+uint32_t emulate_current_access(uint32_t addr, BOOL wt, BOOL ex) {
+	//We read from the active L1 who is mapping this virtual address
+	uint32_t l1_base_add;
+	uint32_t l1_idx;
+	uint32_t l1_desc_pa_add;
+	uint32_t l1_desc_va_add;
+	uint32_t l1_desc;
+	uint32_t l1_type;
+	uint32_t pointed_pa_add;
+	uint32_t l2_base_addr;
+	uint32_t l2_idx;
+
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, (uint32_t)l1_base_add);
+	l1_idx = VA_TO_L1_IDX(addr);
+	l1_desc_pa_add = L1_IDX_TO_PA(l1_base_add, l1_idx);
+	l1_desc_va_add = mmu_guest_pa_to_va(l1_desc_pa_add, curr_vm->config);
+	l1_desc = *((uint32_t *) l1_desc_va_add);
+	l1_type = L1_TYPE(l1_desc);
+
+	// The address is unmapped
+	if (l1_type == 0)
+		return 0;
+
+	// The address is mapped by an unkwown mechanism
+	if (l1_type == 3)
+		return 0;
+
+	// The address is mapped by a section
+	// With the new mechanism the kernel memory should be never mapped by a section
+	if (l1_type == 2)
+		return 0;
+
+	// The address is mapped by a PT, l1_type == 1
+	l1_pt_t *l1_pt_desc = (l1_pt_t *) (&l1_desc);
+	l2_base_addr = PA_OF_POINTED_PT(l1_pt_desc);
+	l2_idx = VA_TO_L2_IDX(addr);
+
+	uint32_t table2_idx = (l2_base_addr - (l2_base_addr & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
+	table2_idx *= 0x100; /*256 pages per L2PT*/
+	l2_idx = table2_idx + l2_idx;
+
+	uint32_t l2_desc_pa_add = L2_IDX_TO_PA(l2_base_addr, l2_idx);
+	uint32_t l2_desc_va_add = mmu_guest_pa_to_va(l2_desc_pa_add, (curr_vm->config));
+	uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
+
+	// Unmapped: nothing to emulate
+	if((l2_desc & DESC_TYPE_MASK) == 0)
+		return FALSE;
+
+	l2_small_t *pg_desc = (l2_small_t *) (&l2_desc) ;
+	pointed_pa_add = START_PA_OF_SPT(pg_desc);
+
+	l2_base_addr = (l2_base_addr & L2_BASE_MASK);
+
+#ifdef DEBUG_EMULATOR
+	printf("EMULATING abort on L2 WT:%d EX:%d :%x pc=%x, mode=%d\n", wt, ex, addr, curr_vm->current_mode_state->ctx.pc, curr_vm->current_guest_mode);
+#endif
+
+	uint32_t small_attrs = l2_desc;
+	if (wt) {
+		small_attrs = MAKE_WT_SMALDESC(small_attrs);
+		small_attrs |= 0b1;
+	}
+	if (ex) {
+		small_attrs &= ~(0b1);
+		small_attrs &= ~(0b1 << 4);
+	}
+
+	dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
+	dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
+	COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, addr);
+	COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, addr);
+	dsb();
+	isb();
+	hypercall_dcache_clean_area(l2_desc_va_add, 0x4000);
+
+	return 1;
+}
+
 void hypercall_end_request()
 {
 	hypercall_request_t request = get_request(curr_vm->pending_request_index);
@@ -327,13 +409,17 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 {
 	uint32_t domac = HC_DOMAC_ALL;
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
-#if 1
-	if (addr >= 0xc0000000) {
+	uint32_t interrupted_mode = curr_vm->current_guest_mode;
+
+	if (interrupted_mode == HC_GM_KERNEL) {
+#if DEBUG_EMULATOR
 		printf("Pabort:%x Status:%x, u=%x \n", addr, status, unused);
 		printf("LR:%x\n", curr_vm->current_mode_state->ctx.lr);
-	}
 #endif
-	uint32_t interrupted_mode = curr_vm->current_guest_mode;
+		uint32_t res = emulate_current_access(addr, 0, 1);
+		if (res)
+			return RV_OK;
+	}
 
 	/*Need to be in virtual kernel mode to access data abort handler */
 	change_guest_mode(HC_GM_KERNEL);
@@ -373,14 +459,22 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 	return RV_OK;
 }
 
+
+
+
 return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 {
-	//printf("Dabort:%x Status:%x, u=%x, pc=%x\n", addr, status, unused, curr_vm->current_mode_state->ctx.pc);
-
 	uint32_t domac = HC_DOMAC_ALL;
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
+
+	// Re-enable the writable flag
+	if (interrupted_mode == HC_GM_KERNEL && addr < 0xFA400000) {
+		uint32_t res = emulate_current_access(addr, 1, 0);
+		if (res)
+			return RV_OK;
+	}
 
 #if defined(LINUX) && defined(CPSW)
 	//If accessed address is within the mapped Ethernet Subsystem memory

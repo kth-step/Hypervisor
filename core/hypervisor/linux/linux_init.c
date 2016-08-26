@@ -377,7 +377,8 @@ void linux_init_dmmu()
     		if((i%256) >=4 && (i%256) <=7) {
 			dmmu_l2_map_entry(table2_pa, i, page_pa, ro_attrs);
 		} else {
-			dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
+			//dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
+			dmmu_l2_map_entry(table2_pa, i, page_pa, ro_attrs);
 		}
 	}
 }
