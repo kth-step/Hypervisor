@@ -205,24 +205,11 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			res = curr_vm->current_mode_state->ctx.reg[0];
 			hypercall_end_rpc(res);
 			from_end_rpc = 0;
-#ifdef DEBUG_MONITOR_CALL
-			counter+=1;
-			if (counter % 100 == 0)
-			{
-				printf("Monitor returned with result: %d\n", res);
-				debug_current_request();
-			}
-#endif
+
 			if (res == 0)
 			{
 				clean_and_invalidate_cache();
 				uint32_t result = execute_next_request();
-#ifdef DEBUG_MONITOR_CALL
-				if (counter % 100 == 0)
-				{
-					printf("hypervisor returned with result: %d\n", result);
-				}
-#endif
 				from_end_rpc = 1;			
 				curr_vm->current_mode_state->ctx.reg[0] = res;
 				clean_and_invalidate_cache();
@@ -230,10 +217,6 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			else
 				reset_requests();
 			break;
-			//  /*VFP Test**********************/
-			//case HYPERCALL_VFP:
-			//  hypercall_vfp_op(param0, param1, param2);
-			//  return;
 		case HYPERCALL_LINUX_INIT_END:
 			hypercall_linux_init_end();
 			return;
