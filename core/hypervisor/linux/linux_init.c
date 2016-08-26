@@ -261,7 +261,7 @@ void linux_init_dmmu()
 	/*Small page with CB on and RW */
 	small_attrs = MMU_L2_TYPE_SMALL;
 	small_attrs |= (MMU_FLAG_B | MMU_FLAG_C);
-	small_attrs_ro |= small_attrs | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
+	small_attrs_ro = small_attrs | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
 	small_attrs |= MMU_AP_USER_RW << MMU_L2_SMALL_AP_SHIFT;
 	small_attrs_xn = small_attrs | 0b1;
 
@@ -340,7 +340,7 @@ void linux_init_dmmu()
 		for(i = table2_idx; i < end;i++, page_pa+=0x1000) {
 			// Do not map executable the part of the memory above .text and .init of linux
 			if (page_pa <= guest_pstart + (curr_vm->config->initial_kernel_ex_va_top - guest_vstart))
-				dmmu_l2_map_entry(table2_pa, i, page_pa,  small_attrs);
+				dmmu_l2_map_entry(table2_pa, i, page_pa,  small_attrs_ro);
 			else {
 				dmmu_l2_map_entry(table2_pa, i, page_pa,  small_attrs_xn);
 				dmmu_entry_t *e = get_bft_entry_by_block_idx(page_pa >> 12);
@@ -371,14 +371,12 @@ void linux_init_dmmu()
 	table2_idx = (table2_pa - (table2_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
 	table2_idx *= 0x100; /*256 pages per L2PT*/
 	uint32_t end = table2_idx + 0x100;
-
-	uint32_t ro_attrs = 0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
+	
 	for(i = table2_idx; i < end; i++, page_pa+=0x1000) {
     		if((i%256) >=4 && (i%256) <=7) {
-			dmmu_l2_map_entry(table2_pa, i, page_pa, ro_attrs);
+			dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs_ro);
 		} else {
-			//dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
-			dmmu_l2_map_entry(table2_pa, i, page_pa, ro_attrs);
+			dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs_ro);
 		}
 	}
 }
