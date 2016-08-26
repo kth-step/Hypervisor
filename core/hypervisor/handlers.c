@@ -33,11 +33,11 @@ void clean_and_invalidate_cache()
 }
 
 
-uint32_t counter = 0;
-
-
 #define MONITOR_ENABLED
 //#define DEBUG_MONITOR_CALL
+
+// keep track if the last monitor request has been generated due to an exception handler (i.e. the monitor emulation layer)
+uint32_t from_exception = 0;
 
 void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 		 uint32_t hypercall_number)
@@ -203,19 +203,22 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			break;
 		case HYPERCALL_END_RPC:
 			res = curr_vm->current_mode_state->ctx.reg[0];
-			hypercall_end_rpc(res);
+			hypercall_end_rpc(res, !from_exception);
 			from_end_rpc = 0;
 
 			if (res == 0)
 			{
 				clean_and_invalidate_cache();
 				uint32_t result = execute_next_request();
-				from_end_rpc = 1;			
-				curr_vm->current_mode_state->ctx.reg[0] = res;
+				from_end_rpc = 1;		
+				if (!from_exception)
+					curr_vm->current_mode_state->ctx.reg[0] = result;
 				clean_and_invalidate_cache();
 			}
-			else
+			else {
 				reset_requests();
+				from_exception = 0;
+			}
 			break;
 		case HYPERCALL_LINUX_INIT_END:
 			hypercall_linux_init_end();
@@ -277,8 +280,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 			clean_and_invalidate_cache();
 #endif
 		}
-		else
+		else {
 			reset_requests();
+			from_exception = 0;
+		}
 			
 	}
 
@@ -297,7 +302,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 }
 
 //#define DEBUG_EMULATOR
-
+// This is the monitor emulation layer
 uint32_t emulate_current_access(uint32_t addr, BOOL wt, BOOL ex) {
 	//We read from the active L1 who is mapping this virtual address
 	uint32_t l1_base_add;
@@ -366,10 +371,10 @@ uint32_t emulate_current_access(uint32_t addr, BOOL wt, BOOL ex) {
 		small_attrs &= ~(0b1 << 4);
 	}
 
-	dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
-	dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
-	//push_request(request_dmmu_l2_unmap_entry(l2_base_addr,l2_idx));
-	//push_request(request_dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs));
+	//dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
+	//dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
+	push_request(request_dmmu_l2_unmap_entry(l2_base_addr,l2_idx));
+	push_request(request_dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs));
 
 	COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, addr);
 	COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, addr);
@@ -404,7 +409,8 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 #endif
 		uint32_t res = emulate_current_access(addr, 0, 1);
 		if (res) {
-			// hypercall_end_request();
+			hypercall_end_request();
+			from_exception = 1;
 			return RV_OK;
 		}
 	}
@@ -461,7 +467,8 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 	if (interrupted_mode == HC_GM_KERNEL && addr < 0xFA400000) {
 		uint32_t res = emulate_current_access(addr, 1, 0);
 		if (res) {
-			// hypercall_end_request();
+			hypercall_end_request();
+			from_exception = 1;
 			return RV_OK;
 		}
 	}
