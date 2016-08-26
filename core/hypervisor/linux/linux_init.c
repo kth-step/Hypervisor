@@ -3,6 +3,7 @@
 #include "hyper.h"
 #include "mmu.h"
 #include "dmmu.h"
+#include "macro_config.h"
 
 extern uint32_t *flpt_va;
 extern uint32_t *slpt_va;
@@ -85,7 +86,7 @@ dmmu_clear_linux_mappings()
 	 */
 
 	for (address = 0; address < guest_vstart; address += SECTION_SIZE) {
-		push_request(request_dmmu_unmap_L1_pageTable_entry(address));
+		request_dmmu_unmap_L1_pageTable_entry(address);
 	}
 
 	/*
@@ -97,8 +98,12 @@ dmmu_clear_linux_mappings()
 
 	for (address = guest_vstart + guest_psize; address < VMALLOC_END;
 	     address += SECTION_SIZE) {
-		push_request(request_dmmu_unmap_L1_pageTable_entry(address));
+		request_dmmu_unmap_L1_pageTable_entry(address);
 	}
+
+#ifdef NO_FREE_INIT
+	return 0;
+#endif
 
 	// Remove the executable flag from all L2 used for the 1-to-1 mapping
 	// if it is pointing outside the Linux TEXT (+ init?)
@@ -124,13 +129,17 @@ dmmu_clear_linux_mappings()
 			if (pg_desc->xn)
 				continue;
 			
-			push_request(request_dmmu_l2_unmap_entry(l2_base_pa, l2_idx));
-			push_request(request_dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc | 0b1));
+			request_dmmu_l2_unmap_entry(l2_base_pa, l2_idx);
+			request_dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc | 0b1);
 		}		
 	}
 }
 
 uint32_t hypercall_linux_init_end() {
+#ifdef NO_FREE_INIT
+	return 0;
+#endif
+
 	// Remove the executable flag from all L2 used for the 1-to-1 mapping
 	// if it is pointing outside the Linux TEXT (+ init?)
 	uint32_t l2block;
@@ -155,8 +164,8 @@ uint32_t hypercall_linux_init_end() {
 			if (pg_desc->xn)
 				continue;
 			
-			push_request(request_dmmu_l2_unmap_entry(l2_base_pa, l2_idx));
-			push_request(request_dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc | 0b1));
+			request_dmmu_l2_unmap_entry(l2_base_pa, l2_idx);
+			request_dmmu_l2_map_entry(l2_base_pa, l2_idx, l2_pointed_pa, l2_desc | 0b1);
 		}		
 	}
 	return 0;
@@ -340,7 +349,11 @@ void linux_init_dmmu()
 		for(i = table2_idx; i < end;i++, page_pa+=0x1000) {
 			// Do not map executable the part of the memory above .text and .init of linux
 			if (page_pa <= guest_pstart + (curr_vm->config->initial_kernel_ex_va_top - guest_vstart))
+#ifdef NO_EXCEPT_EMU
+				dmmu_l2_map_entry(table2_pa, i, page_pa,  small_attrs);
+#else
 				dmmu_l2_map_entry(table2_pa, i, page_pa,  small_attrs_ro);
+#endif
 			else {
 				dmmu_l2_map_entry(table2_pa, i, page_pa,  small_attrs_xn);
 				dmmu_entry_t *e = get_bft_entry_by_block_idx(page_pa >> 12);
@@ -376,7 +389,11 @@ void linux_init_dmmu()
     		if((i%256) >=4 && (i%256) <=7) {
 			dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs_ro);
 		} else {
-			dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs_ro);
+#ifdef NO_EXCEPT_EMU
+			dmmu_l2_map_entry(table2_pa, i, page_pa,  small_attrs);
+#else
+			dmmu_l2_map_entry(table2_pa, i, page_pa,  small_attrs_ro);
+#endif
 		}
 	}
 }

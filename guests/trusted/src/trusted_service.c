@@ -9,7 +9,7 @@
 #include "hypercalls.h"
 
 //#define DEBUG_MONITOR
-#define ENABLE_MONITOR
+//#define ENABLE_MONITOR
 //#define DISREGARD_KERNEL
 //#define ALWAYS_ACCEPT
 

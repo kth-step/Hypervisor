@@ -1,6 +1,8 @@
 #include <hw.h>
 #include "hypercalls.h"
 #include "dmmu.h"
+#include "macro_config.h"
+
 #if defined(LINUX) && defined(CPSW)
 #include <soc_cpsw.h>
 #endif
@@ -33,7 +35,6 @@ void clean_and_invalidate_cache()
 }
 
 
-#define MONITOR_ENABLED
 //#define DEBUG_MONITOR_CALL
 
 // keep track if the last monitor request has been generated due to an exception handler (i.e. the monitor emulation layer)
@@ -273,7 +274,7 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 #ifdef MONITOR_ENABLED
 			hypercall_end_request();
 #else
-			clean_and_invalidate_cache();
+			//clean_and_invalidate_cache();
 			res = execute_all_requests();
 			if (res != 0)
 				printf("Hypervisor returned with result: %d\n", res);
@@ -372,11 +373,13 @@ uint32_t emulate_current_access(uint32_t addr, BOOL wt, BOOL ex) {
 		small_attrs &= ~(0b1 << 4);
 	}
 
-	//dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
-	//dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
-	push_request(request_dmmu_l2_unmap_entry(l2_base_addr,l2_idx));
-	push_request(request_dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs));
-
+#ifndef MONITOR_ENABLED
+	dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
+	dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
+#else
+	request_dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
+	request_dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
+#endif
 	COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, addr);
 	COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, addr);
 	dsb();
@@ -403,6 +406,7 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 	COP_WRITE(COP_SYSTEM, COP_SYSTEM_DOMAIN, domac);
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
 
+#ifndef NO_EXCEPT_EMU
 	if (interrupted_mode == HC_GM_KERNEL) {
 #ifdef DEBUG_EMULATOR
 		printf("Pabort:%x Status:%x, u=%x \n", addr, status, unused);
@@ -410,11 +414,14 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 #endif
 		uint32_t res = emulate_current_access(addr, 0, 1);
 		if (res) {
+#ifdef MONITOR_ENABLED
 			hypercall_end_request();
+#endif
 			from_exception = 1;
 			return RV_OK;
 		}
 	}
+#endif
 
 	/*Need to be in virtual kernel mode to access data abort handler */
 	change_guest_mode(HC_GM_KERNEL);
@@ -464,15 +471,19 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
 
+#ifndef NO_EXCEPT_EMU
 	// Re-enable the writable flag
 	if (interrupted_mode == HC_GM_KERNEL && addr < 0xFA400000) {
 		uint32_t res = emulate_current_access(addr, 1, 0);
 		if (res) {
+#ifdef MONITOR_ENABLED
 			hypercall_end_request();
+#endif
 			from_exception = 1;
 			return RV_OK;
 		}
 	}
+#endif
 
 #if defined(LINUX) && defined(CPSW)
 	//If accessed address is within the mapped Ethernet Subsystem memory

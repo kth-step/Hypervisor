@@ -1,0 +1,11 @@
+benchmark:
+as it is:							14.643178
+no monitor check:						13.051884
+no monitor:							12.830176
+no-free-init, no_monitor:					13.789730	:-)
+no monitor/no rm x 1to1						12.893847
+no-free-init, no_monitor, no rm x 1to1:				13.820743	:-D
+no-free-init, no_monitor, no rm x 1to1, NO_EXCEPT_EMU:		13.676130	?
+no_monitor, no rm x 1to1, NO_EXCEPT_EMU, NO_REQUEST_LIST_MMU	10.745278
+
+old master

@@ -55,18 +55,17 @@ typedef struct hypercall_request_ {
 	};
 } hypercall_request_t;
 
-hypercall_request_t request_dmmu_switch_mm(addr_t l1_base_pa_add);
-hypercall_request_t request_dmmu_create_L1_pt(addr_t l1_base_pa_add);
-hypercall_request_t request_dmmu_l1_pt_map(addr_t va, addr_t l2_base_pa_add, uint32_t attrs);
-hypercall_request_t request_dmmu_unmap_L1_pt(addr_t l1_base_pa_add);
-hypercall_request_t request_dmmu_unmap_L2_pt(addr_t l2_base_pa_add);
-hypercall_request_t request_dmmu_unmap_L1_pageTable_entry(addr_t  va);
-hypercall_request_t request_dmmu_create_L2_pt(addr_t l2_base_pa_add);
-hypercall_request_t request_dmmu_l2_map_entry(addr_t l2_base_pa_add, uint32_t l2_idx, addr_t page_pa_add, uint32_t attrs);
-hypercall_request_t request_dmmu_l2_unmap_entry(addr_t l2_base_pa_add, uint32_t l2_idx);
-hypercall_request_t request_dmmu_map_L1_section(addr_t va, addr_t sec_base_add, uint32_t attrs);
+void request_dmmu_switch_mm(addr_t l1_base_pa_add);
+void request_dmmu_create_L1_pt(addr_t l1_base_pa_add);
+void request_dmmu_l1_pt_map(addr_t va, addr_t l2_base_pa_add, uint32_t attrs);
+void request_dmmu_unmap_L1_pt(addr_t l1_base_pa_add);
+void request_dmmu_unmap_L2_pt(addr_t l2_base_pa_add);
+void request_dmmu_unmap_L1_pageTable_entry(addr_t  va);
+void request_dmmu_create_L2_pt(addr_t l2_base_pa_add);
+void request_dmmu_l2_map_entry(addr_t l2_base_pa_add, uint32_t l2_idx, addr_t page_pa_add, uint32_t attrs);
+void request_dmmu_l2_unmap_entry(addr_t l2_base_pa_add, uint32_t l2_idx);
+void request_dmmu_map_L1_section(addr_t va, addr_t sec_base_add, uint32_t attrs);
 
-void push_request(hypercall_request_t request);
 void change_request(hypercall_request_t request, uint32_t index);
 hypercall_request_t get_request(uint32_t index);
 
