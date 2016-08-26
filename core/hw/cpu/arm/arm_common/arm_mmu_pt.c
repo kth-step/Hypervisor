@@ -108,6 +108,7 @@ BOOL pt_create_section(addr_t * l1, addr_t va, addr_t pa, uint32_t mem_type)
 			val |= MMU_AP_USER_RO << MMU_SECTION_AP_SHIFT;
 			val = (val & (~0x10)) | 0xC | (HC_DOM_TRUSTED << MMU_L1_DOMAIN_SHIFT);
 			val |= (0b1 << 4);
+
 			l1[index] = val;
 			return TRUE;
 		}

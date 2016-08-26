@@ -34,7 +34,6 @@ void clean_and_invalidate_cache()
 #endif
 }
 
-
 //#define DEBUG_MONITOR_CALL
 
 // keep track if the last monitor request has been generated due to an exception handler (i.e. the monitor emulation layer)
@@ -376,15 +375,17 @@ uint32_t emulate_current_access(uint32_t addr, BOOL wt, BOOL ex) {
 #ifndef MONITOR_ENABLED
 	dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
 	dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
-#else
-	request_dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
-	request_dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
-#endif
+
 	COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, addr);
 	COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, addr);
 	dsb();
 	isb();
 	hypercall_dcache_clean_area(l2_desc_va_add, 0x4000);
+#else
+	request_dmmu_l2_unmap_entry(l2_base_addr,l2_idx);
+	request_dmmu_l2_map_entry(l2_base_addr, l2_idx, pointed_pa_add, small_attrs);
+#endif
+
 
 	return 1;
 }

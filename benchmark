@@ -1,5 +1,5 @@
 benchmark:
-as it is:							14.643178
+as it is:							14.643178-14.599787 (removing some cache flush)
 no monitor check:						13.051884
 no monitor:							12.830176
 no-free-init, no_monitor:					13.789730	:-)
@@ -8,4 +8,13 @@ no-free-init, no_monitor, no rm x 1to1:				13.820743	:-D
 no-free-init, no_monitor, no rm x 1to1, NO_EXCEPT_EMU:		13.676130	?
 no_monitor, no rm x 1to1, NO_EXCEPT_EMU, NO_REQUEST_LIST_MMU	10.745278
 
-old master
+master (no requests)						11.099221
+
+new_cnt (no requests)						11.108506
+
+
+
+after optimizing monitor
+all enabled 							13.209108
+no monitor check						13.098076
+

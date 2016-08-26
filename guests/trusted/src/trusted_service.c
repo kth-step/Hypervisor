@@ -9,7 +9,7 @@
 #include "hypercalls.h"
 
 //#define DEBUG_MONITOR
-//#define ENABLE_MONITOR
+#define ENABLE_MONITOR
 //#define DISREGARD_KERNEL
 //#define ALWAYS_ACCEPT
 
@@ -53,18 +53,24 @@ uint32_t section_checker(uint32_t l1_desc)
 	l1_sec_t *l1_sec_desc = (l1_sec_t *) (&l1_desc);
 	uint32_t ap = GET_L1_AP(l1_sec_desc);
 	
+	// Assuming tht we have everithing MB aligned
+	uint32_t pointed_pa = START_PA_OF_SECTION(l1_sec_desc);
+	uint32_t sec_block = PA_TO_PH_BLOCK(pointed_pa);
 	uint32_t sec_idx;
+	if (!guest_pa_range_checker(pointed_pa, SECTION_SIZE))
+		return SUCCESS;
+
+	uint32_t ex = ((ap == 3) || (ap == 2)) && (l1_sec_desc->xn == 0);
+	if ((!ex) && (ap != 3))
+		return SUCCESS;
+
 	for (sec_idx = 0; (sec_idx < 256); sec_idx++) {
 		// It is not important to check non-guest memory, since this is neither writable or executable
-		uint32_t ph_block =
-			    PA_TO_PH_BLOCK(START_PA_OF_SECTION(l1_sec_desc)) | (sec_idx);
+		uint32_t ph_block = sec_block| (sec_idx);
 
-		if (!guest_pa_range_checker(PH_BLOCK_TO_PA(ph_block), PAGE_SIZE))
-			return SUCCESS;
-
-
+		//if (!guest_pa_range_checker(PH_BLOCK_TO_PA(ph_block), PAGE_SIZE))
+		//	return SUCCESS;
 		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(ph_block);
-		uint32_t ex = ((ap == 3) || (ap == 2)) && (l1_sec_desc->xn == 0);
 
 		if ((bft_entry->refcnt > 0 || bft_entry->dev_refcnt > 0) && ex)
 			return ERR_MONITOR_BLOCK_WRITABLE;
@@ -180,6 +186,7 @@ uint32_t call_checker(uint32_t index)
 	switch (request.hypercall) {
 
 		case CMD_CREATE_L1_PT:
+			//return SUCCESS;
 			return create_l1_pt_checker(request.create_L1_pt.l1_base_pa_add);
 
 		//No need for checks when freeing an L1
