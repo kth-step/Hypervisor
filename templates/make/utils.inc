@@ -5,7 +5,7 @@
 
 
 # needed for winodws ...
-CC = gcc -m32
+CC = gcc
 
 # INPUT AND OUTPUT
 SRC ?= src

@@ -18,7 +18,7 @@ ECHO=/bin/echo -e
 # rules:
 
 %.ho: %.c
-	gcc -m32 -c $(CFLAGS) $(CFLAGS_HOST) $< -o $@
+	gcc -c $(CFLAGS) $(CFLAGS_HOST) $< -o $@
  
 %.to: %.c      
 	$(CC) -c $(CFLAGS) $(CFLAGS_TARGET) $< -o $@

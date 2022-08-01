@@ -183,6 +183,36 @@ void soc_interrupt_init()
 	cpu_irq_set_enable(68, TRUE);
 	cpu_irq_set_handler(68, (cpu_callback) irq_handler);
 
+/*
+//////////////
+
+	printf("HYPERVISOR soc_interrupt_init: 0x%x\n", intc->intc_protection);
+//while (1);
+#define INTC_IRQ_TIMER0 66
+#define INTC_IRQ_TIMER1_MS 67
+#define INTC_IRQ_TIMER2 68
+#define INTC_IRQ_TIMER3 69
+#define INTC_IRQ_TIMER4 92
+#define INTC_IRQ_TIMER5 93
+#define INTC_IRQ_TIMER6 94
+#define INTC_IRQ_TIMER7 95
+	cpu_irq_set_enable(INTC_IRQ_TIMER0, TRUE);
+	cpu_irq_set_handler(INTC_IRQ_TIMER0, (cpu_callback) irq_handler);
+	cpu_irq_set_enable(INTC_IRQ_TIMER1_MS, TRUE);
+	cpu_irq_set_handler(INTC_IRQ_TIMER1_MS, (cpu_callback) irq_handler);
+	cpu_irq_set_enable(INTC_IRQ_TIMER3, TRUE);
+	cpu_irq_set_handler(INTC_IRQ_TIMER3, (cpu_callback) irq_handler);
+	cpu_irq_set_enable(INTC_IRQ_TIMER4, TRUE);
+	cpu_irq_set_handler(INTC_IRQ_TIMER4, (cpu_callback) irq_handler);
+	cpu_irq_set_enable(INTC_IRQ_TIMER5, TRUE);
+	cpu_irq_set_handler(INTC_IRQ_TIMER5, (cpu_callback) irq_handler);
+	cpu_irq_set_enable(INTC_IRQ_TIMER6, TRUE);
+	cpu_irq_set_handler(INTC_IRQ_TIMER6, (cpu_callback) irq_handler);
+	cpu_irq_set_enable(INTC_IRQ_TIMER7, TRUE);
+	cpu_irq_set_handler(INTC_IRQ_TIMER7, (cpu_callback) irq_handler);
+//////////////
+*/
+
 	/*Enable interrupts for Linux UART0 */
 	cpu_irq_set_enable(72, TRUE);
 	cpu_irq_set_handler(72, (cpu_callback) irq_handler);

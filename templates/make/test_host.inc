@@ -8,7 +8,8 @@
  
 
 # needed for winodws ...
-CC = gcc -m32
+CC = gcc
+# -m32
 
 # INPUT AND OUTPUT
 TEST_FILES = $(wildcard src/*.c)

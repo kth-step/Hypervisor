@@ -90,16 +90,12 @@ void hypercall_irq_restore(uint32_t flag)
 
 void hypercall_end_interrupt(uint32_t irq_regs)
 {
-	if (curr_vm->current_guest_mode != HC_GM_KERNEL) {
-		hyper_panic
-		    ("Guest tried to end interrupt but not in kernel mode.", 1);
-	}
-	if (curr_vm->interrupted_mode >= HC_NGUESTMODES) {
+	if (curr_vm->current_guest_mode != HC_GM_KERNEL)
+		hyper_panic("Guest tried to end interrupt but not in kernel mode.", 1);
+	if (curr_vm->interrupted_mode >= HC_NGUESTMODES)
 		hyper_panic("Invalid interrupted mode value.", 2);
-	}
 #if LINUX
-	if (irq_regs < 0xC0000000
-	    || (irq_regs >= 0xf0000000 && irq_regs <= 0xf0100000)) {
+	if (irq_regs < 0xC0000000 || (irq_regs >= 0xf0000000 && irq_regs <= 0xf0100000)) {
 		printf("irq_reg: %x", irq_regs);
 		hyper_panic("Irq reg not from kernel space", 1);
 	}
@@ -109,18 +105,15 @@ void hypercall_end_interrupt(uint32_t irq_regs)
 		curr_vm->interrupted_mode = HC_GM_TASK;
 	else if (sp_pop[15] >= 0xc0000000 && (sp_pop[16] & 3))
 		curr_vm->interrupted_mode = HC_GM_KERNEL;
-	else {
-		hyper_panic
-		    ("Trying to restore context with wrong privileged mode", 0);
-	}
+	else
+		hyper_panic("Trying to restore context with wrong privileged mode", 0);
 
-	uint32_t *context =
-	    curr_vm->mode_states[curr_vm->interrupted_mode].ctx.reg;
+	uint32_t *context = curr_vm->mode_states[curr_vm->interrupted_mode].ctx.reg;
 
 	uint32_t i;
-	for (i = 0; i < 17; i++) {
+	for (i = 0; i < 17; i++)
 		*context++ = *sp_pop++;
-	}
+
 	*sp_pop = 0xFFFFFFFF;	//ORIG_R0
 #endif
 	change_guest_mode(curr_vm->interrupted_mode);

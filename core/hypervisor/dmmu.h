@@ -6,6 +6,9 @@
 //#define AGGRESSIVE_FLUSHING_HANDLERS
 
 /* bft base and size definition */
+//DMMU bft tables start at 1MB from the start address of physical memory =
+//HAL_PHYS_START + 0x0010_0000 = 0x8000_0000 + 0x0010_0000, which is part of 1MB
+//hypervisor memory.
 #define DMMU_BFT_BASE_PY  (MB + HAL_PHYS_START)
 #define DMMU_BFT_BASE_VA  (DMMU_BFT_BASE_PY - HAL_OFFSET)
 
@@ -76,37 +79,37 @@ typedef __PACKED struct l2_small {
 } l2_small_t;
 
 /* Error messages */
-#define SUCCESS_MMU                 (0)
-#define ERR_MMU_RESERVED_VA                 (1)
-#define ERR_MMU_ENTRY_UNMAPPED 		        (2)
-#define ERR_MMU_OUT_OF_RANGE_PA             (3)
-#define ERR_MMU_SECTION_NOT_UNMAPPED        (4)
-#define ERR_MMU_PH_BLOCK_NOT_WRITABLE       (5)
-#define ERR_MMU_AP_UNSUPPORTED              (6)
-#define ERR_MMU_BASE_ADDRESS_IS_NOT_ALIGNED (7)
-#define ERR_MMU_ALREADY_L1_PT               (8)
-#define ERR_MMU_ALREADY_L2_PT               (8)
-#define ERR_MMU_SANITY_CHECK_FAILED         (9)
-#define ERR_MMU_PT_REGION				    (10)
-#define ERR_MMU_NO_UPDATE                   (11)
-#define ERR_MMU_IS_NOT_L2_PT                (12)
-#define ERR_MMU_XN_BIT_IS_ON                (13)
-#define ERR_MMU_PT_NOT_UNMAPPED             (14)
-#define ERR_MMU_REF_OVERFLOW                (15)
-#define ERR_MMU_INCOMPATIBLE_AP             (16)
-#define ERR_MMU_L2_UNSUPPORTED_DESC_TYPE    (17)
-#define ERR_MMU_REFERENCE_L2                (18)
-#define ERR_MMU_L1_BASE_IS_NOT_16KB_ALIGNED (19)
-#define ERR_MMU_IS_NOT_L1_PT                (20)
-#define ERR_MMU_REFERENCED				    (21)
-#define ERR_MMU_FREE_ACTIVE_L1				(22)
-#define ERR_MMU_SUPERSECTION				(23)
-#define ERR_MMU_NEW_L1_NOW_WRITABLE			(24)
-#define ERR_MMU_L2_BASE_OUT_OF_RANGE        (25)
-#define ERR_MMU_NOT_CACHEABLE               (26)
-#define ERR_MMU_OUT_OF_CACHEABLE_RANGE      (27)
-#define ERR_MMU_NEW_L2_NOW_WRITABLE			(28)
-#define ERR_MMU_X_REF_OVERFLOW                (29)
+#define SUCCESS_MMU                			0
+#define ERR_MMU_RESERVED_VA                 1
+#define ERR_MMU_ENTRY_UNMAPPED 		        2
+#define ERR_MMU_OUT_OF_RANGE_PA             3
+#define ERR_MMU_SECTION_NOT_UNMAPPED        4
+#define ERR_MMU_PH_BLOCK_NOT_WRITABLE       5
+#define ERR_MMU_AP_UNSUPPORTED              6
+#define ERR_MMU_BASE_ADDRESS_IS_NOT_ALIGNED 7
+#define ERR_MMU_ALREADY_L1_PT               8
+#define ERR_MMU_ALREADY_L2_PT               9
+#define ERR_MMU_SANITY_CHECK_FAILED         10
+#define ERR_MMU_PT_REGION				    11
+#define ERR_MMU_NO_UPDATE                   12
+#define ERR_MMU_IS_NOT_L2_PT                13
+#define ERR_MMU_XN_BIT_IS_ON                14
+#define ERR_MMU_PT_NOT_UNMAPPED             15
+#define ERR_MMU_REF_OVERFLOW                16
+#define ERR_MMU_INCOMPATIBLE_AP             17
+#define ERR_MMU_L2_UNSUPPORTED_DESC_TYPE    18
+#define ERR_MMU_REFERENCE_L2                19
+#define ERR_MMU_L1_BASE_IS_NOT_16KB_ALIGNED 20
+#define ERR_MMU_IS_NOT_L1_PT                21
+#define ERR_MMU_REFERENCED				    22
+#define ERR_MMU_FREE_ACTIVE_L1				23
+#define ERR_MMU_SUPERSECTION				24
+#define ERR_MMU_NEW_L1_NOW_WRITABLE			25
+#define ERR_MMU_L2_BASE_OUT_OF_RANGE        26
+#define ERR_MMU_NOT_CACHEABLE               27
+#define ERR_MMU_OUT_OF_CACHEABLE_RANGE      28
+#define ERR_MMU_NEW_L2_NOW_WRITABLE			29
+#define ERR_MMU_X_REF_OVERFLOW              30
 #define ERR_MMU_UNIMPLEMENTED               (-1)
 
 #define PAGE_INFO_TYPE_DATA 0
@@ -136,7 +139,8 @@ void mmu_bft_region_set(addr_t start, size_t size, uint32_t refc, uint32_t x_ref
 #define MAX_REFCNT MAX_13BIT
 #define L2_DESC_ATTR_MASK 0x00000FFD
 
-#define VA_TO_L1_IDX(va) (va >> 20)
+#define VA_TO_L1_IDX(va) ((va) >> 20)
+#define VA_TO_L2_IDX(va) (((va) & 0x000FF000) >> 12)
 #define L1_IDX_TO_PA(l1_base, idx) ((l1_base & 0xFFFFC000) | (idx << 2))
 #define L2_IDX_TO_PA(l2_base, idx) ((l2_base & 0xFFFFF000) | ((0xFFF & idx) << 2))
 
@@ -180,5 +184,7 @@ int dmmu_l2_map_entry(addr_t l2_base_pa_add, uint32_t l2_idx,
 		      addr_t page_pa_add, uint32_t attrs);
 int dmmu_l2_unmap_entry(addr_t l2_base_pa_add, uint32_t l2_idx);
 int dmmu_unmap_L2_pt(addr_t l2_base_pa_add);
+
+void print_l2_ap(uint32_t phys_pte);
 
 #endif				/* _DMMU_H_ */

@@ -87,7 +87,7 @@ typedef enum {
 	V_FIQ,
 	V_ARM_SYSCALL,
 	V_RET_FAST_SYSCALL,
-	V_RET_FROM_EXCEPTION,
+	V_RET_FROM_EXCEPTION,	//Not used.
 } interrupt_vector;
 
 /* CPU context */

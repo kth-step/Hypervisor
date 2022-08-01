@@ -45,13 +45,13 @@ int mmu_lookup_hv(addr_t vadr, addr_t * padr, int hv_write)
 	return (ret ^ 1) & 1;
 }
 
+//pstart = 0x8100_0000.
+//Offset from reserved_va_for_pt_access_start = 0xE800_0000.
 addr_t mmu_guest_pa_to_va(addr_t padr, hc_config * config)
 {
 #ifdef DEBUG_MMU_PA_TO_VA
 	printf("mmu_guest_pa_to_va:\n padr=%x, config =%x, a=%x, b=%x\n",
-	       padr, config, config->pa_for_pt_access_start,
-	       config->reserved_va_for_pt_access_start);
+	       padr, config, config->pa_for_pt_access_start, config->reserved_va_for_pt_access_start);
 #endif
-	return (padr - config->firmware->pstart +
-		config->reserved_va_for_pt_access_start);
+	return (padr - config->firmware->pstart + config->reserved_va_for_pt_access_start);
 }

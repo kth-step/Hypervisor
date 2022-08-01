@@ -6,7 +6,7 @@
 #include "hyper_config_base.h"
 #include "hyper_config.h"
 
-#define MODE_NONE ((uint32_t)-1)
+#define MODE_NONE ((uint32_t)-1)	//Casts -1 to uint32_t = 0xFFFFFFFF.
 
 typedef void (*interrupt_handler_fn) (void);
 typedef void (*dabort_handler_fn) (void);
@@ -38,6 +38,8 @@ typedef struct boot_info_ {
 
 typedef struct hyper_mode_state_ {
 	context ctx;
+	//Guest execution mode, including the domain access control bits that are
+	//set when entering the mode.
 	const struct hc_guest_mode_ *mode_config;
 	uint32_t rpc_for;
 	uint32_t rpc_to;
@@ -49,7 +51,7 @@ typedef struct virtual_machine_ {
 	uint32_t interrupted_mode;
 	guest_info guest_info;
 	uint32_t exception_vector[10];
-	hyper_mode_state mode_states[HC_NGUESTMODES];
+	hyper_mode_state mode_states[HC_NGUESTMODES];	//HC_NGUESTMODES = 3.
 	hyper_mode_state *current_mode_state;
 	struct hc_config_ *config;
 	struct virtual_machine_ *next;

@@ -79,36 +79,29 @@ BOOL pt_create_section(addr_t * l1, addr_t va, addr_t pa, uint32_t mem_type)
 		// if RAM, turn of XN and enable cache and buffer
 		if (mem_type == MLT_USER_RAM) {
 			val |= MMU_AP_USER_RW << MMU_SECTION_AP_SHIFT;
-			val =
-			    (val & (~0x10)) | 0xC | (HC_DOM_KERNEL <<
-						     MMU_L1_DOMAIN_SHIFT);
+			val = (val & (~0x10)) | 0xC | (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
 			l1[index] = val;
 			//            printf("CREATED section for USER%d, val = %x\n", index, val);
 			return TRUE;
 		}
 		if (mem_type == MLT_TRUSTED_RAM) {
 			val |= MMU_AP_USER_RW << MMU_SECTION_AP_SHIFT;
-			val =
-			    (val & (~0x10)) | 0xC | (HC_DOM_TRUSTED <<
-						     MMU_L1_DOMAIN_SHIFT);
+			val = (val & (~0x10)) | 0xC | (HC_DOM_TRUSTED << MMU_L1_DOMAIN_SHIFT);
 			l1[index] = val;
 			//            printf("CREATED section for TRUSTED%d, val = %x\n", index, val);
 			return TRUE;
 		}
 		if (mem_type == MLT_HYPER_RAM) {
-			val |= MMU_AP_SUP_RW << MMU_SECTION_AP_SHIFT;
-			val =
-			    (val & (~0x10)) | 0xC | (HC_DOM_DEFAULT <<
-						     MMU_L1_DOMAIN_SHIFT);
+			val |= MMU_AP_SUP_RW << MMU_SECTION_AP_SHIFT;	//MMU_AP_SUP_RW = 0x1, MMU_SECTION_AP_SHIFT = 10, which gives RW in PL1, -- in PL0.
+			val = (val & (~0x10)) | 0xC | (HC_DOM_DEFAULT << MMU_L1_DOMAIN_SHIFT);
 			l1[index] = val;
 			//          printf("CREATED section for HYPER%d, val = %x\n", index, val);
 			return TRUE;
 		}
 
 	}
-	printf
-	    ("Could not allocate section, index=%d va adr=%x pa adr=%x type=%d\n",
-	     index, va, pa, type);
+	printf("Could not allocate section, index=%d va adr=%x pa adr=%x type=%d\n", index, va, pa, type);
+	while (1);
 	return FALSE;
 
 }
@@ -116,8 +109,7 @@ BOOL pt_create_section(addr_t * l1, addr_t va, addr_t pa, uint32_t mem_type)
 /*
  * functions below are used to build page table from data structure
  */
-uint32_t pt_create_coarse(addr_t * pt, addr_t va, addr_t pa, uint32_t size,
-			  uint32_t mem_type)
+uint32_t pt_create_coarse(addr_t * pt, addr_t va, addr_t pa, uint32_t size, uint32_t mem_type)
 {
 	uint32_t *table1 = pt;
 	uint32_t index = MMU_L1_INDEX(va);
@@ -161,9 +153,7 @@ uint32_t pt_create_coarse(addr_t * pt, addr_t va, addr_t pa, uint32_t size,
 		table2_pa = pt_get_empty_l2();
 		if (!table2_pa)
 			return 0;
-		table1[index] =
-		    ((uint32_t) (table2_pa) | (domain << MMU_L1_DOMAIN_SHIFT)
-		     | MMU_L1_TYPE_COARSE);
+		table1[index] = ((uint32_t) (table2_pa) | (domain << MMU_L1_DOMAIN_SHIFT) | MMU_L1_TYPE_COARSE);
 	} else {
 		/* There is already a mapping to the first level descriptor */
 		table2_pa = MMU_L1_PT_ADDR(table1[index]);

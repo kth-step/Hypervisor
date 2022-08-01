@@ -159,7 +159,7 @@ uint32_t hypercall_map_l1_section(addr_t va, addr_t sec_base_add,
 /*Create a MB Section page
  *Guest can only map to its own domain and to its own physical addresses
  */
-void hypercall_create_section(addr_t va, addr_t pa, uint32_t page_attr)
+void hypercall_create_section(addr_t va, addr_t pa, uint32_t page_attr)	//THIS FILE IS NOT USED
 {
 #ifdef DEBUG_MMU
 	printf
@@ -205,7 +205,7 @@ void hypercall_create_section(addr_t va, addr_t pa, uint32_t page_attr)
 
 /*Switch page table
  * TODO Add list of allowed page tables*/
-void hypercall_switch_mm(addr_t table_base, uint32_t context_id)
+void hypercall_switch_mm(addr_t table_base, uint32_t context_id)	//THIS FILE IS NOT USED
 {
 #ifdef DEBUG_MMU
 	printf("\n\t\t\tHypercall switch PGD\n\t\t table_base:%x ", table_base);
@@ -251,7 +251,7 @@ void hypercall_switch_mm(addr_t table_base, uint32_t context_id)
  * TODO Security critical, need to add list of used page tables
  * and have a counter for each reference so that we dont free a page table that is still
  * used by another task (Linux kernel knows not to do this but can be used in an attack)*/
-void hypercall_free_pgd(addr_t * pgd)
+void hypercall_free_pgd(addr_t * pgd)	//THIS FILE IS NOT USED
 {
 #ifdef DEBUG_MMU
 	printf("\n\t\t\tHypercall FREE PGD\n\t\t pgd:%x ", pgd);
@@ -303,7 +303,7 @@ void hypercall_free_pgd(addr_t * pgd)
 /*New pages for processes, copys kernel space from master pages table
  *and cleans the cache, set these pages read only for user
  *TODO Add list of used page tables and keep count */
-void hypercall_new_pgd(addr_t * pgd)
+void hypercall_new_pgd(addr_t * pgd)	//THIS FILE IS NOT USED
 {
 #ifdef DEBUG_MMU
 	printf("\n\t\t\tHypercall new PGD\n\t\t pgd:%x ", pgd);
@@ -403,7 +403,7 @@ void hypercall_new_pgd(addr_t * pgd)
  * If val is 0, it means clean the page so we need to check the current
  * mapped page and remove the write protection.
  * */
-void hypercall_set_pmd(addr_t * pmd, uint32_t val)
+void hypercall_set_pmd(addr_t * pmd, uint32_t val)	//THIS FILE IS NOT USED
 {
 #ifdef DEBUG_MMU
 	printf("\n\t\t\tHypercall set PMD\n\t\t pmd:%x val:%x ", pmd, val);
@@ -535,7 +535,7 @@ void hypercall_set_pmd(addr_t * pmd, uint32_t val)
 }
 
 /*Sets an entry in lvl 2 page table*/
-void hypercall_set_pte(addr_t * va, uint32_t linux_pte, uint32_t phys_pte)
+void hypercall_set_pte(addr_t * va, uint32_t linux_pte, uint32_t phys_pte)	//THIS FILE IS NOT USED
 {
 #ifdef DEBUG_MMU
 	printf

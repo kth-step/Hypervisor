@@ -23,6 +23,7 @@ void hypercall_dcache_invalidate_region(addr_t start, addr_t end)
 void hypercall_dcache_flush_area(addr_t va, uint32_t size)
 {
 	mem_cache_dcache_area(va, size, FLUSH);
+
 }
 
 void hypercall_dcache_clean_area(addr_t va, uint32_t size)
@@ -78,23 +79,23 @@ void hypercall_tlb_invalidate_asid(uint32_t asid)
 
 }
 
-void hypercall_cache_op(enum hyp_cache_op op, addr_t va, uint32_t size)
+//Flushes (cleans and invalidates) all data caches.
+//Includes LoUU, LoC, and LoUIS.
+void hypercall_clean_or_invalidate_dcache(void) {
+	mem_flush_dcache();
+}
+
+void hypercall_cache_op(enum hyp_cache_op op, addr_t va, uint32_t size_or_end)
 {
 	switch (op) {
 	case FLUSH_ALL:
 		hypercall_flush_all();
 		return;
 	case FLUSH_D_CACHE_AREA:
-		hypercall_dcache_flush_area(va, size);
+		hypercall_dcache_flush_area(va, size_or_end);
 		return;
 	case CLEAN_D_CACHE_AREA:
-		hypercall_dcache_clean_area(va, size);
-		return;
-	case INV_D_CACHE_REGION:
-		hypercall_dcache_invalidate_region(va, size);
-		return;
-	case CLEAN_D_CACHE_REGION:
-		hypercall_dcache_clean_region(va, size);
+		hypercall_dcache_clean_area(va, size_or_end);
 		return;
 	case INVAL_D_CACHE_MVA:
 		hypercall_dcache_invalidate_mva(va);
@@ -116,6 +117,18 @@ void hypercall_cache_op(enum hyp_cache_op op, addr_t va, uint32_t size)
 		return;
 	case INVAL_TLB_ASID:
 		hypercall_tlb_invalidate_asid(va);
+		return;
+	case FLUSH_D_CACHE:
+		hypercall_clean_or_invalidate_dcache();
+		return;
+	case INV_D_CACHE_REGION:
+		hypercall_dcache_invalidate_region(va, size_or_end);
+		return;
+	case CLEAN_D_CACHE_REGION:
+		hypercall_dcache_clean_region(va, size_or_end);
+		return;
+	case COHERENT_RANGE:
+		coherent_range((uint32_t) va, size_or_end);
 		return;
 	default:
 		printf("Invalid cache operation\n");

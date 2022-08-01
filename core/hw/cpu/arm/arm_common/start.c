@@ -16,6 +16,9 @@ void start()
 	    curr_vm->config->firmware->vstart +
 	    curr_vm->config->guest_entry_offset;
 #ifdef LINUX
+	//Offset = 0x0001_0000 must be added since that offset is used to move the
+	//guest by arm_guest_blob.S to 0x8100_0000 + 0x0001_0000, and pstart is also
+	//set by arm_guest_blob.S.
 	start =
 	    curr_vm->config->firmware->pstart +
 	    curr_vm->config->guest_entry_offset;

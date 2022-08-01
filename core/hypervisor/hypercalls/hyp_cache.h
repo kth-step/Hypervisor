@@ -11,8 +11,6 @@ enum hyp_cache_op {
 	FLUSH_ALL = 0,
 	FLUSH_D_CACHE_AREA = 1,
 	CLEAN_D_CACHE_AREA = 2,
-	INV_D_CACHE_REGION = 11,
-	CLEAN_D_CACHE_REGION = 12,
 	INVAL_D_CACHE_MVA = 3,
 	FLUSH_I_CACHE_ALL = 4,
 	FLUSH_I_CACHE_MVA = 5,
@@ -20,6 +18,10 @@ enum hyp_cache_op {
 	INVAL_TLB_ALL = 7,
 	INVAL_TLB_MVA = 8,
 	INVAL_TLB_ASID = 9,
+	FLUSH_D_CACHE = 10,
+	INV_D_CACHE_REGION = 11,
+	CLEAN_D_CACHE_REGION = 12,
+	COHERENT_RANGE = 13,
 };
 
 void hypercall_dcache_clean_area(addr_t va, uint32_t size);

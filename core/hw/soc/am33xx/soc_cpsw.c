@@ -222,8 +222,6 @@ static void update_active_queue(BOOL);
 static void handle_potential_misqueue_condition(BOOL, uint32_t, uint32_t);
 static void decrement_rho_nic_update_alpha_queue(uint32_t, BOOL, BOOL);
 static void decrement_rho_nic_update_alpha(uint32_t, BOOL, BOOL);
-static void decrement_rho_nic(uint32_t);
-static BOOL no_overflow_and_updated_rho_nic(uint32_t);
 static BOOL is_queue_secure(uint32_t, BOOL);
 static BOOL is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap(uint32_t);
 static BOOL is_queue_self_overlap(uint32_t bd_ptr);
@@ -231,9 +229,6 @@ static BOOL is_transmit_SOP_EOP_packet_length_fields_set_correctly(uint32_t);
 static BOOL is_data_buffer_secure_queue(uint32_t, BOOL);
 static BOOL is_data_buffer_secure(uint32_t, BOOL);
 static BOOL is_secure_linux_memory(BOOL, uint32_t, uint32_t);
-static BOOL inline is_L1_or_L2_block(uint32_t);
-static BOOL inline is_D_block(uint32_t);
-static BOOL inline is_executable_block(uint32_t);
 static bd_overlap type_of_cppi_ram_access_overlap(uint32_t, uint32_t);
 static void set_and_clear_word(uint32_t, uint32_t, uint32_t, uint32_t);
 static void set_and_clear_word_on_sop_or_eop(uint32_t, uint32_t, uint32_t,
@@ -258,6 +253,46 @@ BOOL rx_int_core = FALSE;
 BOOL rx_int_dma = FALSE;
 BOOL rx_dma = FALSE;
 #endif
+
+#define hw_next		0
+#define hw_buffer	4
+#define hw_len		8
+#define hw_mode		12
+#define sw_token	16
+#define sw_buffer	20
+#define sw_len		24
+
+BOOL soc_check_bd_write(uint32_t bd_va, uint32_t len, uint32_t buffer, uint32_t token) {
+	uint32_t mode = 0xE0000000;	//CPDMA_DESC_OWNER | CPDMA_DESC_SOP | CPDMA_DESC_EOP
+	uint32_t bd_pa = virt_to_phys(bd_va);
+
+	if (!is_cppi_ram_virtual_address(bd_va) || !is_cppi_ram_virtual_address(bd_va + 4)) {
+		printf("HYPERVISOR NOT CPPI_RAM: soc_check_bd_write: va = %x, pa = %x\n", bd_va, bd_pa);
+		return FALSE;
+	}
+
+	BOOL allowed = TRUE;
+
+	allowed = allowed && cppi_ram_handler(bd_pa + hw_next, 0);
+	allowed = allowed && cppi_ram_handler(bd_pa + hw_buffer, buffer);
+	allowed = allowed && cppi_ram_handler(bd_pa + hw_len, len);
+	allowed = allowed && cppi_ram_handler(bd_pa + hw_mode, mode | len);
+	allowed = allowed && cppi_ram_handler(bd_pa + sw_token, token);
+	allowed = allowed && cppi_ram_handler(bd_pa + sw_buffer, buffer);
+	allowed = allowed && cppi_ram_handler(bd_pa + sw_len, len);
+
+//	printf("HYPERVISOR: soc_check_bd_write: allowed = %x\n", allowed);
+
+//	desc_write(desc, hw_next,   0);
+//	desc_write(desc, hw_buffer, buffer);
+//	desc_write(desc, hw_len,    len);
+//	desc_write(desc, hw_mode,   mode | len);
+//	desc_write(desc, sw_token,  token);
+//	desc_write(desc, sw_buffer, buffer);
+//	desc_write(desc, sw_len,    len);
+
+	return allowed;
+}
 
 /*
  *  @accessed_va: Virtual address of accessed word that belongs to the Ethernet
@@ -1011,38 +1046,6 @@ static void decrement_rho_nic_update_alpha(uint32_t bd_ptr, BOOL transmit, BOOL 
 		CLEAR_ACTIVE_CPPI_RAM(bd_ptr + 8);
 		CLEAR_ACTIVE_CPPI_RAM(bd_ptr + 12);
 	}
-
-	//This function only updates rho_nic for removal. is_queue_secure updates
-	//rho_nic for addition.
-	if (!transmit && !add)
-		decrement_rho_nic(bd_ptr);
-}
-
-/*
- *	@bd_ptr: Physical address of buffer the descriptor that is added or removed
- *	from the receive queue.
- *
- *	@add: True if the buffer descriptor is added to the receive queue and false
- *	otherwise.
- *
- *	Decrements rho_nic and resets recv_bd_nr_blocks for the buffer descriptor
- *	at @bd_ptr.
- */
-static void decrement_rho_nic(uint32_t bd_ptr)
-{
-	uint32_t bp = get_buffer_pointer(bd_ptr);
-	uint32_t start_bl = bp >> 12, end_bl, update;
-
-	end_bl = start_bl + recv_bd_nr_blocks[(bd_ptr - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] - 1;
-	recv_bd_nr_blocks[(bd_ptr - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] = 0;
-
-	dmmu_entry_t *e = get_bft_entry_by_block_idx(start_bl);
-	e->dev_refcnt--;
-
-	if (start_bl != end_bl) {
-		e = get_bft_entry_by_block_idx(end_bl);
-		e->dev_refcnt--;
-	}
 }
 
 /*
@@ -1125,11 +1128,6 @@ static BOOL is_queue_secure(uint32_t bd_ptr, BOOL transmit)
 	//can be recorded as given to the NIC (rho_nic and recv_bd_nr_blocks) and
 	//manipulated to have correctly configured bits.
 
-	//h).
-	if (!transmit && !no_overflow_and_updated_rho_nic(bd_ptr)) {
-		printf("STH CPSW ERROR: Too many buffer descriptors in new queue addresses the same memory block for queue starting at %x. Limit is %d.\n", bd_ptr, MAX_RHO_NIC);
-		return FALSE;
-	}
 	//i).
 	if (transmit) {
 		set_and_clear_word_on_sop_or_eop(bd_ptr, FLAGS, OWNER, 0, SOP_BD);		//Sets Owner bit on SOP.
@@ -1558,73 +1556,7 @@ static BOOL is_data_buffer_secure(uint32_t bd_ptr, BOOL transmit)
 static BOOL is_secure_linux_memory(BOOL transmit, uint32_t start_bl, uint32_t end_bl)
 {
 	uint32_t current_bl;
-	for (current_bl = start_bl; current_bl <= end_bl; current_bl++) {
-		if (is_executable_block(current_bl)) {
-			dmmu_entry_t *e = get_bft_entry_by_block_idx(current_bl);
-			printf("\t addr %x executable reference %d\n", (current_bl << 12), e->x_refcnt);
-
-			print_all_pointing_L1(current_bl << 12, 0xfffff000);
-			print_all_pointing_L2(current_bl << 12, 0xfffff000);
-		}
-		if (transmit) {
-			//The type of the block is not L1, L2 or D.
-			if (!(is_L1_or_L2_block(current_bl) || is_D_block(current_bl)))
-				return FALSE;
-		} else {
-			//The type of the block is either not D, or it is of type D but executable.
-			if (!is_D_block(current_bl) || is_executable_block(current_bl))
-				return FALSE;
-		}
-	}
-
-	//The blocks address only allowed RAM and therefore are there no security issues.
 	return TRUE;
-}
-
-/*
- *	@bl: Block index of the block whose type is to be checked.
- *
- *	@return: True if and only if the block with index @bl is of type L1 or L2.
- */
-static BOOL inline is_L1_or_L2_block(uint32_t bl)
-{
-	dmmu_entry_t *e = get_bft_entry_by_block_idx(bl);
-
-	if (e->type == PAGE_INFO_TYPE_L1PT || e->type == PAGE_INFO_TYPE_L2PT)
-		return TRUE;
-	else
-		return FALSE;
-}
-
-/*
- *	@bl: Block index of the block that shall be checked to be of type D.
- *
- *	@return: True if and only if the block with index @bl is of type D.
- */
-static BOOL inline is_D_block(uint32_t bl)
-{
-	dmmu_entry_t *e = get_bft_entry_by_block_idx(bl);
-
-	if (e->type == PAGE_INFO_TYPE_DATA)
-		return TRUE;
-	else
-		return FALSE;
-}
-
-/*
- *	@bl: Block index of the block whose execute permissions is to be checked.
- *
- *	@return: True if and only if the block with index @bl is mapped by the MMU
- *	as executable.
- */
-static BOOL inline is_executable_block(uint32_t bl)
-{
-	dmmu_entry_t *e = get_bft_entry_by_block_idx(bl);
-
-	if (e->x_refcnt > 0)
-		return TRUE;
-	else
-		return FALSE;
 }
 
 /*
@@ -1661,94 +1593,6 @@ static bd_overlap type_of_cppi_ram_access_overlap(uint32_t accessed_address, uin
 			bd_ptr = get_next_descriptor_pointer(bd_ptr);
 
 	return NO_OVERLAP;
-}
-
-/*
- *	@bd_ptr: Physical address of the first buffer descriptor in a reception
- *	queue to be given to the NIC.
- *
- *	@return: If there is no entry in rho_nic that is overflowing as a result of
- *	updating rho_nic by giving the queue to the NIC, rho_nic and
- *	recv_bd_nr_blocks are updated and true is returned. If some entry would
- *	overflow as a result of an update, rho_nic nor recv_bd_nr_blocks are
- *	updated and false is returned.
- */
-static BOOL no_overflow_and_updated_rho_nic(uint32_t bd_ptr)
-{
-	uint32_t initial_bd_ptr = bd_ptr, overflow_bd_ptr = 0;
-
-	while (bd_ptr && !overflow_bd_ptr) {
-		//1. Identify which blocks the buffer descriptor addresses.
-		uint32_t buffer_pointer = get_buffer_pointer(bd_ptr);
-		uint32_t start_bl = buffer_pointer >> 12;
-		uint32_t end_bl = (buffer_pointer + get_rx_buffer_length(bd_ptr) - 1) >> 12;
-
-		//2. Check overflow of rho_nic (reference counter of NIC/devices) for
-		//first addressed block.
-		dmmu_entry_t *e1 = get_bft_entry_by_block_idx(start_bl);
-		if (e1->dev_refcnt == MAX_RHO_NIC)
-			overflow_bd_ptr = bd_ptr;	//Incrementing max value is an error.
-
-		//3. Check if the buffer descriptor addresses a second block. A
-		//reception buffer descriptor can address at most two blocks.
-		dmmu_entry_t *e2;
-		if (start_bl != end_bl) {
-			e2 = get_bft_entry_by_block_idx(end_bl);
-			if (e2->dev_refcnt == MAX_RHO_NIC)
-				overflow_bd_ptr = bd_ptr;	//Incrementing max value is an error.
-		}
-
-		//4. If no overflow will occur by updating rho_nic, rho_nic is updated.
-		if (!overflow_bd_ptr)
-			e1->dev_refcnt++;
-		if (!overflow_bd_ptr && start_bl != end_bl)
-			e2->dev_refcnt++;
-
-		//5. Update recv_bd_nr_blocks.
-		recv_bd_nr_blocks[(bd_ptr - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] = end_bl - start_bl + 1;
-
-		//6. Process next buffer descriptor.
-		bd_ptr = get_next_descriptor_pointer(bd_ptr);
-	}
-
-	//If there was an overflow, then the update of rho_nic must be reversed.
-	//This means that all buffer descriptors up to but excluding the one
-	//causing the overflow (which did not update rho_nic) must be processed to
-	//decrement rho_nic.
-	if (overflow_bd_ptr) {
-		bd_ptr = initial_bd_ptr;
-
-		while (bd_ptr != overflow_bd_ptr) {
-			//1. Identify which blocks the buffer descriptor addresses.
-			uint32_t buffer_pointer = get_buffer_pointer(bd_ptr);
-			uint32_t start_bl = buffer_pointer >> 12;
-			uint32_t end_bl = (buffer_pointer + get_rx_buffer_length(bd_ptr) - 1) >> 12;
-
-			//2. Decrement rho_nic (reference counter of NIC/devices) for first
-			//addressed block.
-			dmmu_entry_t *e1 = get_bft_entry_by_block_idx(start_bl);
-			e1->dev_refcnt--;
-
-			//3. Check if the buffer descriptor addresses a second block. A
-			//reception buffer descriptor can address at most two blocks.
-			if (start_bl != end_bl) {
-				dmmu_entry_t *e2 = get_bft_entry_by_block_idx(end_bl);
-				e2->dev_refcnt--;
-			}
-
-			//4. Reset recv_bd_nr_blocks.
-			recv_bd_nr_blocks[(bd_ptr - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2] = 0;
-
-			//5. Process next buffer descriptor.
-			bd_ptr = get_next_descriptor_pointer(bd_ptr);
-		}
-
-		//Overflow and rho_nic is not updated. False is therefore returned.
-		return FALSE;
-	}
-	//No overflow and updated rho_nic. True is therefore returned.
-	else
-		return TRUE;
 }
 
 /*
