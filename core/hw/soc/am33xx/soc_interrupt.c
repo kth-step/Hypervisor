@@ -50,7 +50,7 @@ static volatile intc_registers *intc = 0;
 					  uint32_t r2)
 {
 	printf
-	    ("HYPERVISOR default_handler (Default Interrupt Handler) %x:%x:%x\n",
+	    ("HYPERVISOR default_handler (Default Interrupt Handler) %d: 0x%x: 0x%x\n",
 	     r0, r1, r2);
 	return RV_OK;
 }
@@ -182,6 +182,10 @@ void soc_interrupt_init()
 	//Enable interrupts for DMTIMER2 for Linux.
 	cpu_irq_set_enable(68, TRUE);
 	cpu_irq_set_handler(68, (cpu_callback) irq_handler);
+
+	//Enable interrupts for I2C0INT for Linux.
+	cpu_irq_set_enable(70, TRUE);
+	cpu_irq_set_handler(70, (cpu_callback) irq_handler);
 
 /*
 //////////////

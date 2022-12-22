@@ -41,9 +41,11 @@ void map_section(void *page_dir, uint32_t va, uint32_t pa, BOOL cache)
 
 addr_t pt_get_empty_l2()
 {
-	if ((l2_index_p * 0x400) > 0x8000)	// Set max size of L2 pages
+	if ((l2_index_p * 0x400) > 0x8000) {	// Set max size of L2 pages
+		printf("Hypervisor: No free l2 page tables!\n");
+		while (1);
 		return 0;
-	else {
+	} else {
 		addr_t index = l2_index_p * 0x400;
 		memset((uint32_t *) ((uint32_t) slpt_va + index), 0, 0x400);
 		uint32_t l2_base_add = (uint32_t) (GET_PHYS(slpt_va) + index);
@@ -174,3 +176,36 @@ uint32_t pt_create_coarse(addr_t * pt, addr_t va, addr_t pa, uint32_t size, uint
 	}
 	return table2_pa;
 }
+
+/*
+#define SECTION_SIZE 0x00100000
+void pt_create_coarses(addr_t * pt, uint32_t va, uint32_t pa, uint32_t size, uint32_t mem_type) {
+	if (size == 0)
+		return;
+
+	uint32_t first_mb = va >> 20;
+	uint32_t last_mb = (va + size - 1) >> 20;
+	uint32_t number_of_mbs = last_mb - first_mb + 1;
+	uint32_t first_mb_size = number_of_mbs == 1 ? size : va & 0xFFF00000 + SECTION_SIZE - va;
+	uint32_t last_mb_size = size - first_mb_size - (number_of_mbs - 2)*SECTION_SIZE;
+
+	//Mapping first MB.
+	pt_create_coarse(pt, (addr_t) va, (addr_t) pa, first_mb_size, mem_type);
+	if (number_of_mbs == 1)
+		return;
+
+	va = va + first_mb_size;
+	pa = pa + first_mb_size;
+
+	//Mapping intermediate MBs.
+	uint32_t mb;
+	for (mb = 2; mb < number_of_mbs; mb++) {
+		pt_create_coarse(pt, (addr_t) va, (addr_t) pa, SECTION_SIZE, mem_type);
+		va = va + SECTION_SIZE;
+		pa = pa + SECTION_SIZE;
+	}
+
+	//Mapping last MB.
+	pt_create_coarse(pt, (addr_t) va, (addr_t) pa, last_mb_size, mem_type);
+}
+*/

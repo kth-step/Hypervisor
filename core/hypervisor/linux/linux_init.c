@@ -247,7 +247,8 @@ void init_linux_page()	//NOT INVOKED!!!
 	}
 }
 
-uint32_t linux_l2_index_p = 0;
+//uint32_t linux_l2_index_p = 0;
+uint32_t linux_l2_index_p = 2;
 
 //Get physical address of next level-2 page table of 1kB, which is in reserved
 //memory after the Linux allocated memory at
@@ -270,7 +271,7 @@ addr_t linux_pt_get_empty_l2()
 		while (1) ;	//hang
 		return 0;
 	} else {
-		//Each L2 table i 1kB = 256 level-2 desctiptors.
+		//Each L2 table is 0x400 Bytes = 1024 Bytes = 1kB = 256 level-2 desctiptors.
 		addr_t index = linux_l2_index_p * 0x400;
 		// memset((uint32_t *) ((uint32_t) va_l2_pt + index), 0, 0x400);
 		//Physical address of L2 table, 1kB aligned.
@@ -279,9 +280,12 @@ addr_t linux_pt_get_empty_l2()
 		// assuming that va_l2_pt is 4kb aligned
 		//Increment global pointer.
 		linux_l2_index_p++;
-		if ((linux_l2_index_p & 0x2) == 0x2)						//If pointer has passed two page tables, increment it by two
-			linux_l2_index_p = (linux_l2_index_p & (~0x3)) + 4;		//more, since linux uses two page tables more for metadata.
+//		if ((linux_l2_index_p & 0x2) == 0x2)						//If pointer has passed two page tables, increment it by two
+//			linux_l2_index_p = (linux_l2_index_p & (~0x3)) + 4;		//more, since linux uses two page tables more for metadata.
+		if ((linux_l2_index_p & 0x3) == 0x0)						//Multiple of four. Increment by two to get to the hardware
+			linux_l2_index_p = linux_l2_index_p + 2;				//page tables, skipping the Linux meta data.
 
+//printf("linux_pt_get_empty_l2: 0x%x\n", l2_base_add);
 		return l2_base_add;
 	}
 }
@@ -510,7 +514,7 @@ void linux_init_dmmu()
 	//??????????????????????????????????????????????????????????????????????????
 	//??????????????????????????????????????????????????????????????????????????
 	//Makes 0x9FE00000 mapped to 1MB section at physical address 0x9FE00000.
-	dmmu_map_L1_section(0x9FE00000, 0x9FE00000, sect_attrs);
+//	dmmu_map_L1_section(0x9FE00000, 0x9FE00000, sect_attrs);
 	//dmmu_map_L1_section(0xFA400000, 0x87000000, sect_attrs);
 #endif
 	/*special mapping for start address */
@@ -622,8 +626,59 @@ void linux_init_dmmu()
 			printf("\n\tCould not map L2 PT: %d %x\n", error, i);
 	}
 */
+	uint32_t ret;
 
-	uint32_t offset, ret;
+	/*special mapping for start address */
+	//Get physical address of next L2 page table of 1kB.
+	table2_pa = linux_pt_get_empty_l2();	/*pointer to private L2PTs in guest */
+	//Reads 512 level-2 descriptors stored in 2kB memory and updates DMMU data
+	//structures accordingly.
+	ret = dmmu_create_L2_pt(table2_pa & L2_BASE_MASK);
+	if (ret) {
+		printf("Hypervisor initialization5: table2_pa = 0x%x, ret = 0x%x\n", table2_pa, ret);
+		while (1);
+	}
+	//Physical address guest_pstart is mapped by level-2 table at
+	//table2_pa. This is the identity mapping used for Linux boot.
+	ret = dmmu_l1_pt_map(guest_pstart, table2_pa, page_attrs);
+	if (ret) {
+		printf("Hypervisor initialization6: table2_pa = 0x%x, ret = 0x%x\n", table2_pa, ret);
+		while (1);
+	}
+
+	//Physical start address of guest, only first kB is used.
+	uint32_t page_pa = guest_pstart;	//0x8100_0000.
+
+	//table2_pa is 1kB aligned. Gets [2,3] index of table2_pa.
+	table2_idx = (table2_pa - (table2_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
+	//0x200, or 0x300 = 512, or 768.
+	table2_idx *= 256; /*256 pages per L2PT*/
+	//0x300, or 0x400 = 768, or 1024.
+	uint32_t end = table2_idx + 256;
+	//Iterates over all 256 entries of the level-2 page table at table2_pa to
+	//the 256 consecutive 4kB blocks (1MB contiguous memory) starting at the
+	//start of the guest page_pa = guest_pstart.
+	for(i = table2_idx; i < end; i++, page_pa += 0x1000) {
+   		if ((i % 256) >= 4 && (i % 256) <= 7) {
+			//Read-only for unprivileged Linux for page tables.
+			uint32_t ro_attrs = 0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
+			//Maps level-2 entry at i-th index of level-2 page table at physical
+			//address table2_pa to physical 4kB page at page_pa.
+			ret = dmmu_l2_map_entry(table2_pa, i, page_pa, ro_attrs);
+			if (ret) {
+				printf("Hypervisor initialization7: table2_pa = 0x%x, ret = 0x%x, i = %d\n", table2_pa, ret, i);
+				while (1);
+			}
+		} else {
+			ret = dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
+			if (ret) {
+				printf("Hypervisor initialization8: table2_pa = 0x%x, ret = 0x%x, i = %d\n", table2_pa, ret, i);
+				while (1);
+			}
+		}
+	}
+
+	uint32_t offset;
 	/*Can't map from offset = 0 because start addresses contains page tables */
 	/*Maps PA-PA for boot */
 
@@ -647,6 +702,12 @@ void linux_init_dmmu()
 		//Physical address of 1kB level-2 page table not in use with 256
 		//entries. 1kB aligned.
 		table2_pa = linux_pt_get_empty_l2(); /*pointer to private L2PTs in guest*/
+		uint32_t l2_pa = pa_to_l2_base_pa(guest_pstart + offset);
+
+if (table2_pa != l2_pa) {
+printf("Hypervisor linux_init.c: pa_to_l2_base_pa is incorrect: pa = 0x%x, table2_pa = 0x%x, l2_pa = 0x%x.\n", guest_pstart + offset, table2_pa, l2_pa);
+while (1);
+}
 
 		//Updates DMMU data structures to reflect the creation of the new
 		//level-2 page table, by considering 512 entries, while only space for
@@ -662,7 +723,7 @@ void linux_init_dmmu()
 		//used for Linux boot.
 		ret = dmmu_l1_pt_map(guest_pstart + offset, table2_pa, page_attrs);
 		if (ret) {
-			printf("Hypervisor initialization2: table2_pa = 0x%x, ret = 0x%x, offset = 0x%x\n", table2_pa, ret, offset);
+			printf("Hypervisor initialization2: table2_pa = 0x%x, ret = %d, offset = 0x%x\n", table2_pa, ret, offset);
 			while (1);
 		}
 
@@ -672,11 +733,11 @@ void linux_init_dmmu()
 //
 		//L2_BASE_MASK = 0xFFFF_F000 = clears 12 LSBs.
 		//MMU_L1_PT_SHIFT = 10.
-		//table2_pa is 1kB aligned. Gets [0,3] index of table2_pa.
+		//table2_pa is 1kB aligned. Gets [2,3] index of table2_pa.
 		table2_idx = (table2_pa - (table2_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
-		//[0, 0x100, 0x200, 0x300] = [0, 256, 512, 768].
+		//[0x200, 0x300] = [512, 768].
 		table2_idx *= 0x100; /*256 pages per L2PT*/
-		//0x100 = 256. Gives [256, 512, 768, 1024].
+		//0x100 = 256. Gives [768, 1024].
 		uint32_t end = table2_idx + 0x100;
 		//Current 1MB physical block to be mapped by a virtual address.
 		uint32_t page_pa = guest_pstart + offset;
@@ -689,15 +750,16 @@ void linux_init_dmmu()
 
 			//Maps level-2 entry at i-th index of level-2 page table at physical
 			//address table2_pa to physical 4kB page at page_pa.
-			if (page_pa <= guest_pstart + (curr_vm->config->initial_kernel_ex_va_top - guest_vstart)) {	//Executable code.
+//			if (page_pa <= guest_pstart + (curr_vm->config->initial_kernel_ex_va_top - guest_vstart)) {	//Executable code.
 				//page table at physical address table2_pa maps to page with
 				//physical address page_pa = guest_pstart + offset + m*0x0000_1000
+//				printf("Hypervisor initialization calls dmmu_l2_map_entry: table2_pa = 0x%x, i = 0x%x, offset = 0x%x\n", table2_pa, i, offset);
 				ret = dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
 				if (ret) {
 					printf("Hypervisor initialization3: table2_pa = 0x%x, ret = 0x%x, offset = 0x%x\n", table2_pa, ret, offset);
 					while (1);
 				}
-			} else {																	//Not executable code.
+/*			} else {																	//Not executable code.
 				ret = dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs_xn);
 				if (ret) {
 					printf("Hypervisor initialization4: table2_pa = 0x%x, ret = 0x%x, offset = 0x%x\n", table2_pa, ret, offset);
@@ -707,63 +769,9 @@ void linux_init_dmmu()
 				if (e->x_refcnt > 0)
 					printf("\t %x ref_xnt > 0 %d\n", (page_pa >> 12), e->x_refcnt);
 			}
-
+*/
 		}
 	}
-
-	/*special mapping for start address */
-	//Get physical address of next L2 page table of 1kB.
-	table2_pa = linux_pt_get_empty_l2();	/*pointer to private L2PTs in guest */
-	//Reads 512 level-2 descriptors stored in 2kB memory and updates DMMU data
-	//structures accordingly.
-	ret = dmmu_create_L2_pt(table2_pa & L2_BASE_MASK);
-	if (ret != 0 && ret != ERR_MMU_ALREADY_L2_PT) {
-		printf("Hypervisor initialization5: table2_pa = 0x%x, ret = 0x%x\n", table2_pa, ret);
-		while (1);
-	}
-	//Physical address guest_pstart is mapped by level-2 table at
-	//table2_pa. This is the identity mapping used for Linux boot.
-	ret = dmmu_l1_pt_map(guest_pstart, table2_pa, page_attrs);
-	if (ret) {
-		printf("Hypervisor initialization6: table2_pa = 0x%x, ret = 0x%x\n", table2_pa, ret);
-		while (1);
-	}
-//
-//printf("HV Linux init: table2_pa = %x\n", table2_pa);
-//	dmmu_l1_pt_map(guest_vstart, table2_pa, page_attrs);
-//
-	//Physical start address of guest, only first kB is used.
-	uint32_t page_pa = guest_pstart;	//0x8100_000.
-
-	//table2_pa is 1kB aligned. Gets [0,3] index of table2_pa.
-	table2_idx = (table2_pa - (table2_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
-	//0, 0x100, 0x200, or 0x300 = 0, 256, 512, or 768.
-	table2_idx *= 0x100; /*256 pages per L2PT*/
-	//0x100, 0x200, 0x300, or 0x400 = 256, 512, 768, or 1024.
-	uint32_t end = table2_idx + 0x100;
-	//Iterates over all 256 entries of the level-2 page table at table2_pa to
-	//the 256 consecutive 4kB blocks (1MB contiguous memory) starting at the
-	//start of the guest page_pa = guest_pstart.
-	for(i = table2_idx; i < end; i++, page_pa+=0x1000) {
-   		if ((i % 256) >= 4 && (i % 256) <= 7) {
-			//Read-only for unprivileged Linux.
-			uint32_t ro_attrs = 0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
-			//Maps level-2 entry at i-th index of level-2 page table at physical
-			//address table2_pa to physical 4kB page at page_pa.
-			ret = dmmu_l2_map_entry(table2_pa, i, page_pa, ro_attrs);
-			if (ret) {
-				printf("Hypervisor initialization7: table2_pa = 0x%x, ret = 0x%x, i = %d\n", table2_pa, ret, i);
-				while (1);
-			}
-		} else {
-			ret = dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
-			if (ret) {
-				printf("Hypervisor initialization8: table2_pa = 0x%x, ret = 0x%x, i = %d\n", table2_pa, ret, i);
-				while (1);
-			}
-		}
-	}
-//print_specific_L2();
 }
 #endif
 

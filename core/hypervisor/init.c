@@ -357,7 +357,7 @@ curr_vm->guest_info.page_offset = 0xC0000000;///////////////////////////////////
 	//observations) all data cache levels.
 	memory_commit();
 
-	printf("HV pagetable after guests initialization:\n");	// DEBUG
+//	printf("HV pagetable after guests initialization:\n");	// DEBUG
 	//    dump_mmu(flpt_va); // DEBUG
 
 	// We pin the L2s that can be created in the 32KB are of slpt_va
@@ -406,7 +406,7 @@ curr_vm->guest_info.page_offset = 0xC0000000;///////////////////////////////////
 	//space: Source = flpt_va. Destination = guest_pt_va (see library/uc/include/uclib_stdlib.h).
 	memcpy(guest_pt_va, flpt_va, 1024 * 16);
 
-	printf("vm_0 pagetable:\n");	// DEBUG    
+//	printf("vm_0 pagetable:\n");	// DEBUG    
 	//    dump_mmu(guest_pt_va); // DEBUG
 
 	/* activate the guest page table */
@@ -452,7 +452,7 @@ curr_vm->guest_info.page_offset = 0xC0000000;///////////////////////////////////
 		dmmu_map_L1_section(guest_vstart + offset, guest_pstart + offset, attrs);
 	}
 #endif
-	printf("vm_0 pagetable after initialization:\n");	// DEBUG
+//	printf("vm_0 pagetable after initialization:\n");	// DEBUG
 	//dump_mmu(guest_pt_va); // DEBUG
 
 	//Invalidates entire instruction TLB, and data TLB by ASID = 0.
@@ -548,7 +548,8 @@ void start_()
 	guests_init();
 	/*Test crypto */
 
-	printf("Hypervisor initialized2.0\n Entering Guest\n");
+	printf("Hypervisor initialized\n");
+	printf("Entering Guest\n");
 	//Start execution of guest.
 	start_guest();
 }

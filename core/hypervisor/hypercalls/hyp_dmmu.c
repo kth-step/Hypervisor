@@ -71,7 +71,7 @@ void dump_L1pt(virtual_machine * curr_vm) {
 
 void dump_L2pt(addr_t l2_base, virtual_machine * curr_vm) {
 	uint32_t l2_idx, l2_desc_pa_add, l2_desc_va_add, l2_desc;
-	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
+	for (l2_idx = 512; l2_idx < 1024; l2_idx++) {
 		l2_desc_pa_add = L2_DESC_PA(l2_base, l2_idx);
 		l2_desc_va_add = mmu_guest_pa_to_va(l2_desc_pa_add, curr_vm->config);
 		l2_desc = *((uint32_t *) l2_desc_va_add);
@@ -110,7 +110,7 @@ void hypercall_dyn_free_pgd(addr_t * pgd_va)
 #ifdef DEBUG_MMU_L1_Free
 	printf("\n\t\t\tHypercall FREE PGD\n\t\t pgd:%x \n", pgd_va);
 #endif
-	uint32_t i, clean_va;
+	uint32_t i, clean_va, err;
 
 	uint32_t page_offset = curr_vm->guest_info.page_offset;
 
@@ -140,20 +140,23 @@ void hypercall_dyn_free_pgd(addr_t * pgd_va)
 	attrs |= MMU_AP_USER_RW << MMU_L2_SMALL_AP_SHIFT;
 
 	for (i = l2_entry_idx; i < l2_entry_idx + 4; i++) {
-		if (dmmu_l2_unmap_entry(table2_pa & L2_BASE_MASK, i)) {
-			printf("\n\tCould not unmap L2 entry in new PGD\n");
+		if (err = dmmu_l2_unmap_entry(table2_pa & L2_BASE_MASK, i)) {
+			printf("\n\tCould not unmap L2 entry in new PGD, err = %d\n", err);
 			while (1);
 		}
 	}
 
-	if (dmmu_unmap_L1_pt(LINUX_PA(pgd_va))) {
-		printf("\n\tCould not unmap L1 PT in free pgd\n");
+	if (err = dmmu_unmap_L1_pt(LINUX_PA((addr_t) pgd_va))) {
+		printf("\n\thypercall_dyn_free_pgd0: Could not unmap L1 PT in free pgd at pgd_pa = 0x%x, pgd_va = 0x%x, err = %d\n", LINUX_PA((addr_t) pgd_va), pgd_va, err);
+		printf("curr_vm->config->firmware->vstart = 0x%x\n", curr_vm->config->firmware->vstart);
+		printf("curr_vm->config->firmware->pstart = 0x%x\n", curr_vm->config->firmware->pstart);
+		printf("pa = 0x%x\n", (addr_t) pgd_va - (addr_t) curr_vm->config->firmware->vstart + (addr_t) curr_vm->config->firmware->pstart);
 		while (1);
 	}
 
 	for (i = l2_entry_idx; i < l2_entry_idx + 4; i++, page_pa += 0x1000) {
-		if (L2_MAP(table2_pa & L2_BASE_MASK, i, page_pa, attrs)) {
-			printf("\n\tCould not map L2 entry in new pgd\n");
+		if (err = L2_MAP(table2_pa & L2_BASE_MASK, i, page_pa, attrs)) {
+			printf("\n\tCould not map L2 entry in new pgd, err = %d\n", err);
 			while (1);
 		}
 
@@ -255,7 +258,7 @@ void hypercall_dyn_new_pgd(addr_t * pgd_va)
 	clean_and_invalidate_cache();
 	if ((err = dmmu_create_L1_pt(LINUX_PA((addr_t) pgd_va)))) {
 		printf("\n\tCould not create L1 pt in new pgd in %x err:%d\n", LINUX_PA((addr_t) pgd_va), err);
-		printf("\n\tMaster PGT:%d\n", LINUX_PA((addr_t) master_pgd_va));
+		printf("\n\tMaster PGT:%x\n", LINUX_PA((addr_t) master_pgd_va));
 		print_all_pointing_L1(LINUX_PA((addr_t) pgd_va), 0xfff00000);
 		while (1) ;
 	}
@@ -272,6 +275,7 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 #ifdef DEBUG_SET_PMD
 	printf("*** Hypercall set_pmd: va:0x%x pa:0x%x\n", pmd, LINUX_PA((addr_t) pmd));
 #endif
+	uint32_t err;
 	uint32_t switch_back = 0;
 	addr_t l1_entry, *l1_pt_entry_for_desc;
 	addr_t curr_pgd_pa, *pgd_va, attrs;
@@ -295,7 +299,7 @@ void hypercall_dyn_set_pmd(addr_t * pmd, uint32_t desc)
 	addr_t master_pgd_va = (curr_vm->config->pa_initial_l1_offset + page_offset);	//Virtual base address of Linux l1-page table.
 
 	/*Switch to the page table that we want to modify if we are not in it */
-	if ((LINUX_PA((addr_t) pmd & L1_BASE_MASK)) != (curr_pgd_pa)) {	//If l1-page table to modify is not the current one in use.
+	if ((LINUX_PA((addr_t) pmd & L1_BASE_MASK)) != curr_pgd_pa) {	//If l1-page table to modify is not the current one in use.
 		/*This means that we are setting a pmd on another pgd, current
 		 * API does not allow that, so we have to switch the physical ttb0
 		 * back and forth */
@@ -366,7 +370,7 @@ while (1);
 	//l2pt_pa & L2_BASE_MASK = l2pt_pa & 0xFFFF_F000 = base address of page containing the page table at l2pt_pa.
 	//l2pt_pa - (l2pt_pa & L2_BASE_MASK) = byte offset of l2 page table from start of page containing the l2 page table.
 	//table2_idx = number of kB offset of l2 page table from start of page containing the l2 page table.
-	uint32_t table2_idx = (l2pt_pa - (l2pt_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT;
+	uint32_t table2_idx = (l2pt_pa - (l2pt_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT; //2 or 3
 	//If table2_idx = 0, then l2 page table is located at beginning then no l2
 	//entries before it, and if 1, then 1024 l2 entries before it.
 	table2_idx *= 0x100;	/*256 pages per L2PT */
@@ -384,22 +388,42 @@ while (1);
 #ifdef DEBUG_SET_PMD
 		printf("\n\tCounter :%d\n",bft_entry->refcnt);
 #endif
-		if (dmmu_l2_unmap_entry((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx)) {
-			printf("\n\tCould not unmap L2 entry in set PMD\n");
+
+		uint32_t l2_desc_pa_add = L2_IDX_TO_PA((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx);
+		//Virtual address of level-2 descriptor via the address space used by the
+		//hypervisor to read Linux memory.
+		uint32_t l2_desc_va_add = mmu_guest_pa_to_va(l2_desc_pa_add, (curr_vm->config));
+		//Read level-2 descriptor.
+		uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
+
+		if (err = dmmu_l2_unmap_entry((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx)) {
+			printf("\n\tCould not unmap L2 entry in set PMD, err = %d\n", err);
 			while (1);
 		}
-		uint32_t desc_pa = MMU_L2_SMALL_ADDR(desc);
+//		uint32_t desc_pa = MMU_L2_SMALL_ADDR(desc);
+		uint32_t desc_pa = MMU_L2_SMALL_ADDR(l2_desc);
 		uint32_t ro_attrs = 0xE | (MMU_AP_USER_RO << MMU_L2_SMALL_AP_SHIFT);
 
-		if (L2_MAP((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx, desc_pa, ro_attrs)) {
-			printf("\n\tCould not map L2 entry in set PMD\n");
+		err = L2_MAP((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx, desc_pa, ro_attrs);
+		if (err) {
+			printf("\n\thypercall_dyn_set_pmd0: Could not map L2 entry in set PMD, err = %d\n", err);
 			while (1);
 		}
 	}
-	uint32_t err;
+
 	if (desc != 0) {	//Not unmap l1 entry.
-		if ((err = (dmmu_create_L2_pt(MMU_L2_SMALL_ADDR(desc))))) {
-			printf("\n\tCould not create L2PT in set pmd at %x %d\n", MMU_L2_SMALL_ADDR(desc), err);
+		err = dmmu_create_L2_pt(MMU_L2_SMALL_ADDR(desc));
+		if (err == ERR_MMU_REFERENCED) {
+			invalidate_l2_entries_with_invalid_aps(MMU_L2_SMALL_ADDR(desc) & L2_BASE_MASK);
+			remove_aps_l1(MMU_L2_SMALL_ADDR(desc) & L2_BASE_MASK);
+			err = dmmu_create_L2_pt(MMU_L2_SMALL_ADDR(desc) & L2_BASE_MASK);	//Mark identified L2-page table (from l1-entry) as L2.
+			if (err) {
+				printf("hypercall_dyn_set_pmd0.5: err = %d with l2pt_hw_entry_pa = 0x%x\n", err, MMU_L2_SMALL_ADDR(desc) & L2_BASE_MASK);
+				print_all_pointing_L2(MMU_L2_SMALL_ADDR(desc) & L2_BASE_MASK, 0xFFFFFFFF);
+				while (1);
+			}
+		} else if (err != SUCCESS_MMU && err != ERR_MMU_ALREADY_L2_PT) {
+			printf("hypercall_dyn_set_pmd1: Could not create L2PT in set pmd at %x, err = %d\n", MMU_L2_SMALL_ADDR(desc), err);
 
 #ifdef DEBUG_MMU_SET_L1
 			printf("Hypercall set PMD pmd:%x val:%x \n", pmd, desc);
@@ -427,13 +451,17 @@ while (1);
 		dsb();
 		isb();
 
-		if (dmmu_unmap_L1_pageTable_entry(virt_transl_for_pmd)) {
-			printf("\n\tCould not unmap L1 entry in set PMD\n");
-			while (1);
+		if (err = dmmu_unmap_L1_pageTable_entry(virt_transl_for_pmd)) {
+			if (err != ERR_MMU_ENTRY_UNMAPPED) {	//Not already unmapped.
+				printf("\n\thypercall_dyn_set_pmd2: Could not unmap L1 entry in set PMD0, err = %d\n", err);
+				while (1);
+			}
 		}
-		if (dmmu_unmap_L1_pageTable_entry(virt_transl_for_pmd + SECTION_SIZE)) {
-			printf("\n\tCould not unmap L1 entry in set PMD\n");
-			while (1);
+		if (err = dmmu_unmap_L1_pageTable_entry(virt_transl_for_pmd + SECTION_SIZE)) {
+			if (err != ERR_MMU_ENTRY_UNMAPPED) {	//Not already unmapped.
+				printf("\n\thypercall_dyn_set_pmd3: Could not unmap L1 entry in set PMD1, err = %d\n", err);
+				while (1);
+			}
 		}
 
 #ifdef AGGRESSIVE_FLUSHING_HANDLERS
@@ -442,17 +470,19 @@ while (1);
 
 		/*We need to make the l2 page RW again so that
 		 *OS can reuse the address */
-		if (dmmu_l2_unmap_entry((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx)) {
-			printf("\n\tCould not unmap L2 entry in set PMD\n");
+		if (err = dmmu_l2_unmap_entry((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx)) {
+			printf("\n\thypercall_dyn_set_pmd4: Could not unmap L2 entry in set PMD, err = %d\n", err);
 			while (1);
 		}
-		if (dmmu_unmap_L2_pt(MMU_L2_SMALL_ADDR((uint32_t) * pmd))) {
-			printf("\n\tCould not unmap L2 pt in set PMD\n");
-			while (1);
+		if (err = dmmu_unmap_L2_pt(MMU_L2_SMALL_ADDR((uint32_t) * pmd))) {
+//			printf("\n\thypercall_dyn_set_pmd5: Could not unmap L2 pt in set PMD, err = %d\n", err);
+//			print_all_pointing_L1(MMU_L2_SMALL_ADDR((uint32_t) * pmd), 0xFFFFFFFF);
+//			print_all_pointing_L2(MMU_L2_SMALL_ADDR((uint32_t) * pmd), 0xFFFFFFFF);
+//			while (1);
 		}
 
-		if (L2_MAP((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx, MMU_L2_SMALL_ADDR((uint32_t) * pmd), l2_rw_attrs)) {
-			printf("\n\tCould not map L2 entry in set PMD\n");
+		if (err = L2_MAP((uint32_t) l2pt_pa & L2_BASE_MASK, table2_idx + l2_idx, MMU_L2_SMALL_ADDR((uint32_t) * pmd), l2_rw_attrs)) {
+			printf("\n\thypercall_dyn_set_pmd6: Could not map L2 entry in set PMD, err = %d\n", err);
 			while (1);
 		}
 
@@ -471,27 +501,38 @@ while (1);
 
 		/*Flush entry */
 		//Virtual MB index to map to l2 page identified by l1-descriptor.
-		err = dmmu_l1_pt_map(virt_transl_for_pmd, MMU_L2_SMALL_ADDR(desc), attrs);
+//		err = dmmu_l1_pt_map(virt_transl_for_pmd, MMU_L2_SMALL_ADDR(desc), attrs);
+		err = dmmu_l1_pt_map(virt_transl_for_pmd, 0xFFFFFC00 & desc, attrs);
 		if (err) {
-			if (dmmu_unmap_L1_pageTable_entry(virt_transl_for_pmd)) {
-				printf("\n\thypercall_dyn_set_pmd1: Could not unmap L1 entry in set PMD\n");
+		printf("\n\thypercall_dyn_set_pmd7: Could not map L1 entry in set PMD, err = %d\n", err);
+			if (err = dmmu_unmap_L1_pageTable_entry(virt_transl_for_pmd)) {
+				printf("\n\thypercall_dyn_set_pmd8: Could not unmap L1 entry in set PMD2, err = %d\n", err);
 				while (1);
 			}
 
-			if (err = dmmu_l1_pt_map(virt_transl_for_pmd, MMU_L2_SMALL_ADDR(desc), attrs)) {
-				printf("hypercall_dyn_set_pmd1: Could not map L1 PT in set PMD err = %d, virt_transl_for_pmd = %x, pmd = 0x%x, pgd_va = 0x%x, pmd - pgd_va = 0x%x\n", err, virt_transl_for_pmd, pmd, pgd_va, pmd - pgd_va);
+//			if (err = dmmu_l1_pt_map(virt_transl_for_pmd, MMU_L2_SMALL_ADDR(desc), attrs)) {
+			printf("HYPERVISOR: hypercall_map_block2: START.\n");
+			err = dmmu_l1_pt_map(virt_transl_for_pmd, 0xFFFFFC00 & desc, attrs);
+			printf("HYPERVISOR: hypercall_map_block2: END.\n");
+			if (err) {
+				printf("hypercall_dyn_set_pmd9: Could not map L1 PT in set PMD err = %d, virt_transl_for_pmd = %x, pmd = 0x%x, pgd_va = 0x%x, pmd - pgd_va = 0x%x\n", err, virt_transl_for_pmd, pmd, pgd_va, pmd - pgd_va);
 				while (1);
 			}
 		}
-		err = dmmu_l1_pt_map(virt_transl_for_pmd + SECTION_SIZE, MMU_L2_SMALL_ADDR(desc) + 0x400, attrs);
+//		err = dmmu_l1_pt_map(virt_transl_for_pmd + SECTION_SIZE, MMU_L2_SMALL_ADDR(desc) + 0x400, attrs);
+		err = dmmu_l1_pt_map(virt_transl_for_pmd + SECTION_SIZE, (0xFFFFFC00 & desc) + 0x400, attrs);
 		if (err) {
-			if (dmmu_unmap_L1_pageTable_entry(virt_transl_for_pmd + SECTION_SIZE)) {
-				printf("\n\thypercall_dyn_set_pmd2: Could not unmap L1 entry in set PMD\n");
+			if (err = dmmu_unmap_L1_pageTable_entry(virt_transl_for_pmd + SECTION_SIZE)) {
+				printf("\n\thypercall_dyn_set_pmd10: Could not unmap L1 entry in set PMD3, err = %d\n", err);
 				while (1);
 			}
 
-			if (err = dmmu_l1_pt_map(virt_transl_for_pmd + SECTION_SIZE, MMU_L2_SMALL_ADDR(desc) + 0x400, attrs)) {
-				printf("hypercall_dyn_set_pmd2: Could not map L1 PT in set PMD err = %d, virt_transl_for_pmd = %x, pmd = 0x%x, pgd_va = 0x%x, pmd - pgd_va = 0x%x\n", err, virt_transl_for_pmd + SECTION_SIZE, pmd, pgd_va, pmd - pgd_va);
+//			if (err = dmmu_l1_pt_map(virt_transl_for_pmd + SECTION_SIZE, MMU_L2_SMALL_ADDR(desc) + 0x400, attrs)) {
+			printf("HYPERVISOR: hypercall_map_block4: START.\n");
+			err = dmmu_l1_pt_map(virt_transl_for_pmd + SECTION_SIZE, (0xFFFFFC00 & desc) + 0x400, attrs);
+			printf("HYPERVISOR: hypercall_map_block4: END.\n");
+			if (err) {
+				printf("hypercall_dyn_set_pmd11: Could not map L1 PT in set PMD err = %d, virt_transl_for_pmd = %x, pmd = 0x%x, pgd_va = 0x%x, pmd - pgd_va = 0x%x\n", err, virt_transl_for_pmd + SECTION_SIZE, pmd, pgd_va, pmd - pgd_va);
 				while (1);
 			}
 		}
@@ -547,26 +588,22 @@ printf("find_l2pt_entry_va: New va = 0x%x, desc = 0x%x\n", l2pt_linux_entry_va, 
 	return l2pt_linux_entry_va;
 }
 
-/*va is the virtual address of the page table entry for linux pages
- *the physical pages are located 0x800 below */
+/* va is the virtual address of the page table entry for linux pages
+ * the physical pages are located 0x800 = 2048 above */
 void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte, uint32_t phys_pte)
 {
+	uint32_t l1_pa;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pa);
+	uint32_t l1_va = l1_pa - curr_vm->config->firmware->pstart + curr_vm->config->firmware->vstart;
+
 #ifdef DEBUG_MMU
 	printf("Hypercall set PTE va:%x linux_pte:%x phys_pte:%x \n", l2pt_linux_entry_va, phys_pte, linux_pte);
 #endif
-///////////////////////
-//	print_l2_ap(linux_pte);
-///////////////////////
+
 	addr_t phys_start = curr_vm->config->firmware->pstart;
 	uint32_t page_offset = curr_vm->guest_info.page_offset;
-//printf("HYPERVISOR hypercall_dyn_set_pte: l2pt_linux_entry_va = 0x%x, linux_pte = 0x%x, phys_pte = 0x%x\n", l2pt_linux_entry_va, linux_pte, phys_pte);
 	uint32_t guest_size = curr_vm->config->firmware->psize;
-#if 0				/*Linux 3.10.1 */
-	uint32_t *l2pt_hw_entry_va =
-	    (addr_t *) ((addr_t) l2pt_linux_entry_va + 0x800);
-#else				/*Linux 2.6 */
-	uint32_t l2pt_hw_entry_va = (uint32_t) ((addr_t) l2pt_linux_entry_va - 0x800);
-#endif
+	uint32_t l2pt_hw_entry_va = (uint32_t) ((addr_t) l2pt_linux_entry_va + 0x800);
 	addr_t l2pt_hw_entry_pa = ((addr_t) l2pt_hw_entry_va - page_offset + phys_start);
 
 	/*Security Checks */
@@ -582,8 +619,7 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte, uin
 	if (phys_pte != 0) {	/*If 0, then its a remove mapping */
 		/*Check physical address */
 		if (!(pa >= (phys_start) && pa < (phys_start + guest_size))) {
-			printf("Address: %x\n", pa);
-			hyper_panic("Guest trying does not own pte physical address", 1);
+			printf("hypercall_dyn_set_pte0: Guest tries to map physical memory outside its region: PA = 0x%x\n", pa);
 			while (1);
 		}
 	}
@@ -601,8 +637,27 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte, uin
 //printf("HYPERVISOR REMAPS l2pt_linux_entry_va = %x, l2pt_hw_entry_pa = %x, entry_idx = %x, physical level-2 page table base address %x\n", l2pt_linux_entry_va, l2pt_hw_entry_pa & L2_BASE_MASK, entry_idx, MMU_L1_PT_ADDR(phys_pte));
 				dmmu_l2_unmap_entry(l2pt_hw_entry_pa & L2_BASE_MASK, entry_idx);
 				err = L2_MAP(l2pt_hw_entry_pa & L2_BASE_MASK, entry_idx, MMU_L1_PT_ADDR(phys_pte), attrs);
-				if (err) {
-					printf("Could not mark page as an l2 page table in set pte hypercall0: err = 0x%x\n", err);
+				if (err == ERR_MMU_NEW_L2_NOW_WRITABLE) {			//Tries to map itself (L2 page) as writable.
+					attrs &= ~0x10;	//Clear write permission of new descriptor to the page table at l2pt_hw_entry_pa & L2_BASE_MASK.
+					err = L2_MAP(l2pt_hw_entry_pa & L2_BASE_MASK, entry_idx, MMU_L1_PT_ADDR(phys_pte), attrs);
+					if (err) {
+						printf("Could not mark page as an l2 page table in set pte hypercall selfmap: err = %d\n", err);
+						while (1);
+					} else
+						printf("Could mark page as an l2 page table after selfremap in set pte hypercall.\n");
+				} else if (err == ERR_MMU_PH_BLOCK_NOT_WRITABLE) {	//Tries to map an L2 page table as writable.
+					attrs &= ~0x10;									//Clear write permission of new descriptor.
+					err = L2_MAP(l2pt_hw_entry_pa & L2_BASE_MASK, entry_idx, MMU_L1_PT_ADDR(phys_pte), attrs);
+					if (err) {
+						printf("Could not mark page as an l2 page table in set pte hypercall when pointing to L2 page: err = %d\n", err);
+						while (1);
+					} else
+						printf("Could mark page as an l2 page table after remap in set pte hypercall.\n");
+				} else if (err) {
+					printf("Could not mark page as an l2 page table in set pte hypercall0: err = %d\n", err);
+					printf("Could not mark page as an l2 page table in set pte hypercall0: l2pt_hw_entry_pa & L2_BASE_MASK = 0x%x\n", l2pt_hw_entry_pa & L2_BASE_MASK);
+					printf("Could not mark page as an l2 page table in set pte hypercall0: MMU_L1_PT_ADDR(phys_pte) = 0x%x\n", MMU_L1_PT_ADDR(phys_pte));
+					printf("Could not mark page as an l2 page table in set pte hypercall0: attrs = 0x%x\n", attrs);
 					while (1);
 				}
 			} else if (err == ERR_MMU_IS_NOT_L2_PT) {
@@ -612,7 +667,7 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte, uin
 					remove_aps_l1(l2pt_hw_entry_pa & L2_BASE_MASK);
 					err = dmmu_create_L2_pt(l2pt_hw_entry_pa & L2_BASE_MASK);	//Mark identified L2-page table (from l1-entry) as L2.
 					if (err) {
-						printf("\n\tCould not create l2 page table set pte hypercall1: err = 0x%x with l2pt_hw_entry_pa = 0x%x\n", err, l2pt_hw_entry_pa & L2_BASE_MASK);
+						printf("\n\tCould not create l2 page table set pte hypercall1: err = %d with l2pt_hw_entry_pa = 0x%x\n", err, l2pt_hw_entry_pa & L2_BASE_MASK);
 						print_all_pointing_L2(l2pt_hw_entry_pa & L2_BASE_MASK, 0xFFFFFFFF);
 						while (1);
 					}
@@ -625,12 +680,12 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte, uin
 				if (err == ERR_MMU_PT_NOT_UNMAPPED) {
 					err = dmmu_l2_unmap_entry(l2pt_hw_entry_pa & L2_BASE_MASK, entry_idx);
 					if (err) {
-						printf("Could not unmap entry 0x%x of l2 page table at 0x%x in set pte hypercall3: err = 0x%x\n", entry_idx, l2pt_hw_entry_pa & L2_BASE_MASK, err);
+						printf("Could not unmap entry 0x%x of l2 page table at 0x%x in set pte hypercall3: err = %d\n", entry_idx, l2pt_hw_entry_pa & L2_BASE_MASK, err);
 						while (1);
 					}
 					err = L2_MAP(l2pt_hw_entry_pa & L2_BASE_MASK, entry_idx, MMU_L1_PT_ADDR(phys_pte), attrs);
 					if (err) {
-						printf("Could not set entry %d at va = 0x%x - 0x800 = 0x%x of l2 page table at 0x%x in set pte hypercall4: err = 0x%x, pc = 0x%x\n", entry_idx, l2pt_linux_entry_va, l2pt_hw_entry_va, l2pt_hw_entry_pa & L2_BASE_MASK, err, curr_vm->current_mode_state->ctx.pc);
+						printf("Could not set entry %d at va = 0x%x - 0x800 = 0x%x of l2 page table at 0x%x in set pte hypercall4: err = %d, pc = 0x%x\n", entry_idx, l2pt_linux_entry_va, l2pt_hw_entry_va, l2pt_hw_entry_pa & L2_BASE_MASK, err, curr_vm->current_mode_state->ctx.pc);
 						while (1);
 					}
 				} else if (err) {
@@ -638,7 +693,7 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte, uin
 					while (1);
 				}
 			} else {
-				printf("\n\tCould not map l2 entry in set pte hypercall6: err = 0x%x\n", err);
+				printf("\n\tCould not map l2 entry in set pte hypercall6: err = %d\n", err);
 				while (1);
 			}
 		}
@@ -653,7 +708,7 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte, uin
 					remove_aps_l1(l2pt_hw_entry_pa & L2_BASE_MASK);
 					err = dmmu_create_L2_pt(l2pt_hw_entry_pa & L2_BASE_MASK);	//Mark identified L2-page table (from l1-entry) as L2.
 					if (err) {
-						printf("\n\tCould not create l2 page table set pte hypercall7: err = 0x%x with l2pt_hw_entry_pa = 0x%x\n", err, l2pt_hw_entry_pa & L2_BASE_MASK);
+						printf("\n\tCould not create l2 page table set pte hypercall7: err = %d with l2pt_hw_entry_pa = 0x%x\n", err, l2pt_hw_entry_pa & L2_BASE_MASK);
 						print_all_pointing_L2(l2pt_hw_entry_pa & L2_BASE_MASK, 0xFFFFFFFF);
 						while (1);
 					}
@@ -667,7 +722,7 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte, uin
 					while (1);
 				}
 			} else if (err) {
-				printf("\n\tCould not unmap l2 entry in set pte hypercall10: err = 0x%x\n", err);
+				printf("\n\tCould not unmap l2 entry in set pte hypercall10: err = %d\n", err);
 				while (1);
 			}
 		}
@@ -679,7 +734,6 @@ void hypercall_dyn_set_pte(addr_t * l2pt_linux_entry_va, uint32_t linux_pte, uin
 	COP_WRITE(COP_SYSTEM, COP_DCACHE_INVALIDATE_MVA, l2pt_hw_entry_va);
 	clean_and_invalidate_cache();
 }
-
 
 
 
@@ -729,7 +783,7 @@ void print_specific_L2(void) {
 			va_to_use = ((uint32_t)slpt_va) + (pa - slpt_pa);
 		}
 
-		for (l2_idx = 0; l2_idx < 512; l2_idx += 1) {
+		for (l2_idx = 512; l2_idx < 1024; l2_idx += 1) {
 			uint32_t l2_desc_va_add = va_to_use + l2_idx*4;
 			uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
 			uint32_t l2_type = l2_desc & DESC_TYPE_MASK;
@@ -773,7 +827,7 @@ void print_specific_L2(void) {
 
 
 void remove_l1_mappings(uint32_t pa) {
-	if (get_bft_entry_by_block_idx(PA_TO_PH_BLOCK(pa))->type == 2) {
+	if (get_bft_entry_by_block_idx(PA_TO_PH_BLOCK(pa))->type == PAGE_INFO_TYPE_L2PT) {
 		uint32_t err = dmmu_unmap_L2_pt(pa & 0xFFFFF000);
 		if (err) {
 			printf("remove_l1_mappings: Error = 0x%x.\n", err);
@@ -800,7 +854,7 @@ BOOL emulate_write(uint32_t va, uint32_t fault_instruction_va) {
 
 	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pt_pa);
 	l1i = va >> 20;
-	l1e_pa = (l1_pt_pa & 0xFFFFFC00) + l1i*4;
+	l1e_pa = (l1_pt_pa & 0xFFFFC000) | (l1i << 2);
 	l1e_va = mmu_guest_pa_to_va(l1e_pa, curr_vm->config);
 	l1e = *((uint32_t *) l1e_va);
 	l1_type = l1e & 0x3;
@@ -826,7 +880,7 @@ BOOL emulate_write(uint32_t va, uint32_t fault_instruction_va) {
 
 //	printf("AP = 0x%x\n", ((l2e & (0x1 << 9)) >> 7) | ((l2e & (0x3 << 4)) >> 4));
 
-	l2i = l2i + ((l2_pt_pa - (l2_pt_pa & 0xFFFFF000)) >> 10)*256;
+	l2i = l2i + ((l2_pt_pa - (l2_pt_pa & 0xFFFFF000)) >> 10)*256;	//Adds 512 or 768 depending on whether l2_pt_pa is in the second or third kB of the 4kB page.
 	uint32_t err = dmmu_l2_unmap_entry(l2_pt_pa & 0xFFFFF000, l2i);
 	if (err) {
 		printf("emulate_write1: Could not unmap l2 entry.\n");
@@ -837,7 +891,7 @@ BOOL emulate_write(uint32_t va, uint32_t fault_instruction_va) {
 //uint32_t l2e_new = CREATE_L2_DESC(page_pa, small_attrs);
 //	printf("NEW AP = 0x%x\n", ((l2e_new & (0x1 << 9)) >> 7) | ((l2e_new & (0x3 << 4)) >> 4));
 	err = dmmu_l2_map_entry(l2_pt_pa & 0xFFFFF000, l2i, page_pa, small_attrs);
-	if (err == ERR_MMU_PH_BLOCK_NOT_WRITABLE) {	//page_pa is L2.
+	if (err == ERR_MMU_PH_BLOCK_NOT_WRITABLE) {
 		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(PA_TO_PH_BLOCK(page_pa));
 		if (bft_entry->type == PAGE_INFO_TYPE_L2PT) {
 //			printf("emulate_write2: Removes l1 mapping to 0x%x since it must be"
@@ -849,15 +903,33 @@ BOOL emulate_write(uint32_t va, uint32_t fault_instruction_va) {
 //					" classified as an L2 page.\n", page_pa, fault_instruction_va);
 			err = dmmu_l2_map_entry(l2_pt_pa & 0xFFFFF000, l2i, page_pa, small_attrs);
 			if (err) {
-				printf("emulate_write4: Could not map entry 0x%x of l2 page table at 0x%x to page at 0x%x.\n", l2i, l2_pt_pa & 0xFFFFF000, page_pa);
+				printf("emulate_write2: Could not map entry 0x%x of l2 page table at 0x%x to page at 0x%x.\n", l2i, l2_pt_pa & 0xFFFFF000, page_pa);
 				while (1);
 			}
+		} else if (bft_entry->type == PAGE_INFO_TYPE_DATA) {
+			printf("emulate_write3: Mapping page at 0x%x, of type data, not possible.\n", page_pa);
+			while (1);
+		} else if (bft_entry->type == PAGE_INFO_TYPE_L1PT) {
+			err = dmmu_unmap_L1_pt(page_pa & 0xFFFFC000);	//16 kB aligned.
+			if (err) {
+				printf("emulate_write4: Could not remove l1 page table at 0x%x, due to err = %d, pc = 0x%x.\n", page_pa, err, fault_instruction_va);
+				while (1);
+			}
+			err = dmmu_l2_map_entry(l2_pt_pa & 0xFFFFF000, l2i, page_pa, small_attrs);
+			if (err) {
+				printf("emulate_write5: Could not remap l2 page table at 0x%x.\n", page_pa);
+				while (1);
+			}
+		} else if (bft_entry->type == PAGE_INFO_TYPE_INVALID) {
+			printf("emulate_write6: Mapping page at 0x%x, of type invalid, not possible.\n", page_pa);
+			while (1);
 		} else {
-			printf("emulate_write5: Mapping page at 0x%x, not possible even though not an L2 page.\n", page_pa);
+			printf("emulate_write7: Mapping page at 0x%x, of incorrect encoding, not possible.\n", page_pa);
 			while (1);
 		}
+
 	} else if (err) {
-		printf("emulate_write6: Could not map l2 entry: l2_pt_pa = 0x%x,"
+		printf("emulate_write8: Could not map l2 entry: l2_pt_pa = 0x%x,"
 				" l2i = 0x%x, page_pa = 0x%x, va = 0x%x,"
 				" fault_instruction_va = 0x%x.\n", l2_pt_pa, l2i, page_pa, va, fault_instruction_va);
 		while (1);
@@ -883,7 +955,7 @@ BOOL emulate_write(uint32_t va, uint32_t fault_instruction_va) {
 
 uint32_t invalidate_l2_entries_with_invalid_aps(uint32_t l2_pt_pa) {
 	uint32_t l2i;
-	for (l2i = 0; l2i < 512; l2i++) {
+	for (l2i = 512; l2i < 1024; l2i++) {
 		uint32_t l2e_pa = L2_DESC_PA(l2_pt_pa, l2i);
 		uint32_t l2e_va = mmu_guest_pa_to_va(l2e_pa, curr_vm->config);
 		uint32_t l2e = *((uint32_t *) l2e_va);
@@ -907,7 +979,7 @@ uint32_t invalidate_l2_entries_with_invalid_aps(uint32_t l2_pt_pa) {
 			*((uint32_t *) l2e_va) = l2e & 0xFFFFFFFC;
 		} else if (current_check != SUCCESS_MMU) {
 			printf("invalidate_l2_entries_with_invalid_aps: Invalid entry with"
-					" valid AP, err = 0x%x\n", current_check);
+					" valid AP, err = %d\n", current_check);
 			while (1);
 		}
 	}
@@ -956,7 +1028,7 @@ void invalidate_vas_mapped_by_l2_pt(uint32_t l2_pt_pa, uint32_t l2i) {
 		uint32_t l1e = *((uint32_t *) (l1_pt_va + l1i*4));
 		if ((l1e & 0x3) == 0x1 && (l1e & 0xFFFFF000) == l2_pt_pa) {
 			uint32_t addr;
-			for (addr = (l1i << 20) + (l2i << 12); addr < (l1i << 20) + ((l2i + 2) << 12); addr = addr + 4) {
+			for (addr = (l1i << 20) + (l2i << 12); addr < (l1i << 20) + ((l2i + 2) << 12); addr = addr + 4) {	//l2i + 2 since 2 page tables of 256 entries each are to be invalidated.
 				//Cleans all virtual addresses mapped by the 2 l2 page tables at l2_pt_pa: 512*4kB = 2MB.
 				COP_WRITE(COP_SYSTEM, COP_TLB_INVALIDATE_MVA, addr);
 				COP_WRITE(COP_SYSTEM, COP_BRANCH_PRED_INVAL_ALL, addr);
@@ -966,7 +1038,7 @@ void invalidate_vas_mapped_by_l2_pt(uint32_t l2_pt_pa, uint32_t l2i) {
 }
 
 void remove_w_l2(uint32_t l2_pt_pa, uint32_t l2i, uint32_t l2e) {
-	l2i = l2_pt_pa - (l2_pt_pa & 0xFFFFF000) != 0x0 ? l2i + 256 : l2i;
+	l2i = ((l2_pt_pa - (l2_pt_pa & 0xFFFFF000)) >> 10)*256 + l2i;	//Adds the index offset 512 or 768 depending on whether l2_pt_pa is the third or fourth kB of the 4k page containing it.
 	l2_pt_pa = l2_pt_pa & 0xFFFFF000;
 
 	uint32_t err = dmmu_l2_unmap_entry(l2_pt_pa, l2i);
@@ -1031,17 +1103,17 @@ void remove_aps_l2(uint32_t l2_pt_pa, uint32_t pa, uint32_t l1i) {
 			uint32_t l1_pt_pa;
 			COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pt_pa);
 			uint32_t l1_pt_va = mmu_guest_pa_to_va(l1_pt_pa, curr_vm->config);	//l1_base_va = 0xC0004000
-//			printf("Removes writable mapping: L1 entry with index 0x%x and virtual"
-//					" address 0x%x, points to L2 page table at virtual address 0x%x"
-//					" (pa = 0x%x) with index 0x%x, resulting in a map to 0x%x\n",
-//					 l1i, (l1i << 2) + l1_pt_va, l2_pt_va, l2_pt_pa, l2i, pa);
+			printf("Removes writable mapping: L1 entry with index 0x%x and virtual"
+					" address 0x%x, points to L2 page table at virtual address 0x%x"
+					" (pa = 0x%x) with index 0x%x, resulting in a map to 0x%x\n",
+					 l1i, (l1i << 2) + l1_pt_va, l2_pt_va, l2_pt_pa, l2i, pa);
 
 			remove_w_l2(l2_pt_pa, l2i, l2e);
 
-//			printf("Removed writable mapping: L1 entry with index 0x%x and virtual"
-//					" address 0x%x, points to L2 page table at virtual address 0x%x"
-//					" (pa = 0x%x) with index 0x%x, resulting in a map to 0x%x\n",
-//					 l1i, (l1i << 2) + l1_pt_va, l2_pt_va, l2_pt_pa, l2i, pa);
+			printf("Removed writable mapping: L1 entry with index 0x%x and virtual"
+					" address 0x%x, points to L2 page table at virtual address 0x%x"
+					" (pa = 0x%x) with index 0x%x, resulting in a map to 0x%x\n",
+					 l1i, (l1i << 2) + l1_pt_va, l2_pt_va, l2_pt_pa, l2i, pa);
 		}
 	}
 }
@@ -1050,10 +1122,6 @@ void remove_aps_l1(uint32_t pa) {
 	uint32_t l1i, l1_pt_pa;
 	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pt_pa);
 	uint32_t l1_pt_va = mmu_guest_pa_to_va(l1_pt_pa, curr_vm->config);	//l1_pt_va = 0xC0004000
-
-	uint32_t hv_to_linux_i_start_inclusive = curr_vm->config->reserved_va_for_pt_access_start >> 20;
-	//+1 for last MB with l2 page tables.
-	uint32_t hv_to_linux_i_end_exclusive = hv_to_linux_i_start_inclusive + (curr_vm->config->firmware->psize >> 20) + 1;
 
 	//Do not remove APs of page tables to hypervisor memory.
 	for (l1i = 0; l1i < (HAL_VIRT_START >> 20); l1i = l1i + 1) {	//L1 indexes up to HV memory, 2MB at a time.
@@ -1072,37 +1140,56 @@ void remove_aps_l1(uint32_t pa) {
 //maps to @pa, as assigned by linux_pt_get_empty_l2. linux_l2_index_p: 4kB
 //aligned or 4kB aligned + 1kB. For every 2MBs, linux_l2_index_p is incremented
 //by 4.
+/* THIS IS OLD VERSION BEFORE CHANGING linux_init.c:linux_init_dmmu to initialize page tables in correct order.
 uint32_t pa_to_l2_base_pa(addr_t pa) {
 	addr_t guest_pstart = curr_vm->config->firmware->pstart;
 
 	if ((pa & 0xFFF00000) == guest_pstart)// {			//@pa in 1st MB of memory, last index.
 		pa = guest_pstart + curr_vm->config->firmware->psize;
-/*
-		addr_t guest_psize = curr_vm->config->firmware->psize;
-		addr_t first_offset = SECTION_SIZE;
-		addr_t last_offset = (guest_psize & 0xFFF00000) - SECTION_SIZE;
-		addr_t number_of_sections = ((last_offset - first_offset) >> 20) + 1;
-		uint32_t number_of_2mb_sections = number_of_sections >> 1;
-		addr_t number_of_1kB_page_tables = number_of_2mb_sections * 4;	//4 1kB page tables per 2MB.
-		if ((number_of_sections & 0x1) == 0x1)			//Odd number of sections require an additional 1kB page table.
-			number_of_1kB_page_tables++;
+					/*	This was commented out before changing linux_init.c:linux_init_dmmu.
+							addr_t guest_psize = curr_vm->config->firmware->psize;
+							addr_t first_offset = SECTION_SIZE;
+							addr_t last_offset = (guest_psize & 0xFFF00000) - SECTION_SIZE;
+							addr_t number_of_sections = ((last_offset - first_offset) >> 20) + 1;
+							uint32_t number_of_2mb_sections = number_of_sections >> 1;
+							addr_t number_of_1kB_page_tables = number_of_2mb_sections * 4;	//4 1kB page tables per 2MB.
+							if ((number_of_sections & 0x1) == 0x1)			//Odd number of sections require an additional 1kB page table.
+								number_of_1kB_page_tables++;
 
-		addr_t index = number_of_1kB_page_tables * 0x400;
-		addr_t l2_page_table_base_pa = guest_pstart + curr_vm->config->pa_initial_l2_offset;
-		addr_t l2_base_add = l2_page_table_base_pa + index;
-		return l2_base_add;
-	} else {											//@pa is not 1st MB of memory.
-*/
+							addr_t index = number_of_1kB_page_tables * 0x400;
+							addr_t l2_page_table_base_pa = guest_pstart + curr_vm->config->pa_initial_l2_offset;
+							addr_t l2_base_add = l2_page_table_base_pa + index;
+							return l2_base_add;
+						} else {											//@pa is not 1st MB of memory.
+					*/
+/*
 	addr_t pa_offset = pa - SECTION_SIZE - guest_pstart;	//2nd MB has index 0, etc.
 	addr_t mb2_offset = pa_offset >> 21;
 	addr_t linux_l2_index_p = mb2_offset*4;			//4 1kB page tables per 2MB.
 	if ((pa_offset & 0x00100000) == 0x00100000)		//Second MB in 2MB: Increment by
 		linux_l2_index_p = linux_l2_index_p + 1;	//1 to get next 1kB page table.
-	addr_t index = linux_l2_index_p * 0x400;		//Byte index to level-2 page table.
+	addr_t index = linux_l2_index_p * 0x400;		//Byte index to level-2 page table by multiplying with 1024.
+	uint32_t pa_l2_pt = guest_pstart + curr_vm->config->pa_initial_l2_offset;
+	uint32_t l2_base_add = pa_l2_pt + index + 2048;	//Add 2048 to skip the Linux meta data and get to the hardware page table entries.
+	return l2_base_add;
+//	}
+}
+*/
+uint32_t pa_to_l2_base_pa(addr_t pa) {
+	uint32_t guest_pstart = curr_vm->config->firmware->pstart;
+	uint32_t pa_offset = pa - guest_pstart;
+	uint32_t mb2_offset = pa_offset >> 21;			//2MB offset index.
+	uint32_t linux_l2_index_p = mb2_offset*4;			//4 1kB page tables per 2MB.
+//	if ((pa_offset & 0x00100000) == 0x00100000)		//Second MB in 2MB: Increment by
+//		linux_l2_index_p = linux_l2_index_p + 1;	//1 to get next 1kB page table.
+//kanske ska vara + 3 om andra MB och + 2 om första MB.
+
+	linux_l2_index_p = (pa_offset & 0x00100000) == 0x00100000 ? linux_l2_index_p + 3 : linux_l2_index_p + 2;
+
+	uint32_t index = linux_l2_index_p*1024;	//Multiply 1024 to get byte index to L2 page table.
 	uint32_t pa_l2_pt = guest_pstart + curr_vm->config->pa_initial_l2_offset;
 	uint32_t l2_base_add = pa_l2_pt + index;
 	return l2_base_add;
-//	}
 }
 
 //Given kernel_sec_start and kernel_sec_end, sets up page tables from
@@ -1115,8 +1202,8 @@ void linux_boot_virtual_map_section(uint32_t PAGE_OFFSET, uint32_t kernel_sec_st
 ////Linux in arch/arm/mm/mmu.c:map_lowmem to write zeros to pages, via virtual//
 ////addresses, allocated to become L2-page tables, so that Linux can allocate///
 ////and use L2-page tables instead of sections./////////////////////////////////
-	kernel_sec_end = kernel_sec_start + curr_vm->config->firmware->psize;///////
-	printf("Hypercall 1: Adjusts initial boot virtual Linux map: end va = 0x%x, end pa = 0x%x\n", PAGE_OFFSET + curr_vm->config->firmware->psize, kernel_sec_end);
+//	kernel_sec_end = kernel_sec_start + curr_vm->config->firmware->psize;///////
+//	printf("Hypercall 1: Adjusts initial boot virtual Linux map: end va = 0x%x, end pa = 0x%x\n", PAGE_OFFSET + curr_vm->config->firmware->psize, kernel_sec_end);
 ////////////////////////////////////////////////////////////////////////////////
 	if (kernel_sec_start != curr_vm->config->firmware->pstart) {
 		printf("HYPERVISOR: linux_boot_virtual_map_section: Linux start as\n");
@@ -1140,21 +1227,10 @@ void linux_boot_virtual_map_section(uint32_t PAGE_OFFSET, uint32_t kernel_sec_st
 	addr_t vstart = PAGE_OFFSET;	//0xC0000000;
 	addr_t number_of_bytes = kernel_sec_end - kernel_sec_start;
 	uint32_t offset;
-	for (offset = SECTION_SIZE; offset < number_of_bytes; offset += SECTION_SIZE) {
+	for (offset = 0; offset < number_of_bytes; offset += SECTION_SIZE) {
 		table2_pa = pa_to_l2_base_pa(kernel_sec_start + offset);
-//if ((table2_pa & 0xFFFFF000) == 0x8800E000)
-//printf("INIT3: offset = 0x%x, table2_pa = 0x%x\n", offset, table2_pa);
-		//Level-2 page table already initialized by linux_init_dmmu.
-//printf("HV Linux init: table2_pa = %x; guest_vstart + offset = %x; offset = %x\n", table2_pa, vstart + offset, offset);
 		dmmu_l1_pt_map(vstart + offset, table2_pa, page_attrs);
 	}
-
-	table2_pa = pa_to_l2_base_pa(kernel_sec_start);
-//if ((table2_pa & 0xFFFFF000) == 0x8800E000)
-//printf("INIT4: offset = 0x%x, table2_pa = 0x%x\n", offset, table2_pa);
-//printf("HV Linux init: table2_pa = %x\n", table2_pa);
-	//First MB treated last as in linux_init_dmmu.
-	dmmu_l1_pt_map(vstart, table2_pa, page_attrs);
 
 	//Complete memory accesses before invalidating/flushing caches.
 	//BPIALL?????????
@@ -1264,7 +1340,11 @@ void linux_boot_second_virtual_map_mb(uint32_t start_va, uint32_t start_pa, uint
 	uint32_t l1_desc = *(flpt_va + l1_idx);				//Virtual address of level-1 descriptor mapping va.
 //	printf("HYPERVISOR: linux_boot_second_virtual_map_mb: start_va = %x; start_pa = %x; level-1 descriptor va = %x\n", start_va, start_pa, flpt_va + l1_idx);
 	if (L1_TYPE(l1_desc) == UNMAPPED_ENTRY) {	//If va is unmapped, map its level-1 descriptor to its 2nd level page table.
-		dmmu_l1_pt_map(start_va, table2_pa, page_attrs);
+		uint32_t err = dmmu_l1_pt_map(start_va, table2_pa, page_attrs);
+		if (err) {
+			printf("linux_boot_second_virtual_map_mb0: err = %d\n", err);
+			while (1);
+		}
 	}
 
 	uint32_t table2_index_offset = ((table2_pa - (table2_pa & 0xFFFFF000)) >> 10)*256;
@@ -1274,15 +1354,30 @@ void linux_boot_second_virtual_map_mb(uint32_t start_va, uint32_t start_pa, uint
 	uint32_t i;
 	for(i = start_table2_index; i <= end_table2_index; i++, page_pa += 0x1000)
 		if (page_pa <= guest_pstart + (curr_vm->config->initial_kernel_ex_va_top - guest_vstart)) {	//Executable code.
-			uint32_t ret = dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
-			if (ret) {
-				printf("linux_boot_second_virtual_map_mb1: err = 0x%x\n", ret);
+			uint32_t err = dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
+			if (err == ERR_MMU_PT_NOT_UNMAPPED) {
+				/*So DMMU API does not allow changing attributes or remapping an entry if its not empty
+				 *this is a workaround */
+//printf("HYPERVISOR REMAPS l2pt_linux_entry_va = %x, l2pt_hw_entry_pa = %x, entry_idx = %x, physical level-2 page table base address %x\n", l2pt_linux_entry_va, l2pt_hw_entry_pa & L2_BASE_MASK, entry_idx, MMU_L1_PT_ADDR(phys_pte));
+				err = dmmu_l2_unmap_entry(table2_pa, i);
+				if (err) {
+					printf("linux_boot_second_virtual_map_mb1: err = %d\n", err);
+					while (1);
+				}
+				err = dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs);
+				if (err) {
+					printf("linux_boot_second_virtual_map_mb2: err = %d\n", err);
+					while (1);
+				}
+			}
+			else if (err) {
+				printf("linux_boot_second_virtual_map_mb3: err = %d\n", err);
 				while (1);
 			}
 		} else {																				//Not executable code.
-			uint32_t ret = dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs_xn);
-			if (ret) {
-				printf("linux_boot_second_virtual_map_mb2: err = 0x%x\n", ret);
+			uint32_t err = dmmu_l2_map_entry(table2_pa, i, page_pa, small_attrs_xn);
+			if (err) {
+				printf("linux_boot_second_virtual_map_mb4: err = %d\n", err);
 				while (1);
 			}
 		}
@@ -1364,37 +1459,100 @@ void linux_boot_second_virtual_map(uint32_t start_va, uint32_t start_pa, uint32_
 #define AM33XX_L4_WK_IO_OFFSET	0xb5000000
 #define L4_WK_AM33XX_PHYS		L4_WK_AM33XX_BASE
 #define L4_WK_AM33XX_VIRT		(L4_WK_AM33XX_PHYS + AM33XX_L4_WK_IO_OFFSET)
-void linux_map_per_wkup(uint32_t start_va, uint32_t start_pa, uint32_t end_pa) {
+
+#define CPSW_SS_VIRT 0xFA400000
+#define CPSW_SS_PHYS 0x4A100000
+#define CPSW_SS_SIZE 0x00004000
+#define PRU_ICSS_VIRT (CPSW_SS_VIRT + CPSW_SS_SIZE)
+#define PRU_ICSS_PHYS 0x4A300000
+#define PRU_ICSS_SIZE 0x00027000
+#define TPCC_VIRT (PRU_ICSS_VIRT + PRU_ICSS_SIZE)
+#define TPCC_PHYS 0x49000000
+#define TPCC_SIZE 0x00001000
+#define TPTC0_VIRT (TPCC_VIRT + TPCC_SIZE)
+#define TPTC0_PHYS 0x49800000
+#define TPTC0_SIZE 0x00001000
+#define TPTC1_VIRT (TPTC0_VIRT + TPTC0_SIZE)
+#define TPTC1_PHYS 0x49900000
+#define TPTC1_SIZE 0x00001000
+#define TPTC2_VIRT (TPTC1_VIRT + TPTC1_SIZE)
+#define TPTC2_PHYS 0x49A00000
+#define TPTC2_SIZE 0x00001000
+#define MMCHS2_VIRT (TPTC2_VIRT + TPTC2_SIZE)
+#define MMCHS2_PHYS 0x47810000
+#define MMCHS2_SIZE 0x00001000
+#define USBSS_VIRT (MMCHS2_VIRT + MMCHS2_SIZE)
+#define USBSS_PHYS 0x47400000
+#define USBSS_SIZE 0x00008000
+#define L3OCMC0_VIRT (USBSS_VIRT + USBSS_SIZE)
+#define L3OCMC0_PHYS 0x40300000
+#define L3OCMC0_SIZE 0x00010000
+#define EMIF0_VIRT (L3OCMC0_VIRT + L3OCMC0_SIZE)
+#define EMIF0_PHYS 0x4C000000
+#define EMIF0_SIZE 0x00001000
+#define GPMC_VIRT (EMIF0_VIRT + EMIF0_SIZE)
+#define GPMC_PHYS 0x50000000
+#define GPMC_SIZE 0x00001000
+#define SHAM_VIRT (GPMC_VIRT + GPMC_SIZE)
+#define SHAM_PHYS 0x53100000
+#define SHAM_SIZE 0x00001000
+#define AES_VIRT (SHAM_VIRT + SHAM_SIZE)
+#define AES_PHYS 0x53500000
+#define AES_SIZE 0x00001000
+#define SGX530_VIRT (AES_VIRT + AES_SIZE)
+#define SGX530_PHYS 0x56000000
+#define SGX530_SIZE 0x00010000
+void check_io_mapping(uint32_t start_va, uint32_t start_pa, uint32_t end_pa) {
 	uint32_t length = end_pa - start_pa;
 
-
 	if (start_pa == L4_34XX_PHYS && end_pa == L4_34XX_PHYS + L4_34XX_SIZE && start_va == L4_34XX_VIRT) {
-		printf("Hypervisor linux_map_per_wkup has mapped 0x%x to 0x%x\n", start_va, start_pa);
-/*
-		uint32_t section, offset;
-		uint32_t number_of_sections = length / SECTION_SIZE;
-		for (section = 0, offset = 0; section < number_of_sections; section++, offset += SECTION_SIZE) {
-			uint32_t table2_pa = pt_create_coarse(flpt_va, start_va + offset, start_pa + offset, SECTION_SIZE, MLT_IO_RW_REG);
-			if (table2_pa == 0) {
-				printf("Hypervisor cannot map %x to %x\n", start_va, start_pa);
-				while (1);
-			}
-			//Map to page table of linux as well.
-			uint32_t l1_entry = table2_pa | (HC_DOM_DEFAULT << MMU_L1_DOMAIN_SHIFT) | MMU_L1_TYPE_COARSE;
-			uint32_t l1_index = MMU_L1_INDEX(start_va);
-//			*(curr_vm->config->firmware->vstart + curr_vm->config->pa_initial_l1_offset) = l1_entry;
-			printf("Hypervisor maps %x to %x\n", start_va + offset, start_pa + offset);
-		}
-*/
+//		printf("Hypervisor check_io_mapping has checked L4_PER 0x%x to 0x%x\n", start_va, start_pa);
+		return;
 	} else if (start_pa == L4_WK_AM33XX_PHYS && end_pa == L4_WK_AM33XX_PHYS + L4_WK_AM33XX_SIZE && start_va == L4_WK_AM33XX_VIRT) {
-		printf("Hypervisor linux_map_per_wkup has mapped 0x%x to 0x%x\n", start_va, start_pa);
-/*
-		uint32_t table2_pa = pt_create_coarse(flpt_va, start_va, start_pa, length, MLT_IO_RW_REG);
-		if (table2_pa == 0) {
-			printf("Hypervisor cannot map %x to %x\n", start_va, start_pa);
-			while (1);
-		}
-*/
+//		printf("Hypervisor check_io_mapping has checked L4_WKUP 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == CPSW_SS_PHYS && end_pa == CPSW_SS_PHYS + CPSW_SS_SIZE && start_va == CPSW_SS_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked CPSW_SS 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == PRU_ICSS_PHYS && end_pa == PRU_ICSS_PHYS + PRU_ICSS_SIZE && start_va == PRU_ICSS_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked PRU_ICSS 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == TPCC_PHYS && end_pa == TPCC_PHYS + TPCC_SIZE && start_va == TPCC_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked TPCC 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == TPTC0_PHYS && end_pa == TPTC0_PHYS + TPTC0_SIZE && start_va == TPTC0_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked TPTC0 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == TPTC1_PHYS && end_pa == TPTC1_PHYS + TPTC1_SIZE && start_va == TPTC1_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked TPTC1 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == TPTC2_PHYS && end_pa == TPTC2_PHYS + TPTC2_SIZE && start_va == TPTC2_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked TPTC2 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == MMCHS2_PHYS && end_pa == MMCHS2_PHYS + MMCHS2_SIZE && start_va == MMCHS2_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked MMCHS2 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == USBSS_PHYS && end_pa == USBSS_PHYS + USBSS_SIZE && start_va == USBSS_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked USBSS 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == L3OCMC0_PHYS && end_pa == L3OCMC0_PHYS + L3OCMC0_SIZE && start_va == L3OCMC0_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked L3OCMC0 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == EMIF0_PHYS && end_pa == EMIF0_PHYS + EMIF0_SIZE && start_va == EMIF0_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked EMIF0 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == GPMC_PHYS && end_pa == GPMC_PHYS + GPMC_SIZE && start_va == GPMC_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked GPMC 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == SHAM_PHYS && end_pa == SHAM_PHYS + SHAM_SIZE && start_va == SHAM_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked SHAM 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == AES_PHYS && end_pa == AES_PHYS + AES_SIZE && start_va == AES_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked AES 0x%x to 0x%x\n", start_va, start_pa);
+		return;
+	} else if (start_pa == SGX530_PHYS && end_pa == SGX530_PHYS + SGX530_SIZE && start_va == SGX530_VIRT) {
+//		printf("Hypervisor check_io_mapping has checked SGX530 0x%x to 0x%x\n", start_va, start_pa);
+		return;
 	} else {
 		printf("HYPERVISOR: Tries to map invalid device region: start_va = 0x%x; start_pa = 0x%x; end_pa = 0x%x.\n", start_va, start_pa, end_pa);
 		while (1);
@@ -1546,4 +1704,624 @@ uint32_t adjust_aps(uint32_t phys_pte) {
 	case 6: printf ("APs6: Deprecated PL1 = R, PL0 = R\n"); while (1);
 	default: printf ("APs: Invalid code.\n"); while (1);
 	}
+}
+
+/* Simulates pmd[i] = (pmd[i] & mask) | prot, where pmd[i] maps a section,
+ * i ∈ {0, 1}, for all L2 page table entries of the L2 page table pointed to by
+ * pmd[i]. A requirement is mask = ~prot.
+ */
+#define PMD_SECT_XN			(1 << 4)
+#define PMD_SECT_APX		(1 << 15)
+#define PMD_SECT_AP_WRITE	(1 << 10)
+#define AP2					(1 << 9)
+#define AP1					(1 << 5)
+#define AP0					(1 << 4)
+void hypercall_dyn_update_pmd_single(uint32_t pmd, uint32_t mask, uint32_t prot) {
+	if (mask != ~prot || (mask != ~PMD_SECT_XN && mask != ~(PMD_SECT_APX | PMD_SECT_AP_WRITE))) {
+		printf("hypercall_dyn_update_pmd_single0: Mask and prot are not inverted relative each other.\n");
+		while (1);
+	}
+
+	uint32_t current_l1_pt_pa;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, current_l1_pt_pa);				//Physical base address of current l1-page table.
+	uint32_t l1_pt_va = pmd & L1_BASE_MASK;												//16kB alignment of PMD gives base address of L1 table.
+	uint32_t l1_pt_pa = LINUX_PA((addr_t) l1_pt_va);									//Physical base address of L1 page table to modify.
+	uint32_t switch_back = 0;
+	if (l1_pt_pa != current_l1_pt_pa) {													//If l1-page table to modify is not the current one in use.
+		COP_WRITE(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pt_pa);
+		isb();
+		switch_back = 1;
+	}
+
+	uint32_t l1d = *((uint32_t *) pmd);													//L1 descriptor to modify.
+	if ((l1d & 0x3) != 0x1) {															//L1 descriptor must point to L2 page table.
+		printf("hypercall_dyn_update_pmd_single1: L1 descriptor to modify does not point to an L2 page table: l1d = 0x%x.\n", l1d);
+		while (1);
+	}
+
+	uint32_t l2_pt_pa = MMU_L1_PT_ADDR(l1d);											//Physical address of L2 page table pointed to by the L1 descriptor the modification of which is to be simulated by this function.
+	uint32_t l2_page_pt_va = mmu_guest_pa_to_va(l2_pt_pa & L2_BASE_MASK, curr_vm->config);	//This L2 page table is one of the initial L2s reserved by the hypervisor after physical Linux memory.
+	uint32_t table2_idx = (l2_pt_pa - (l2_pt_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT; 	//2 or 3.
+	table2_idx *= 0x100;																//256 pages per L2PT.
+
+	uint32_t l2i, err;
+	for (l2i = table2_idx; l2i < table2_idx + 256; l2i++) {
+		uint32_t l2d = *((uint32_t *)(l2_page_pt_va + 4*l2i));
+
+		if ((l2d & 0x2) == 0x2 && prot == PMD_SECT_XN) {								//Must be valid small page type of l2 entry.
+			uint32_t page_pa = MMU_L2_SMALL_ADDR(l2d);									//Page mapped to by current l2 entry.
+			uint32_t small_attrs = (0x00000FFF & l2d) | 0x1;							//Sets XN.
+
+			err = dmmu_l2_unmap_entry(l2_pt_pa & L2_BASE_MASK, l2i);
+			if (err) {
+				printf("hypercall_dyn_update_pmd_single2: err = %d\n", err);
+				while (1);
+			}
+
+			err = dmmu_l2_map_entry(l2_pt_pa & L2_BASE_MASK, l2i, page_pa, small_attrs);
+			if (err) {
+				printf("hypercall_dyn_update_pmd_single3: err = %d\n", err);
+				while (1);
+			}
+
+			COP_WRITE(COP_SYSTEM, COP_DCACHE_INVALIDATE_MVA, l2_page_pt_va + 4*l2i);
+		} else if ((l2d & 0x2) == 2) {														//prot == PMD_SECT_APX | PMD_SECT_AP_WRITE due to initial check of this function.
+			uint32_t page_pa = MMU_L2_SMALL_ADDR(l2d);									//Page mapped to by current l2 entry.
+			uint32_t small_attrs = (0x00000FFF & l2d & ~(AP2 | AP1 | AP0)) | AP1;		//Sets read-only.
+
+			err = dmmu_l2_unmap_entry(l2_pt_pa & L2_BASE_MASK, l2i);
+			if (err) {
+				printf("hypercall_dyn_update_pmd_single4: err = %d\n", err);
+				while (1);
+			}
+
+			err = dmmu_l2_map_entry(l2_pt_pa & L2_BASE_MASK, l2i, page_pa, small_attrs);
+			if (err) {
+				printf("hypercall_dyn_update_pmd_single5: err = %d\n", err);
+				while (1);
+			}
+
+			COP_WRITE(COP_SYSTEM, COP_DCACHE_INVALIDATE_MVA, l2_page_pt_va + 4*l2i);
+		}
+	}
+
+	if (switch_back) {
+		COP_WRITE(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, current_l1_pt_pa);			//Restore the L1 page table.
+		isb();
+	}
+
+	clean_and_invalidate_cache();
+}
+
+static uint32_t n = 0;
+void hypercall_map_block(uint32_t ptr, uint32_t size) {
+	uint32_t err;
+	uint32_t vstart = curr_vm->config->firmware->vstart;	//or use curr_vm->guest_info.page_offset but they are equal.
+	uint32_t pstart = curr_vm->config->firmware->pstart;
+	uint32_t psize = curr_vm->config->firmware->psize;
+
+	printf("hypercall_map_block: n = %d\n", n);
+	if (n == 46) printf("hypercall_map_block: ptr = 0x%x, size = 0x%x\n", ptr, size);
+	if (n == 46) printf("hypercall_map_block: vstart = 0x%x\n", vstart);
+	if (n == 46) printf("hypercall_map_block: pstart = 0x%x\n", pstart);
+	if (n == 46) printf("hypercall_map_block: psize = 0x%x\n", psize);
+
+
+	if (!(vstart <= ptr && ptr < vstart + psize)) {
+		printf("hypercall_map_block0: Mapped block outside virtual kernel memory region: 0x%x\n", ptr);
+		while (1);
+	} else if (ptr & 0xFFFF000 != 0x0) {
+		printf("hypercall_map_block1: Mapped block not starting on 4kB bountary: 0x%x\n", ptr);
+		while (1);
+	} else if (size != 0x1000) {
+		printf("hypercall_map_block: Mapped block not equal to 4kB: 0x%x\n", size);
+		while (1);
+	}
+
+	uint32_t ptr_va = ptr;
+	uint32_t l1i = ptr_va >> 20;
+
+
+	uint32_t l1_pa;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pa);
+	uint32_t l1_va = mmu_guest_pa_to_va(l1_pa, curr_vm->config);
+	uint32_t l1e_va = l1_va + l1i*4;
+	uint32_t l1e = *((uint32_t *) l1e_va);
+	uint32_t ptr_pa = ptr_va - vstart + pstart;
+	uint32_t l2_pa = pa_to_l2_base_pa(ptr_pa);
+	uint32_t l2i_start = ((l2_pa - (l2_pa & L2_BASE_MASK)) >> MMU_L1_PT_SHIFT)*256; 	//2 or 3, times 256 gives 512 or 768.
+	uint32_t l2i = l2i_start + ((ptr_va & 0x000FF000) >> 12);
+	if (n == 46) printf("hypercall_map_block: l1_pa = 0x%x, l1i = 0x%x, l1_va = 0x%x, l1e_va = 0x%x, l1e = 0x%x\n", l1_pa, l1i, l1_va, l1e_va, l1e);
+	if (n == 46) printf("hypercall_map_block: l2_pa = 0x%x, l2i = 0x%x, ptr_pa = 0x%x\n", l2_pa, l2i, ptr_pa);
+	if ((l1e & 0x3) == 0x0) {	//Unmapped l1 entry.
+		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(PA_TO_PH_BLOCK(l2_pa));
+		if (bft_entry->type != PAGE_INFO_TYPE_L2PT || bft_entry->refcnt != 0) {
+			printf("hypercall_map_block: Not L2 page table or already"
+					" referenced when remapping L1 entry: type = 0x%x, refcnt = 0x%x\n", bft_entry->type, bft_entry->refcnt);
+			while (1);
+		} else {	//Clear block/4kB page containing the page table.
+			uint32_t i;
+			if (n == 46) printf("hypercall_map_block: Unmaps l2 entries when remapping initial l2 page table.\n");
+			for (i = 512; i < 1024; i++) {
+				err = dmmu_l2_unmap_entry(l2_pa, i);
+				if (err) {
+					printf("hypercall_map_block: Could not unmap l2 entry 0x%x in remap: err = 0x%x.\n", i, err);
+					while (1);
+				}
+			}
+		}
+
+		uint32_t page_attrs = MMU_L1_TYPE_PT | (HC_DOM_KERNEL << MMU_L1_DOMAIN_SHIFT);
+		if (n == 46) printf("hypercall_map_block10: START.\n");
+		err = dmmu_l1_pt_map(ptr_va, l2_pa, page_attrs);
+		if (n == 46) printf("hypercall_map_block10: END.\n");
+		if (err) {
+			printf("hypercall_map_block0: err = %d\n", err);
+			while (1);
+		}
+	} else if ((l1e & 0x3) == 0x1) {	//L1 entry already mapping. Check if L2 entry is mapping.
+		uint32_t l2e_pa = l2_pa + l2i*4;
+		uint32_t l2e_va = mmu_guest_pa_to_va(l2e_pa, curr_vm->config);
+		uint32_t l2e = *((uint32_t *) l2e_va);
+		uint32_t l1e_l2_pa = 0xFFFFFC00 & l1e;
+
+		if (l2_pa != l1e_l2_pa) {
+			printf("hypercall_map_block: L1 entry maps to l1e & 0xFFFFFC00 = 0x%x but intended initial l2_pa = 0x%x\n", l1e_l2_pa, l2_pa);
+			while (1);
+		} else if ((l2e & 0x2) == 1) {	//L2 entry is mapping. Return.
+			if ((l2e & 0xFFFFF000) != ptr_pa) {
+				printf("hypercall_map_block: L2 entry maps to l2e & 0xFFFFFC00 = 0x%x but should map to ptr_pa = 0x%x\n", l2e, ptr_pa);
+				while (1);
+			}
+			if (n == 46) printf("hypercall_map_block: L1 and L2 are mapping already.\n");
+			n++;
+			return;
+		}
+		if (n == 46) printf("hypercall_map_block: L1 is mapping but not L2.\n");
+	} else {
+		printf("hypercall_map_block: Unknown type field of L1 descriptor: l1e = 0x%x\n", l1e);
+		while (1);
+	}
+
+	uint32_t small_attrs_xn = MMU_L2_TYPE_SMALL | (MMU_FLAG_B | MMU_FLAG_C) | (MMU_AP_USER_RW << MMU_L2_SMALL_AP_SHIFT) | 0x00000001;
+	if (n == 46) printf("hypercall_map_block: Map L2 entry: l2i = 0x%x, l2_pa = 0x%x, ptr_pa = 0x%x\n", l2i, l2_pa, ptr_pa);
+	err = dmmu_l2_map_entry(l2_pa, l2i, ptr_pa, small_attrs_xn);
+	if (err) {
+		printf("hypercall_map_block: Could not map L2 entry on remap: err = %d\n", err);
+		while (1);
+	}
+
+	clean_and_invalidate_cache();
+
+	printf("hypercall_map_block: Remapped l2 entry to map ptr_va = %x\n", ptr_va);
+	printf("hypercall_map_block: BEFORE TEST: memory[0x%x] = 0x%x\n", (uint32_t *) ptr_va, *((uint32_t *) ptr_va));
+	*((uint32_t *) ptr_va) = 0x01234567;
+	printf("hypercall_map_block: AFTER TEST1: memory[0x%x] = 0x%x\n", (uint32_t *) ptr_va, *((uint32_t *) ptr_va));
+	n++;
+
+	memset((void *)ptr_va, 0, size);
+	printf("hypercall_map_block: AFTER TEST2: memory[0x%x] = 0x%x\n", (uint32_t *) ptr_va, *((uint32_t *) ptr_va));
+
+}
+
+void hypercall_map_block_nw(uint32_t ptr, uint32_t size) {
+	uint32_t err;
+	uint32_t vstart = curr_vm->config->firmware->vstart;	//or use curr_vm->guest_info.page_offset but they are equal.
+	uint32_t pstart = curr_vm->config->firmware->pstart;
+	uint32_t psize = curr_vm->config->firmware->psize;
+
+	printf("hypercall_map_block_nw: n = %d\n", n);
+	printf("hypercall_map_block_nw: ptr = 0x%x, size = 0x%x\n", ptr, size);
+	printf("hypercall_map_block_nw: vstart = 0x%x\n", vstart);
+	printf("hypercall_map_block_nw: pstart = 0x%x\n", pstart);
+	printf("hypercall_map_block_nw: psize = 0x%x\n", psize);
+while (1);
+
+	if (!(vstart <= ptr && ptr < vstart + psize)) {
+		printf("hypercall_map_block_nw0: Mapped block outside virtual kernel memory region: 0x%x\n", ptr);
+		while (1);
+	} else if (ptr & 0xFFFF000 != 0x0) {
+		printf("hypercall_map_block_nw1: Mapped block not starting on 4kB bountary: 0x%x\n", ptr);
+		while (1);
+	} else if (size != 0x1000) {
+		printf("hypercall_map_block_nw2: Mapped block not equal to 4kB: 0x%x\n", size);
+		while (1);
+	}
+
+	uint32_t ptr_va = ptr;
+
+	uint32_t l1_pa;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pa);
+	uint32_t l1_va = mmu_guest_pa_to_va(l1_pa, curr_vm->config);
+	uint32_t l1i = ptr_va >> 20;
+	uint32_t l1e_va = l1_va + l1i*4;
+	uint32_t l1e = *((uint32_t *) l1e_va);
+
+	if ((l1e & 0x3) != 0x1) {
+		printf("hypercall_map_block_nw3: L1 entry mapping the pointer is not pointing to an L2 page table: l1_va = 0x%x, l1e_va = 0x%x, l1e = 0x%x\n", l1_va, l1e_va, l1e);
+		while (1);
+	}
+
+	uint32_t l2_pa = l1e & 0xFFFFFC00;
+	uint32_t l2_va = mmu_guest_pa_to_va(l2_pa, curr_vm->config);
+	uint32_t l2i = (ptr_va & 0x000FF000) >> 12;
+	uint32_t *l2e_va = (uint32_t *)(l2_va + l2i*4);
+	uint32_t l2e = *l2e_va;
+
+	if ((l2e & 0x2) == 0x2) {	//Entry valid. So remap it with new access permissions not being writable.
+		l2i += ((l2_pa - (l2_pa & 0xFFFFF000)) >> 10)*256;
+		err = dmmu_l2_unmap_entry(l2_pa & 0xFFFFF000, l2i);
+		if (err) {
+			printf("hypercall_map_block_nw4: Cannot unmap entry\n");
+			while (1);
+		}
+		err = dmmu_l2_map_entry(l2_pa & 0xFFFFF000, l2i, l2e & 0xFFFFF000, (l2e & ~(MMU_AP_SUP_RW << MMU_L2_SMALL_AP_SHIFT)) & 0x00000FFF);
+		if (err) {
+			printf("hypercall_map_block_nw5: Cannot remap entry\n");
+			while (1);
+		}
+
+		clean_and_invalidate_cache();
+	}
+}
+
+void merge_with_initial_l2_page_table(uint32_t pmd, uint32_t desc) {
+	uint32_t err;
+	uint32_t pmd0 = ((uint32_t *) pmd)[0];
+	uint32_t pmd1 = ((uint32_t *) pmd)[1];
+
+	if ((pmd0 & 0x3) == 0x1 && (pmd0 & 0xFFFFFC00) >= 0x88000000) {	//L1 table currently pointing to an initial L2 page table.
+		uint32_t l2_pa_old = pmd0 & 0xFFFFFC00;
+		uint32_t l2_pa_new = desc & 0xFFFFFC00;
+		uint32_t l2_va_old = mmu_guest_pa_to_va(l2_pa_old, curr_vm->config);
+		uint32_t l2_va_new = mmu_guest_pa_to_va(l2_pa_new, curr_vm->config);
+		if ((l2_va_old & 0x00000C00) != 0x800) {	//L2 page table is not 3rd kB of 4kB page.
+			printf("merge_with_initial_l2_page_table: L2 page table is not 3rd kB of 4kB page.\n");
+			while (1);
+		}
+
+		uint32_t l2i;
+		for (l2i = 512; l2i < 768; l2i++) {
+			uint32_t l2e_va_old = l2_va_old + l2i*4;
+			uint32_t l2e_va_new = l2_va_new + l2i*4;
+			uint32_t l2e_old = *((uint32_t *) l2e_va_old);
+			uint32_t l2e_new = *((uint32_t *) l2e_va_new);
+			if ((l2e_old & 0x2) != 0x0 && (l2e_new & 0x2) == 0x0) {	//Valid l2 entry in initial l2, and invalid entry in new l2: Copy.
+				printf("merge_with_initial_l2_page_table3: valid old, invalid new.\n");
+				err = dmmu_l2_map_entry(l2_pa_new & 0xFFFFF000, l2i, l2e_old & 0xFFFFF000, l2e_old & 0x00000FFF);
+
+				if (err == ERR_MMU_IS_NOT_L2_PT) {
+					err = dmmu_create_L2_pt(l2_pa_new & 0xFFFFF000);
+					if (err) {
+						printf("merge_with_initial_l2_page_table3: Cannot create L2 table, err = %d.\n", err);
+						while (1);
+					}
+					err = dmmu_l2_map_entry(l2_pa_new & 0xFFFFF000, l2i, l2e_old & 0xFFFFF000, l2e_old & 0x00000FFF);
+					if (err) {
+						printf("merge_with_initial_l2_page_table3: Cannot map L2 entry, err = %d.\n", err);
+						while (1);
+					}
+				} else if (err) {
+					printf("merge_with_initial_l2_page_table3: Could not copy L2 entry in L2 table in 4th kB: err = %d\n", err);
+					while (1);
+				}
+			} else if ((l2e_old & 0x2) == 0x0 && (l2e_new & 0x2) != 0x0) {	//Invalid l2 entry in initial l2, and valid entry in new l2: Copy.
+//				printf("merge_with_initial_l2_page_table3: invalid old, valid new.\n");
+			} else if ((l2e_old & 0x2) != 0x0 && (l2e_new & 0x2) != 0x0) {	//Valid l2 entry in initial l2, and valid entry in new l2: Copy.
+//				printf("merge_with_initial_l2_page_table3: valid old, valid new.\n");
+			} else if ((l2e_old & 0x2) == 0x0 && (l2e_new & 0x2) == 0x0) {	//Invalid l2 entry in initial l2, and invalid entry in new l2: Copy.
+//				printf("merge_with_initial_l2_page_table3: invalid old, invalid new.\n");
+			} else {
+				printf("merge_with_initial_l2_page_table3: Cannot happen!\n");
+				while (1);
+			}
+		}
+	}
+
+	if ((pmd1 & 0x3) == 0x1 && (pmd1 & 0xFFFFFC00) >= 0x88000000) {	//L1 table currently pointing to an initial L2 page table.
+		uint32_t l2_pa_old = pmd1 & 0xFFFFFC00;
+		uint32_t l2_pa_new = (desc & 0xFFFFFC00) + 0x400;				//Add 1kB for the directly following page table.
+		uint32_t l2_va_old = mmu_guest_pa_to_va(l2_pa_old, curr_vm->config);
+		uint32_t l2_va_new = mmu_guest_pa_to_va(l2_pa_new, curr_vm->config);
+		if ((l2_va_old & 0x00000C00) != 0xC00) {	//L2 page table is not 4th kB of 4kB page.
+			printf("merge_with_initial_l2_page_table4: L2 page table is not 4th kB of 4kB page.\n");
+			while (1);
+		}
+
+		uint32_t l2i;
+		for (l2i = 768; l2i < 1024; l2i++) {
+			uint32_t l2e_va_old = l2_va_old + (l2i - 768)*4;
+			uint32_t l2e_va_new = l2_va_new + (l2i - 768)*4;
+			uint32_t l2e_old = *((uint32_t *) l2e_va_old);
+			uint32_t l2e_new = *((uint32_t *) l2e_va_new);
+			if ((l2e_old & 0x2) != 0x0 && (l2e_new & 0x2) == 0x0) {	//Valid l2 entry in initial l2, and invalid entry in new l2: Copy.
+				printf("merge_with_initial_l2_page_table4: valid old, invalid new.\n");
+				err = dmmu_l2_map_entry(l2_pa_new & 0xFFFFF000, l2i, l2e_old & 0xFFFFF000, l2e_old & 0x00000FFF);
+
+				if (err == ERR_MMU_IS_NOT_L2_PT) {
+					err = dmmu_create_L2_pt(l2_pa_new & 0xFFFFF000);
+					if (err) {
+						printf("merge_with_initial_l2_page_table4: Cannot create L2 table, err = %d.\n", err);
+						while (1);
+					}
+					err = dmmu_l2_map_entry(l2_pa_new & 0xFFFFF000, l2i, l2e_old & 0xFFFFF000, l2e_old & 0x00000FFF);
+					if (err) {
+						printf("merge_with_initial_l2_page_table4: Cannot map L2 entry, err = %d.\n", err);
+						while (1);
+					}
+				} else if (err) {
+					printf("merge_with_initial_l2_page_table4: Could not copy L2 entry in L2 table in 4th kB: err = %d\n", err);
+					while (1);
+				}
+			} else if ((l2e_old & 0x2) == 0x0 && (l2e_new & 0x2) != 0x0) {	//Invalid l2 entry in initial l2, and valid entry in new l2: Copy.
+//				printf("merge_with_initial_l2_page_table4: invalid old, valid new.\n");
+			} else if ((l2e_old & 0x2) != 0x0 && (l2e_new & 0x2) != 0x0) {	//Valid l2 entry in initial l2, and valid entry in new l2: Copy.
+//				printf("merge_with_initial_l2_page_table4: valid old, valid new.\n");
+			} else if ((l2e_old & 0x2) == 0x0 && (l2e_new & 0x2) == 0x0) {	//Invalid l2 entry in initial l2, and invalid entry in new l2: Copy.
+//				printf("merge_with_initial_l2_page_table4: invalid old, invalid new.\n");
+			} else {
+				printf("merge_with_initial_l2_page_table4: Cannot happen!\n");
+				while (1);
+			}
+		}
+	}
+
+	clean_and_invalidate_cache();
+}
+
+void map_allocated_page_table(uint32_t pte_va) {
+	uint32_t ptr_va = pte_va & 0xFFFFF000;
+
+	uint32_t l1_pa;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pa);
+	uint32_t l1_va = mmu_guest_pa_to_va(l1_pa, curr_vm->config);
+	uint32_t l1i = ptr_va >> 20;
+	uint32_t l1e_va = l1_va + l1i*4;
+	uint32_t l1e = *((uint32_t *) l1e_va);
+	if ((l1e & 0x3) != 0x1) {	//Not valid L1 descriptor
+		uint32_t vstart = curr_vm->config->firmware->vstart;	//or use curr_vm->guest_info.page_offset but they are equal.
+		uint32_t pstart = curr_vm->config->firmware->pstart;
+		uint32_t psize = curr_vm->config->firmware->psize;
+		if (ptr_va < vstart || ptr_va >= vstart + psize) {
+			printf("map_allocated_page_table: Not valid page table entry address: 0x%x.\n", ptr_va);
+			while (1);
+		}
+
+		uint32_t ptr_pa = ptr_va - vstart + pstart;
+		uint32_t l2_pa = pa_to_l2_base_pa(ptr_pa);	//Physical address of l2 page table mapping pte_va.
+
+		dmmu_entry_t *bft_entry = get_bft_entry_by_block_idx(PA_TO_PH_BLOCK(l2_pa));
+		if (bft_entry->type != PAGE_INFO_TYPE_L2PT) {
+			printf("map_allocated_page_table: L2 page table not marked as such.\n");
+			while (1);
+		} else {
+			printf("map_allocated_page_table: L2 page table marked as such.\n");
+			while (1);
+		}
+
+		uint32_t l2_va = mmu_guest_pa_to_va(l2_pa, curr_vm->config);
+		
+	} else if ((l1e & 0x3) == 0x1) {	//Valid L1 descriptor.
+		uint32_t l2_pa = l1e & 0xFFFFFC00;
+		uint32_t l2_va = mmu_guest_pa_to_va(l2_pa, curr_vm->config);
+		uint32_t l2i = (ptr_va & 0x000FF000) >> 12;
+		uint32_t *l2e_va = (uint32_t *)(l2_va + l2i*4);
+		uint32_t l2e = *l2e_va;
+		//USE DMMU HERE!
+	} else if ((l1e & 0x3) != 0x0) {
+		printf("map_allocated_page_table: Not valid L1 entry.\n");
+		while (1);
+	}
+}
+
+/*
+void map_one_to_one_l2(uint32_t start_va, uint32_t end_va, uint32_t prot_l1) {
+	uint32_t l1_pa;
+	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pa);
+	uint32_t l1_va = mmu_guest_pa_to_va(l1_pa, curr_vm->config);
+	uint32_t l1i = va >> 20;
+	uint32_t l1e_va = l1_va + l1i*4;
+	uint32_t l1e = *((uint32_t *) l1e_va);
+	uint32_t pa = va - vstart + pstart;			//The corresponding physical address of virtual address @va in kernel 1-1 mapping.
+	uint32_t l2_pa = pa_to_l2_base_pa(pa);		//Physical address of l2 page table mapping @va to pa.
+	if ((l1e & 0x3) != 0x1) {					//Invalid L1 descriptor.
+
+	} else {									//Valid L1 descriptor.
+		uint32_t l2_pa = l1e & 0xFFFFFC00;
+		uint32_t l2_va = mmu_guest_pa_to_va(l2_pa, curr_vm->config);
+		uint32_t l2i = (ptr_va & 0x000FF000) >> 12;
+		uint32_t *l2e_va = (uint32_t *)(l2_va + l2i*4);
+		uint32_t l2e = *l2e_va;
+		l2i += ((l2_pa - (l2_pa & 0xFFFFF000)) >> 10)*256;
+		if ((l2e & 0x3) == 0x1) {	//Valid entry.
+			err = dmmu_l2_unmap_entry(l2_pa & 0xFFFFF000, l2i);
+			if (err) {
+				printf("map_one_to_one_l2: Could not unmap entry: l2_pa = 0x%x, l2i = 0x%x", l2_pa, l2i);
+				while (1);
+			}
+			uint32_t attrs = ;
+			err = dmmu_l2_map_entry(l2_pa & 0xFFFFF000, l2i, pa & 0xFFFFF000, attrs);
+		} else {					//Invalid l2 entry.
+		}
+	}
+}
+*/
+
+//https://cpulator.01xz.net/?sys=arm&loadasm=share/s33LHiT.s
+//
+/*
+	bic	r3, r1, #0x000003f0			//r3 := r1 AND ~0x000003f0
+	bic	r3, r3, #PTE_TYPE_MASK		//r3 := r3 AND ~PTE_TYPE_MASK = r3 AND ~0x3
+	orr	r3, r3, r2					//r3 := r3 OR r2
+	orr	r3, r3, #PTE_EXT_AP0 | 2	//r3 := r3 OR (0x10 | 0x2)
+
+	tst	r1, #1 << 4
+	orrne	r3, r3, #PTE_EXT_TEX(1)	//If bit 4 is set in r1 (non-zero result, Z flag not set, not equal), then r3 := r3 OR (1 << 6)
+
+	eor	r1, r1, #L_PTE_DIRTY		//r1 := r1 XOR (1 << 6)
+	tst	r1, #L_PTE_RDONLY | L_PTE_DIRTY
+	orrne	r3, r3, #PTE_EXT_APX	//If either of bits 7 (1 << 7) or 6 (1 << 6) is set in r1, then r3 := r3 OR (1 << 9)
+
+	tst	r1, #L_PTE_USER
+	orrne	r3, r3, #PTE_EXT_AP1	//If bit 8 (1 << 8) is set in r1, then r3 := r3 OR (2 << 4)
+
+	tst	r1, #L_PTE_XN
+	orrne	r3, r3, #PTE_EXT_XN		//If bit 9 (1 << 9) is set in r1, then r3 := r3 OR (1 << 0)
+
+	tst	r1, #L_PTE_YOUNG
+	tstne	r1, #L_PTE_VALID
+	eorne	r1, r1, #L_PTE_NONE		//If bit 1 (1 << 1) is set in r1, and if bit 0 (1 << 0) is set in r1, then r1 := r1 XOR (1 << 11)
+	tstne	r1, #L_PTE_NONE
+	moveq	r3, #0					//If bit 1 (1 << 1) is not set in r1, then r3 := 0
+									//If bit 1 (1 << 1) is set in r1, and if bit 0 (1 << 0) is NOT set in r1, then r3 := 0
+//If bit 1 (1 << 1) is set in r1, and if bit 0 (1 << 0) is set in r1, and if bit 11 (1 << 11) is NOT set in (r1 XOR (1 << 11)), then r3 := 0
+*/
+#define PTE_TYPE_MASK	0x3
+#define PTE_EXT_AP0		0x10
+#define PTE_EXT_TEX(x)	(x << 6)
+#define PTE_EXT_APX		(1 << 9)
+#define PTE_EXT_AP1		(2 << 4)
+#define PTE_EXT_XN		(1 << 0)
+#define PTE_EXT_NG		(1 << 11)
+#define L_PTE_DIRTY		(1 << 6)
+#define L_PTE_RDONLY	(1 << 7)
+#define L_PTE_USER		(1 << 8)
+#define L_PTE_XN		(1 << 9)
+#define L_PTE_YOUNG		(1 << 1)
+#define L_PTE_VALID		(1 << 0)
+#define L_PTE_NONE		(1 << 11)
+#define QUAUX(X) #X
+#define QU(X) QUAUX(X)
+uint32_t get_pte_hw_i(uint32_t pte_linux, uint32_t ext) {	//ext is global bit.
+	asm volatile ("mov	r1, %0" :: "r" (pte_linux) : "r1");
+	asm volatile ("mov	r2, %0" :: "r" (ext) : "r2");
+
+	asm volatile ("bic	r3, r1, #0x000003f0" ::: "r3");
+	asm volatile ("bic	r3, r3, #" QU(PTE_TYPE_MASK) "" ::: "r3");
+	asm volatile ("orr	r3, r3, r2" ::: "r3");
+	asm volatile ("orr	r3, r3, #" QU(PTE_EXT_AP0) " | 2" ::: "r3");
+	asm volatile ("tst	r1, #1 << 4" ::: "cc");
+	asm volatile ("orrne	r3, r3, #" QU(PTE_EXT_TEX(1)) "" ::: "r3");
+	asm volatile ("eor	r1, r1, #" QU(L_PTE_DIRTY) "" ::: "r1");
+	asm volatile ("tst	r1, #" QU(L_PTE_RDONLY) " | " QU(L_PTE_DIRTY) "" ::: "cc");
+	asm volatile ("orrne	r3, r3, #" QU(PTE_EXT_APX) "" ::: "r3");
+	asm volatile ("tst	r1, #" QU(L_PTE_USER) "" ::: "cc");
+	asm volatile ("orrne	r3, r3, #" QU(PTE_EXT_AP1) "" ::: "r3");
+	asm volatile ("tst	r1, #" QU(L_PTE_XN) "" ::: "cc");
+	asm volatile ("orrne	r3, r3, #" QU(PTE_EXT_XN) "" ::: "r3");
+	asm volatile ("tst	r1, #" QU(L_PTE_YOUNG) "" ::: "cc");
+	asm volatile ("tstne	r1, #" QU(L_PTE_VALID) "" ::: "cc");
+	asm volatile ("eorne	r1, r1, #" QU(L_PTE_NONE) "" ::: "r1");
+	asm volatile ("tstne	r1, #" QU(L_PTE_NONE) "" ::: "cc");
+	asm volatile ("moveq	r3, #0" ::: "r3");
+	uint32_t pte_hw;
+	asm volatile ("mov %0, r3" : "=r" (pte_hw) : :);
+	return pte_hw;
+}
+
+uint32_t get_pte_hw_c(uint32_t pte_linux, uint32_t ext) {		//ext is global bit.
+	uint32_t r1 = pte_linux;
+	uint32_t r2 = ext;
+	uint32_t r3 = r1 & ~0x000003f0;
+	r3 = r3 & ~PTE_TYPE_MASK;
+	r3 = r3 | r2;
+	r3 = r3 | (PTE_EXT_AP0 | 0x2);
+
+	r3 = r1 & (1 << 4) ? r3 | PTE_EXT_TEX(1) : r3;
+	r1 = r1 ^ L_PTE_DIRTY;
+	r3 = r1 & (L_PTE_RDONLY | L_PTE_DIRTY) ? r3 | PTE_EXT_APX : r3;
+	r3 = r1 & L_PTE_USER ? r3 | PTE_EXT_AP1 : r3;
+	r3 = r1 & L_PTE_XN ? r3 | PTE_EXT_XN : r3;
+	if (r1 & L_PTE_YOUNG) {
+		if (r1 & L_PTE_VALID) {
+			r1 = r1 ^ L_PTE_NONE;
+			r3 = r1 & L_PTE_NONE ? r3 : 0;
+		} else {
+			r3 = 0;
+		}		
+	} else {
+		r3 = 0;
+	}
+
+	uint32_t pte_hw = r3;
+	return pte_hw;
+}
+
+uint32_t find_l2_pte_va(uint32_t va, uint32_t pfn) {
+	uint32_t pa = pfn << 12;
+	uint32_t l2_pa = pa_to_l2_base_pa(pa);
+	uint32_t l2_va = mmu_guest_pa_to_va(l2_pa, curr_vm->config);
+	uint32_t l2i = (va & 0x000FF000) >> 12;
+	uint32_t l2e_va = l2_va + 4*l2i;
+	return l2e_va;
+}
+
+void hypercall_dyn_set_pte_one_to_one(uint32_t va, uint32_t pfn, uint32_t lpte, uint32_t hpte) {
+	uint32_t vstart = curr_vm->config->firmware->vstart;	//or use curr_vm->guest_info.page_offset but they are equal.
+	uint32_t page_tables_offset = curr_vm->config->pa_initial_l1_offset;
+
+	uint32_t pa = pfn << 12;
+	uint32_t l2_pa = pa_to_l2_base_pa(pa);
+	uint32_t l2_va = mmu_guest_pa_to_va(l2_pa, curr_vm->config);
+	uint32_t l2i = ((va & 0x000FF000) >> 12) + (((l2_pa - (l2_pa & 0xFFFFF000)) >> 10)*256);
+
+	uint32_t hpte_va = l2_va + ((va & 0x000FF000) >> 12)*4;
+	uint32_t lpte_va = hpte_va - 0x800;
+	uint32_t attrs = hpte & 0x00000FFF;
+	uint32_t err;
+
+	if (hpte != 0) {	//Map.
+		if (va == vstart + page_tables_offset + 0x0000 ||	//Page tables must be mapped as read only.
+			va == vstart + page_tables_offset + 0x1000 ||
+			va == vstart + page_tables_offset + 0x2000 ||
+			va == vstart + page_tables_offset + 0x3000 ) {
+			attrs = attrs & ~(MMU_AP_SUP_RW << MMU_L2_SMALL_AP_SHIFT);
+		}
+
+		err = L2_MAP(l2_pa & 0xFFFFF000, l2i, MMU_L1_PT_ADDR(hpte), attrs);
+		if (err == ERR_MMU_PT_NOT_UNMAPPED) {
+			err = dmmu_l2_unmap_entry(l2_pa & 0xFFFFF000, l2i);
+			if (err) {
+				printf("hypercall_dyn_set_pte_one_to_one: dmmu_l2_unmap_entry failed. va = 0x%x, page table at 0xC0004000, err = %d\n", va, err);
+				while (1);
+			}
+			err = L2_MAP(l2_pa & 0xFFFFF000, l2i, MMU_L1_PT_ADDR(hpte), attrs);
+		} else if (err == ERR_MMU_PH_BLOCK_NOT_WRITABLE) {	//Tries to map an L2 page table as writable.
+			attrs &= ~0x10;									//Clear write permission of new descriptor.
+			err = L2_MAP(l2_pa & 0xFFFFF000, l2i, MMU_L1_PT_ADDR(hpte), attrs);
+			if (err) {
+				printf("Could not mark page as an l2 page table in set pte hypercall when pointing to L2 page: err = %d\n", err);
+				while (1);
+			}
+//			else printf("Could mark page as an l2 page table after remap in set pte hypercall.\n");
+		} else {
+			printf("hypercall_dyn_set_pte_one_to_one failed: va = 0x%x, page table at 0xC0004000, err = %d\n", va, err);
+			while (1);
+		}
+
+		if (err == ERR_MMU_PH_BLOCK_NOT_WRITABLE) {	//Tries to map an L2 page table as writable.
+			attrs &= ~0x10;									//Clear write permission of new descriptor.
+			err = L2_MAP(l2_pa & 0xFFFFF000, l2i, MMU_L1_PT_ADDR(hpte), attrs);
+			if (err) {
+				printf("Could not mark page as an l2 page table in set pte hypercall when pointing to L2 page: err = %d\n", err);
+				while (1);
+			}
+//			else printf("Could mark page as an l2 page table after remap in set pte hypercall.\n");
+		} else if (err) {
+			printf("hypercall_dyn_set_pte_one_to_one: vstart = 0x%x, page_tables_offset = 0x%x, vstart + 0x4000 = 0x%x, va = 0x%x, err != 0 && va == vstart + 0x4000 = 0x%x\n", vstart, page_tables_offset, vstart + 0x4000, va, err != 0 && va == vstart + 0x4000);
+			printf("hypercall_dyn_set_pte_one_to_one cannot map: l2_pa = 0x%x, l2_va = 0x%x, l2i = %x, va = 0x%x, pfn = 0x%x, hpte = 0x%x, err = %d\n", l2_pa, l2_va, l2i, va, pfn, hpte, err);
+			while (1);
+		}
+	} else {			//Unmap.
+		err = dmmu_l2_unmap_entry(l2_pa & 0xFFFFF000, l2i);
+		if (err) {
+			printf("hypercall_dyn_set_pte_one_to_one cannot unmap: l2_pa = 0x%x, l2_va = 0x%x, l2i = %x, va = 0x%x, pfn = 0x%x, hpte = 0x%x, err = %d\n", l2_pa, l2_va, l2i, va, pfn, hpte, err);
+			while (1);
+		}
+	}
+
+	*((uint32_t *)lpte_va) = lpte;
+
+	COP_WRITE(COP_SYSTEM, COP_DCACHE_INVALIDATE_MVA, hpte_va);
+	clean_and_invalidate_cache();
 }

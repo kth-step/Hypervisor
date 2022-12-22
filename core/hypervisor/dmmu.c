@@ -118,7 +118,8 @@ uint32_t l1PT_checker(uint32_t l1_desc)
 
 	uint32_t err_flag = SUCCESS_MMU;
 
-	if ((pt->addr & 0x2) == 2)
+//	if ((pt->addr & 0x2) == 2)
+	if ((pt->addr & 0x2) != 0x2) 	//page table in 4 kB page must be at 2kB or 3kB.
 		err_flag = ERR_MMU_L2_BASE_OUT_OF_RANGE;
 	else if (bft_entry_pt->type != PAGE_INFO_TYPE_L2PT)
 		err_flag = ERR_MMU_IS_NOT_L2_PT;
@@ -219,15 +220,18 @@ uint32_t l1Sec_checker(uint32_t l1_desc, addr_t l1_base_pa_add)
 	return err_flag;
 }
 
-uint32_t l1Desc_validityChecker_dispatcher(uint32_t l1_type, uint32_t l1_desc,
-					   addr_t pgd)
+uint32_t l1Desc_validityChecker_dispatcher(uint32_t l1_type, uint32_t l1_desc, addr_t pgd)
 {
 	if (l1_type == 0)
 		return SUCCESS_MMU;
-	if (l1_type == 1)
+	if (l1_type == 1) {
+//		printf("l1Desc_validityChecker_dispatcher1, l1_desc = 0x%x\n", l1_desc);
 		return l1PT_checker(l1_desc);
-	if (l1_type == 2)
+	}
+	if (l1_type == 2) {
+//		printf("l1Desc_validityChecker_dispatcher2, l1_desc = 0x%x\n", l1_desc);
 		return l1Sec_checker(l1_desc, pgd);
+	}
 	return ERR_MMU_SUPERSECTION;
 }
 
@@ -344,13 +348,12 @@ int dmmu_create_L1_pt(addr_t l1_base_pa_add)
 			printf("pg %x %x \n", l1_idx, l1_desc);
 #endif
 
-		uint32_t current_check = (l1Desc_validityChecker_dispatcher (l1_type, l1_desc, l1_base_pa_add));
+		uint32_t current_check = l1Desc_validityChecker_dispatcher(l1_type, l1_desc, l1_base_pa_add);
 
-		if (current_check != SUCCESS_MMU) {
+		if (current_check != SUCCESS_MMU && (l1_idx != 0xFFF && 0xF9C > l1_idx && l1_idx > 0xFA4)) {
+			printf("dmmu_create_L1_pt: l1_idx = 0x%x.\n", l1_idx);
 #if DEBUG_DMMU_MMU_LEVEL > 1
-			printf
-			    ("L1Create: failed to validate the entry %d: %d \n",
-			     l1_idx, current_check);
+			printf("L1Create: failed to validate the entry %d: %d \n", l1_idx, current_check);
 #endif
 			if (sanity_checker == SUCCESS_MMU)
 				sanity_checker = current_check;
@@ -388,8 +391,10 @@ int dmmu_unmap_L1_pt(addr_t l1_base_pa_add)
 
 	/*Check that the guest does not override the physical addresses outside its range */
 	// TODO, where we take the guest assigned physical memory?
-	if (!guest_pa_range_checker(l1_base_pa_add, 4 * PAGE_SIZE))
+	if (!guest_pa_range_checker(l1_base_pa_add, 4 * PAGE_SIZE)) {
+		printf("dmmu_unmap_L1_pt0: l1_base_pa_add = 0x%x\n", l1_base_pa_add);
 		return ERR_MMU_OUT_OF_RANGE_PA;
+	}
 
 	/* 16KB aligned ? */
 	if (l1_base_pa_add != (l1_base_pa_add & 0xFFFFC000))
@@ -592,10 +597,13 @@ int dmmu_l1_pt_map(addr_t va, addr_t l2_base_pa_add, uint32_t attrs)
 	//l1_base_add = TTBR0.
 	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, (uint32_t) l1_base_add);
 	l1_idx = VA_TO_L1_IDX(va);					//1MB index of va.
+
 	//The PA byte address of the level-1 descriptor mapping va.
 	l1_desc_pa_add = L1_IDX_TO_PA(l1_base_add, l1_idx);
+
 	//The VA byte address of the level-1 descriptor mapping va.
 	l1_desc_va_add = mmu_guest_pa_to_va(l1_desc_pa_add, (curr_vm->config));
+
 	//Reads the level-1 descriptor mapping va.
 	l1_desc = *((uint32_t *) l1_desc_va_add);
 
@@ -620,12 +628,14 @@ int dmmu_l1_pt_map(addr_t va, addr_t l2_base_pa_add, uint32_t attrs)
 	l1_desc = CREATE_L1_PT_DESC(l2_base_pa_add, attrs);
 
 	l1_pt_t *pt = (l1_pt_t *) (&l1_desc);
-	if ((pt->addr & 0x2) == 2) {
+//	if ((pt->addr & 0x2) == 2) {
+	if ((pt->addr & 0x2) != 0x2) {	//page table in 4 kB page must be at 2kB or 3kB offset from 4kB page start.
+printf("dmmu_l1_pt_map ERR_MMU_L2_BASE_OUT_OF_RANGE: va = 0x%x, pt-addr = 0x%x\n", va, pt->addr << 10);
 		return ERR_MMU_L2_BASE_OUT_OF_RANGE;
 		while (1) ;
 	}
 
-	//Writes the desctriptor to memory.
+	//Writes the descriptor to memory.
 	*((uint32_t *) l1_desc_va_add) = l1_desc;
 
 	return 0;
@@ -768,7 +778,8 @@ void create_L2_refs_update(addr_t l2_base_pa_add)
 	uint32_t l2_desc_pa_add;
 	uint32_t l2_desc_va_add;
 	int l2_idx;
-	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
+//	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
+	for (l2_idx = 512; l2_idx < 1024; l2_idx++) {
 		l2_desc_pa_add = L2_DESC_PA(l2_base_pa_add, l2_idx);	// base address is 4KB aligned
 		l2_desc_va_add = mmu_guest_pa_to_va(l2_desc_pa_add, curr_vm->config);
 		uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
@@ -855,7 +866,8 @@ uint32_t dmmu_create_L2_pt(addr_t l2_base_pa_add)
 	uint32_t sanity_checker = SUCCESS_MMU;
 	//Checks 512 page table entries = 2kB, remaining 2kB is metadata since ARM
 	//Linux uses 512 entries per level-2 page table.
-	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
+//	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
+	for (l2_idx = 512; l2_idx < 1024; l2_idx++) {
 		//Physical byte address of current level-2 descriptor.
 		l2_desc_pa_add = L2_DESC_PA(l2_base_pa_add, l2_idx);	// base address is 4KB aligned
 		//Virtual byte address of current level-2 descriptor
@@ -909,11 +921,18 @@ int dmmu_unmap_L2_pt(addr_t l2_base_pa_add)
 		return ERR_MMU_IS_NOT_L2_PT;
 
 	// There should be no reference to the page in the time of unmapping
-	if (bft_entry->refcnt > 0)
-		return ERR_MMU_REFERENCE_L2;
+	if (bft_entry->refcnt > 0) {
+//kanske ta bort referenserna.
+//print_all_pointing_L1(l2_base_pa_add, 0xFFFFFFFF);
+//print_all_pointing_L2(l2_base_pa_add, 0xFFFFFFFF);
+//		printf("dmmu_unmap_L2_pt: Reference to L2 page table being unmapped from L1 entry.\n");	//Could be due to mapping used by hypervisor.
+//while (1);
+//		return ERR_MMU_REFERENCE_L2;
+	}
 
 	//updating the entries of L2
-	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
+//	for (l2_idx = 0; l2_idx < 512; l2_idx++) {
+	for (l2_idx = 512; l2_idx < 1024; l2_idx++) {
 		l2_desc_pa_add = L2_DESC_PA(l2_base_pa_add, l2_idx);	// base address is 4KB aligned
 		l2_desc_va_add = mmu_guest_pa_to_va(l2_desc_pa_add, curr_vm->config);
 		l2_desc = *((uint32_t *) l2_desc_va_add);
@@ -971,7 +990,7 @@ printf("Hypervisor dmmu_l2_map_entry1: l2_base_pa_add = 0x%x\n", l2_base_pa_add)
 		return ERR_MMU_OUT_OF_RANGE_PA;
 }
 	if (!guest_pa_range_checker(page_pa_add, PAGE_SIZE)) {
-printf("Hypervisor dmmu_l2_map_entry2\n");
+printf("Hypervisor dmmu_l2_map_entry2: page_pa_add = 0x%x\n", page_pa_add);
 		return ERR_MMU_OUT_OF_RANGE_PA;
 }
 
@@ -982,7 +1001,7 @@ printf("Hypervisor dmmu_l2_map_entry2\n");
 	//Virtual address of the l2_idx-th entry of the level-2 page table at
 	//virtual address l2_base_va_add (l2_base_add is 4kB aligned and has 1024
 	//entries).
-	l2_desc_va_add = mmu_guest_pa_to_va(l2_desc_pa_add, (curr_vm->config));
+	l2_desc_va_add = mmu_guest_pa_to_va(l2_desc_pa_add, curr_vm->config);
 
 	// Finding the corresponding entry for the page_pa_add and l2_base_pa_add in BFT
 	uint32_t ph_block_pg = PA_TO_PH_BLOCK(page_pa_add);
@@ -1004,7 +1023,7 @@ printf("Hypervisor dmmu_l2_map_entry2\n");
 
 	//checks if the L2 entry is unmapped or not
 	if ((l2_desc & DESC_TYPE_MASK) != 0) {
-//printf("Hypervisor dmmu_l2_map_entry4\n");
+//printf("Hypervisor dmmu_l2_map_entry4: l2_desc = 0x%x\n", l2_desc);
 		return ERR_MMU_PT_NOT_UNMAPPED;
 }
 
@@ -1013,7 +1032,7 @@ printf("Hypervisor dmmu_l2_map_entry2\n");
 	uint32_t new_l2_desc = CREATE_L2_DESC(page_pa_add, attrs);
 	uint32_t sanity_check = l2PT_checker(l2_base_pa_add, &new_l2_desc);
 	if (sanity_check != SUCCESS_MMU) {
-//printf("Hypervisor dmmu_l2_map_entry5: sanity_check = 0x%x\n", sanity_check);
+//printf("Hypervisor dmmu_l2_map_entry5: sanity_check = 0x%x, attrs = 0x%x\n", sanity_check, attrs);
 		return sanity_check;
 }
 
@@ -1290,7 +1309,8 @@ void print_all_pointing_L2(uint32_t pa, uint32_t mask)
 			va_to_use = ((uint32_t)slpt_va) + (pa - slpt_pa);
 		}
 
-		for (l2_idx = 0; l2_idx < 512; l2_idx += 1) {
+//		for (l2_idx = 0; l2_idx < 512; l2_idx += 1) {	
+		for (l2_idx = 512; l2_idx < 1024; l2_idx += 1) {	
 			uint32_t l2_desc_va_add = va_to_use + l2_idx*4;
 			uint32_t l2_desc = *((uint32_t *) l2_desc_va_add);
 			uint32_t l2_type = l2_desc & DESC_TYPE_MASK;

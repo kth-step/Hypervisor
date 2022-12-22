@@ -206,12 +206,71 @@ void board_init()	//Invoked by core/hypervisor/init.c:start_
 	pt_create_coarse(flpt_va, AM33XX_L4_WK_IO_OFFSET(0x44E31000), 0x44E31000, 0x1000, MLT_IO_RW_REG);	/* DMTIMER1_1MS: Writes TIOCP_CFG controlling parameters of the OCP interface. No memory access.*/
 	pt_create_coarse(flpt_va, AM33XX_L4_WK_IO_OFFSET(0x44E35000), 0x44E35000, 0x1000, MLT_IO_RW_REG);	/* WDT1: Writes Watchdog System Control Register to set parameters of L4 bus. No memory access.*/
 #endif
-	pt_create_coarse(flpt_va, 0xFA400000, 0x4A100000, 0x1000, MLT_IO_RO_REG);	/* CPSW_SS except MDIO, CPSW_WR, CPPI_RAM 4KB */
-	pt_create_coarse(flpt_va, 0xFA401000, 0x4A101000, 0x1000, MLT_IO_RW_REG);	/* MDIO, CPSW_WR which is 4KB. */
-	pt_create_coarse(flpt_va, 0xFA402000, 0x4A102000, 0x2000, MLT_IO_RO_REG);	/* CPPI_RAM 8KB */
-#if 0
-	pt_create_coarse(flpt_va, 0xFA524000, 0x40300000, 0x10000, MLT_USER_RAM);	/* L3 OCMC0: Comment in arch/arm/plat-omap */
-#endif
+#define CPSW_SS_VIRT 0xFA400000
+#define CPSW_SS_PHYS 0x4A100000
+#define CPSW_SS_SIZE 0x00004000
+#define PRU_ICSS_VIRT (CPSW_SS_VIRT + CPSW_SS_SIZE)
+#define PRU_ICSS_PHYS 0x4A300000
+#define PRU_ICSS_SIZE 0x00027000
+#define TPCC_VIRT (PRU_ICSS_VIRT + PRU_ICSS_SIZE)
+#define TPCC_PHYS 0x49000000
+#define TPCC_SIZE 0x00001000
+#define TPTC0_VIRT (TPCC_VIRT + TPCC_SIZE)
+#define TPTC0_PHYS 0x49800000
+#define TPTC0_SIZE 0x00001000
+#define TPTC1_VIRT (TPTC0_VIRT + TPTC0_SIZE)
+#define TPTC1_PHYS 0x49900000
+#define TPTC1_SIZE 0x00001000
+#define TPTC2_VIRT (TPTC1_VIRT + TPTC1_SIZE)
+#define TPTC2_PHYS 0x49A00000
+#define TPTC2_SIZE 0x00001000
+#define MMCHS2_VIRT (TPTC2_VIRT + TPTC2_SIZE)
+#define MMCHS2_PHYS 0x47810000
+#define MMCHS2_SIZE 0x00001000
+#define USBSS_VIRT (MMCHS2_VIRT + MMCHS2_SIZE)
+#define USBSS_PHYS 0x47400000
+#define USBSS_SIZE 0x00008000
+#define L3OCMC0_VIRT (USBSS_VIRT + USBSS_SIZE)
+#define L3OCMC0_PHYS 0x40300000
+#define L3OCMC0_SIZE 0x00010000
+#define EMIF0_VIRT (L3OCMC0_VIRT + L3OCMC0_SIZE)
+#define EMIF0_PHYS 0x4C000000
+#define EMIF0_SIZE 0x00001000
+#define GPMC_VIRT (EMIF0_VIRT + EMIF0_SIZE)
+#define GPMC_PHYS 0x50000000
+#define GPMC_SIZE 0x00001000
+#define SHAM_VIRT (GPMC_VIRT + GPMC_SIZE)
+#define SHAM_PHYS 0x53100000
+#define SHAM_SIZE 0x00001000
+#define AES_VIRT (SHAM_VIRT + SHAM_SIZE)
+#define AES_PHYS 0x53500000
+#define AES_SIZE 0x00001000
+#define SGX530_VIRT (AES_VIRT + AES_SIZE)
+#define SGX530_PHYS 0x56000000
+#define SGX530_SIZE 0x00010000
+
+	//See linux-5.15.13/arch/arm/mach-omap2/io.c.
+	//CPSW_SS_VIRT starts on a MB aligned address and all of this space fits
+	//within 1 MB. Hence, pt_create_coarse, which can manage a region spanning
+	//at most 1 MB starting from a MB aligned address, can be used for these
+	//mappings.
+	pt_create_coarse(flpt_va, CPSW_SS_VIRT + 0x0000, CPSW_SS_PHYS, 0x1000, MLT_IO_RO_REG);	/* CPSW_SS except MDIO, CPSW_WR, CPPI_RAM 4KB */
+	pt_create_coarse(flpt_va, CPSW_SS_VIRT + 0x1000, CPSW_SS_PHYS + 0x1000, 0x1000, MLT_IO_RW_REG);	/* MDIO, CPSW_WR which is 4KB. */
+	pt_create_coarse(flpt_va, CPSW_SS_VIRT + 0x2000, CPSW_SS_PHYS + 0x2000, 0x2000, MLT_IO_RO_REG);	/* CPPI_RAM 8KB */
+	pt_create_coarse(flpt_va, PRU_ICSS_VIRT, PRU_ICSS_PHYS, PRU_ICSS_SIZE, MLT_IO_RW_REG);	/* PRU_ICSS, 156kB. */
+	pt_create_coarse(flpt_va, TPCC_VIRT, TPCC_PHYS, TPCC_SIZE, MLT_IO_RO_REG);	/* TPCC, 4kB. */
+	pt_create_coarse(flpt_va, TPTC0_VIRT, TPTC0_PHYS, TPTC0_SIZE, MLT_IO_RO_REG);	/* TPTC0, 4kB. */
+	pt_create_coarse(flpt_va, TPTC1_VIRT, TPTC1_PHYS, TPTC1_SIZE, MLT_IO_RO_REG);	/* TPTC2, 4kB. */
+	pt_create_coarse(flpt_va, TPTC2_VIRT, TPTC2_PHYS, TPTC2_SIZE, MLT_IO_RO_REG);	/* TPTC3, 4kB. */
+	pt_create_coarse(flpt_va, MMCHS2_VIRT, MMCHS2_PHYS, MMCHS2_SIZE, MLT_IO_RW_REG);	/* MMCHS2, 4kB. */
+	pt_create_coarse(flpt_va, USBSS_VIRT, USBSS_PHYS, USBSS_SIZE, MLT_IO_RW_REG);	/* USBSS, 4kB. */
+	pt_create_coarse(flpt_va, L3OCMC0_VIRT, L3OCMC0_PHYS, L3OCMC0_SIZE, MLT_USER_RAM);	/* L3 OCMC0, 64kB. */
+	pt_create_coarse(flpt_va, EMIF0_VIRT, EMIF0_PHYS, EMIF0_SIZE, MLT_IO_RW_REG);	/* EMIF0, 4kB. */
+	pt_create_coarse(flpt_va, GPMC_VIRT, GPMC_PHYS, GPMC_SIZE, MLT_IO_RW_REG);	/* GPMC, 4kB. */
+	pt_create_coarse(flpt_va, SHAM_VIRT, SHAM_PHYS, SHAM_SIZE, MLT_IO_RW_REG);	/* SHAM, 4kB. */
+	pt_create_coarse(flpt_va, AES_VIRT, AES_PHYS, AES_SIZE, MLT_IO_RW_REG);	/* AES, 4kB. */
+	pt_create_coarse(flpt_va, SGX530_VIRT, SGX530_PHYS, SGX530_SIZE, MLT_IO_RW_REG);	/* SGX530, 64kB. */
+
 	/*Flush the addresses as we are going to use it soon */
 	mem_mmu_tlb_invalidate_all(TRUE, TRUE);
 	mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback

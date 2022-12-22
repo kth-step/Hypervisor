@@ -90,8 +90,6 @@ printf("HV: guest_size = %x\n", (uint32_t) info->guest.guest_size);
 }
 #else																//Linux 5.15.13.
 void hypercall_guest_init(uint32_t *vector_table) {
-	printf("HYPERVISOR: hypercall_guest_init: vector_table = 0x%x.\n", vector_table);
-
 	//Used by core/hypervisor/handlers.c.
 	curr_vm->guest_info.nr_syscalls = 452;	//452 system calls in Linux 5.15.13.
 
