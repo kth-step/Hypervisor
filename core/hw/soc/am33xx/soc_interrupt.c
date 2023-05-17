@@ -56,6 +56,7 @@ static volatile intc_registers *intc = 0;
 }
 
 /*These functions have not been tested yet*/
+//UNUSED
 void mask_interrupt(uint32_t irq, uint32_t pending)
 {
 	uint32_t hwirq = irq;
@@ -72,6 +73,7 @@ void mask_interrupt(uint32_t irq, uint32_t pending)
 		hyper_panic("Guest not allowed to use this IRQ", irq);
 }
 
+//UNUSED
 void unmask_interrupt(uint32_t irq, uint32_t pending)
 {
 	int offset = irq >> 5;
@@ -125,11 +127,12 @@ void cpu_irq_set_enable(int n, BOOL enable)
 		intc->sections[section].intc_mir &= ~(1 << pos);
 		intc->sections[section].intc_mir_clear = 1 << pos;
 
-		interrupt_ctrl[section] |= (1 << pos);
+		interrupt_ctrl[section] |= (1 << pos);	//UNUSED
 	} else {
 		intc->sections[section].intc_mir |= (1 << pos);
 		intc->sections[section].intc_mir_set = 1 << pos;
 
+		//UNUSED
 		interrupt_ctrl[section] &= ~(1 << pos);	/*INT CTRL BITMASK IRQ guests are allowed to use */
 	}
 }
@@ -163,6 +166,18 @@ void soc_interrupt_init()
 		cpu_irq_set_handler(i, default_handler);
 	}
 
+	//Enable interrupts for USB for Linux.
+	cpu_irq_set_enable(17, TRUE);
+	cpu_irq_set_handler(17, (cpu_callback) irq_handler);
+//	cpu_irq_set_enable(18, TRUE);							//Unnecessary.
+	cpu_irq_set_handler(18, (cpu_callback) irq_handler);	//Unnecessary.
+//	cpu_irq_set_enable(19, TRUE);
+	cpu_irq_set_handler(19, (cpu_callback) irq_handler);
+//	cpu_irq_set_enable(34, TRUE);							//Unnecessary.
+	cpu_irq_set_handler(34, (cpu_callback) irq_handler);	//Unnecessary.
+//	cpu_irq_set_enable(78, TRUE);							//Unnecessary.
+	cpu_irq_set_handler(78, (cpu_callback) irq_handler);	//Unnecessary.
+
 	//Enable Interrupts for CPSW for Linux.
 #if defined(LINUX) && defined(CPSW)
 	//The network driver uses interrupt lines 40, 41, 42, and 43.
@@ -183,14 +198,19 @@ void soc_interrupt_init()
 	cpu_irq_set_enable(68, TRUE);
 	cpu_irq_set_handler(68, (cpu_callback) irq_handler);
 
-	//Enable interrupts for I2C0INT for Linux.
+	//Enable interrupts for I2C0INT for Linux (becuase Linux uses it for some reason; maybe due to some initialization).
 	cpu_irq_set_enable(70, TRUE);
 	cpu_irq_set_handler(70, (cpu_callback) irq_handler);
+
+	if (intc->intc_protection) {
+		printf("HYPERVISOR INTC_PROTECTION ACTIVATED: 0x%x\n", intc->intc_protection);
+		while (1);
+	}
 
 /*
 //////////////
 
-	printf("HYPERVISOR soc_interrupt_init: 0x%x\n", intc->intc_protection);
+
 //while (1);
 #define INTC_IRQ_TIMER0 66
 #define INTC_IRQ_TIMER1_MS 67

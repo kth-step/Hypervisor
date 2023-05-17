@@ -13,7 +13,7 @@
 //accessing a register.
 extern virtual_machine *curr_vm;
 
-//#define PRINT_QUEUE
+#define PRINT_QUEUE
 
 //The number to add to physical address in the Ethernet Subsystem to get the
 //corresponding virtual address.
@@ -31,10 +31,13 @@ extern virtual_machine *curr_vm;
 //one half for reception.
 #define MAX_QUEUE_LENGTH 256
 
+//Number of DMA channels the transmission and reception modules can use.
+#define N_DMA_CHANNELS	8
+
 //Accesses the value at physical address phys which is of type uint32_t *.
-#define word_at_phys_addr(phys) (*((uint32_t *) phys_to_virt(phys)))
+#define word_at_phys_addr(phys) (*((volatile uint32_t *) phys_to_virt(phys)))
 //Accesses the value at physical address phys which is of type uint32_t *.
-#define word_at_virt_addr(virt) (*((uint32_t *) virt))
+#define word_at_virt_addr(virt) (*((volatile uint32_t *) virt))
 
 //Bit 31 is the SOP bit in a buffer descriptor.
 #define SOP (1 << 31)
@@ -106,56 +109,64 @@ extern virtual_machine *curr_vm;
 #define EOP_BD FALSE
 
 //Macros for NIC register accesses:
-#define DMACONTROL_PHYSICAL_ADDRESS 0x4A100820
-#define is_dmacontrol_virtual_address(address) (address == phys_to_virt(DMACONTROL_PHYSICAL_ADDRESS))
-#define DMACONTROL (word_at_phys_addr(DMACONTROL_PHYSICAL_ADDRESS))
+#define DMACONTROL_PA 0x4A100820
+#define is_dmacontrol_virtual_address(address) (address == phys_to_virt(DMACONTROL_PA))
+#define DMACONTROL (word_at_phys_addr(DMACONTROL_PA))
 
-#define CPDMA_SOFT_RESET_PHYSICAL_ADDRESS 0x4A10081C
-#define is_cpdma_soft_reset_virtual_address(address) (address == phys_to_virt(CPDMA_SOFT_RESET_PHYSICAL_ADDRESS))
-#define CPDMA_SOFT_RESET (word_at_phys_addr(CPDMA_SOFT_RESET_PHYSICAL_ADDRESS))
+#define CPDMA_SOFT_RESET_PA 0x4A10081C
+#define is_cpdma_soft_reset_virtual_address(address) (address == phys_to_virt(CPDMA_SOFT_RESET_PA))
+#define CPDMA_SOFT_RESET (word_at_phys_addr(CPDMA_SOFT_RESET_PA))
+
+#define bytes_per_register	4
 
 #define is_hdp_register_virtual_address(address) (phys_to_virt(0x4A100A00) <= address && address < phys_to_virt(0x4A100A40))
 
-#define TX0_HDP_PHYSICAL_ADDRESS 0x4A100A00
-#define is_tx0_hdp_virtual_address(address) (address == phys_to_virt(TX0_HDP_PHYSICAL_ADDRESS))
-#define TX0_HDP (word_at_phys_addr(TX0_HDP_PHYSICAL_ADDRESS))
+#define TX_HDP_PA 0x4A100A00
+#define RX_HDP_PA 0x4A100A20
 
-#define RX0_HDP_PHYSICAL_ADDRESS 0x4A100A20
-#define is_rx0_hdp_virtual_address(address) (address == phys_to_virt(RX0_HDP_PHYSICAL_ADDRESS))
-#define RX0_HDP (word_at_phys_addr(RX0_HDP_PHYSICAL_ADDRESS))
+#define is_tx_hdp_virtual_address(va) (phys_to_virt(TX_HDP_PA) <= va && va < phys_to_virt(TX_HDP_PA + (N_DMA_CHANNELS*bytes_per_register)))
+#define is_rx_hdp_virtual_address(va) (phys_to_virt(RX_HDP_PA) <= va && va < phys_to_virt(RX_HDP_PA + (N_DMA_CHANNELS*bytes_per_register)))
 
-#define is_cp_register_virtual_address(address) (phys_to_virt(0x4A100A40) <= address && address < phys_to_virt(0x4A100A80))
+#define TX_HDP(channel_id) (word_at_phys_addr(TX_HDP_PA + (channel_id*bytes_per_register)))
+#define RX_HDP(channel_id) (word_at_phys_addr(RX_HDP_PA + (channel_id*bytes_per_register)))
 
-#define TX0_CP_PHYSICAL_ADDRESS 0x4A100A40
-#define is_tx0_cp_virtual_address(address) (address == phys_to_virt(TX0_CP_PHYSICAL_ADDRESS))
-#define TX0_CP (word_at_phys_addr(TX0_CP_PHYSICAL_ADDRESS))
+#define get_tx_hdp_channel_id(va)	((va - phys_to_virt(TX_HDP_PA)) / bytes_per_register)
+#define get_rx_hdp_channel_id(va)	((va - phys_to_virt(RX_HDP_PA)) / bytes_per_register)
 
-#define RX0_CP_PHYSICAL_ADDRESS 0x4A100A60
-#define is_rx0_cp_virtual_address(address) (address == phys_to_virt(RX0_CP_PHYSICAL_ADDRESS))
-#define RX0_CP (word_at_phys_addr(RX0_CP_PHYSICAL_ADDRESS))
+#define TX_CP_PA 0x4A100A40
+#define RX_CP_PA 0x4A100A60
 
-#define TX_TEARDOWN_PHYSICAL_ADDRESS 0x4A100808
-#define is_tx_teardown_virtual_address(address) (address == phys_to_virt(TX_TEARDOWN_PHYSICAL_ADDRESS))
-#define TX_TEARDOWN (word_at_phys_addr(TX_TEARDOWN_PHYSICAL_ADDRESS))
+#define is_tx_cp_virtual_address(va) (phys_to_virt(TX_CP_PA) <= va && va < phys_to_virt(TX_CP_PA + (N_DMA_CHANNELS*bytes_per_register)))
+#define is_rx_cp_virtual_address(va) (phys_to_virt(RX_CP_PA) <= va && va < phys_to_virt(RX_CP_PA + (N_DMA_CHANNELS*bytes_per_register)))
 
-#define RX_TEARDOWN_PHYSICAL_ADDRESS 0x4A100818
-#define is_rx_teardown_virtual_address(address) (address == phys_to_virt(RX_TEARDOWN_PHYSICAL_ADDRESS))
-#define RX_TEARDOWN (word_at_phys_addr(RX_TEARDOWN_PHYSICAL_ADDRESS))
+#define TX_CP(channel_id) (word_at_phys_addr(TX_CP_PA + (channel_id*bytes_per_register)))
+#define RX_CP(channel_id) (word_at_phys_addr(RX_CP_PA + (channel_id*bytes_per_register)))
 
-#define CPPI_RAM_START_PHYSICAL_ADDRESS 0x4A102000
-#define CPPI_RAM_END_PHYSICAL_ADDRESS 0x4A104000
-#define is_cppi_ram_virtual_address(address) (phys_to_virt(CPPI_RAM_START_PHYSICAL_ADDRESS) <= address && address < phys_to_virt(CPPI_RAM_END_PHYSICAL_ADDRESS))
+#define get_tx_cp_channel_id(va)	((va - phys_to_virt(TX_CP_PA)) / bytes_per_register)
+#define get_rx_cp_channel_id(va)	((va - phys_to_virt(RX_CP_PA)) / bytes_per_register)
+
+#define TX_TEARDOWN_PA 0x4A100808
+#define is_tx_teardown_virtual_address(address) (address == phys_to_virt(TX_TEARDOWN_PA))
+#define TX_TEARDOWN (word_at_phys_addr(TX_TEARDOWN_PA))
+
+#define RX_TEARDOWN_PA 0x4A100818
+#define is_rx_teardown_virtual_address(address) (address == phys_to_virt(RX_TEARDOWN_PA))
+#define RX_TEARDOWN (word_at_phys_addr(RX_TEARDOWN_PA))
+
+#define CPPI_RAM_START_PA 0x4A102000
+#define CPPI_RAM_END_PA 0x4A104000
+#define is_cppi_ram_virtual_address(address) (phys_to_virt(CPPI_RAM_START_PA) <= address && address < phys_to_virt(CPPI_RAM_END_PA))
 #define CPPI_RAM(physical_address) (word_at_phys_addr(physical_address))
 
-#define RX_BUFFER_OFFSET_PHYSICAL_ADDRESS 0x4A100828
-#define is_rx_buffer_offset_virtual_address(address) (address == phys_to_virt(RX_BUFFER_OFFSET_PHYSICAL_ADDRESS))
-#define RX_BUFFER_OFFSET (word_at_phys_addr(RX_BUFFER_OFFSET_PHYSICAL_ADDRESS))
+#define RX_BUFFER_OFFSET_PA 0x4A100828
+#define is_rx_buffer_offset_virtual_address(address) (address == phys_to_virt(RX_BUFFER_OFFSET_PA))
+#define RX_BUFFER_OFFSET (word_at_phys_addr(RX_BUFFER_OFFSET_PA))
 
 //Maximum value of rho_nic.
 #define MAX_RHO_NIC 15
 
 //Enums used to denote what sort of overlap a CPPI_RAM does with respect to a queue.
-typedef enum OVERLAP { ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP, ILLEGAL_OVERLAP, NO_OVERLAP} bd_overlap;
+typedef enum OVERLAP {ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP, ILLEGAL_OVERLAP, NO_OVERLAP} bd_overlap;
 
 //Physical addresses of buffer descriptors of the hypervisor's view of where
 //the transmitter and receiver are in processing buffer descriptors. That is,
@@ -165,14 +176,21 @@ typedef enum OVERLAP { ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP, ILLEGAL_OVERLAP, 
 //the buffer descriptor in queustion has actually been released by the NIC
 //hardware.
 //
-//tx0_active_queue and rx0_active_queue always point to a SOP.
-static uint32_t tx0_active_queue = 0, rx0_active_queue = 0;
-static BOOL initialized = FALSE, tx0_hdp_initialized = FALSE, rx0_hdp_initialized = FALSE, tx0_cp_initialized = FALSE, rx0_cp_initialized = FALSE, tx0_tearingdown = FALSE, rx0_tearingdown = FALSE;
+//tx_active_queue[channel_id] and rx_active_queue[channel_id] always point to a SOP.
+static uint32_t tx_active_queue[N_DMA_CHANNELS];
+static uint32_t rx_active_queue[N_DMA_CHANNELS];
+static BOOL initialized = FALSE;
+static BOOL tx_hdp_initialized[N_DMA_CHANNELS];
+static BOOL rx_hdp_initialized[N_DMA_CHANNELS];
+static BOOL tx_cp_initialized[N_DMA_CHANNELS];
+static BOOL rx_cp_initialized[N_DMA_CHANNELS];
+static BOOL tx_tearingdown[N_DMA_CHANNELS];
+static BOOL rx_tearingdown[N_DMA_CHANNELS];
 
 //For each 32-bit word aligned word in CPPI_RAM, true means that word is a part of an active queue, and false not.
 #define alpha_SIZE 64
 //This data structure assumes that no buffer descriptors overlap.
-//By the definition of the C language is alpha initialized to contain only zeros.
+//By the definition of the C language alpha is initialized to contain only zeros.
 static uint32_t alpha[alpha_SIZE];
 
 //The data structure recv_bd_nr_blocks records for each buffer descriptor how many blocks it accesses.
@@ -193,25 +211,24 @@ Optimized:
  2. bit_offset := (((CPPI_RAM_WORD - CPPI_RAM_START) >> 2) & 0x1F)
  3. (alpha[(CPPI_RAM_WORD - CPPI_RAM_START) >> 7] & (1 << (((CPPI_RAM_WORD - CPPI_RAM_START) >> 2) & 0x1F)))
 */
-#define IS_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 7] & (1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2) & 0x1F)))
+#define IS_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PA) >> 7] & (1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PA) >> 2) & 0x1F)))
 
 //Input is a word aligned address in CPPI_RAM. The corresponding bit in alpha is set to 1.
-#define SET_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 7] |= (1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2) & 0x1F)))
+#define SET_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PA) >> 7] |= (1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PA) >> 2) & 0x1F)))
 
 //Input is a word aligned address in CPPI_RAM. The corresponding bit in alpha is set to 0.
-#define CLEAR_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 7] &= (~(1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PHYSICAL_ADDRESS) >> 2) & 0x1F))))
+#define CLEAR_ACTIVE_CPPI_RAM(CPPI_RAM_WORD) (alpha[(CPPI_RAM_WORD - CPPI_RAM_START_PA) >> 7] &= (~(1 << (((CPPI_RAM_WORD - CPPI_RAM_START_PA) >> 2) & 0x1F))))
 
 /*
  *  Local functions only used in this file.
  */
-static BOOL stateram_handler(uint32_t);
 static BOOL write_nic_register_handler(uint32_t, uint32_t);
 static BOOL dmacontrol_handler(uint32_t);
 static BOOL cpdma_soft_reset_handler(uint32_t);
-static BOOL tx0_hdp_handler(uint32_t);
-static BOOL rx0_hdp_handler(uint32_t);
-static BOOL tx0_cp_handler(uint32_t);
-static BOOL rx0_cp_handler(uint32_t);
+static BOOL tx_hdp_handler(uint32_t, uint32_t);
+static BOOL rx_hdp_handler(uint32_t, uint32_t);
+static BOOL tx_cp_handler(uint32_t, uint32_t);
+static BOOL rx_cp_handler(uint32_t, uint32_t);
 static BOOL tx_teardown_handler(uint32_t);
 static BOOL rx_teardown_handler(uint32_t);
 static BOOL cppi_ram_handler(uint32_t, uint32_t);
@@ -219,9 +236,9 @@ static BOOL rx_buffer_offset_handler(uint32_t);
 
 static void initialization_performed(void);
 static void update_active_queue(BOOL);
-static void handle_potential_misqueue_condition(BOOL, uint32_t, uint32_t);
-static void decrement_rho_nic_update_alpha_queue(uint32_t, BOOL, BOOL);
-static void decrement_rho_nic_update_alpha(uint32_t, BOOL, BOOL);
+static void handle_potential_misqueue_condition(BOOL, uint32_t, uint32_t, uint32_t);
+static void decrement_rho_nic_update_alpha_queue(uint32_t, BOOL);
+static void decrement_rho_nic_update_alpha(uint32_t, BOOL);
 static BOOL is_queue_secure(uint32_t, BOOL);
 static BOOL is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap(uint32_t);
 static BOOL is_queue_self_overlap(uint32_t bd_ptr);
@@ -229,12 +246,13 @@ static BOOL is_transmit_SOP_EOP_packet_length_fields_set_correctly(uint32_t);
 static BOOL is_data_buffer_secure_queue(uint32_t, BOOL);
 static BOOL is_data_buffer_secure(uint32_t, BOOL);
 static BOOL is_secure_linux_memory(BOOL, uint32_t, uint32_t);
+static void type_of_cppi_ram_access(uint32_t, BOOL, bd_overlap *, uint32_t *);
 static bd_overlap type_of_cppi_ram_access_overlap(uint32_t, uint32_t);
 static void set_and_clear_word(uint32_t, uint32_t, uint32_t, uint32_t);
-static void set_and_clear_word_on_sop_or_eop(uint32_t, uint32_t, uint32_t,
-					     uint32_t, BOOL);
+static void set_and_clear_word_on_sop_or_eop(uint32_t, uint32_t, uint32_t, uint32_t, BOOL);
 #if defined(PRINT_QUEUE)
 static void print_queue(uint32_t);
+static void print_queues(void);
 #endif
 
 #if 0
@@ -254,6 +272,7 @@ BOOL rx_int_dma = FALSE;
 BOOL rx_dma = FALSE;
 #endif
 
+/*
 #define hw_next		0
 #define hw_buffer	4
 #define hw_len		8
@@ -293,6 +312,7 @@ BOOL soc_check_bd_write(uint32_t bd_va, uint32_t len, uint32_t buffer, uint32_t 
 
 	return allowed;
 }
+*/
 
 /*
  *  @accessed_va: Virtual address of accessed word that belongs to the Ethernet
@@ -349,39 +369,6 @@ BOOL soc_check_cpsw_access(uint32_t accessed_va, uint32_t instruction_va)
 		//Now it is known that the address to access is word aligned.
 		//-----------------------------------------------------------------
 
-///////////////////
-#if 0
-//      write_register_at_physical_address(0x4A100800 + 0x14, 1);    //DMA RX CONTROL, Forbid all but 1
-//      write_register_at_physical_address(0x4A100800 + 0xAC, 0xFF);  //RX_INTMASK_CLEAR, Forbid everything
-//      write_register_at_physical_address(0x4A101200 + 0x14, 0xFF);  //Core enable, Forbid all but FF
-
-		if (phys_to_virt(0x4A100814) == rn && rt == 0) {
-			printf("STH CPSW: PREVENTED DMA RX CONTROL DISABLE\n");
-			rx_dma = FALSE;
-			return TRUE;
-		} else if (phys_to_virt(0x4A100814) == rn && rt == 1) {
-			rx_dma = TRUE;
-			printf("STH CPSW: INTERVEANED DMA RX CONTROL ENABLE\n");
-		} else if (phys_to_virt(0x4A1008A8) == rn) {
-			printf("STH CPSW: INTERVEANED RX INTERRUPT ENABLE\n");
-			rx_int_dma = TRUE;
-		} else if (phys_to_virt(0x4A1008AC) == rn) {
-			printf("STH CPSW: PREVENTED RX INTERRUPT DISABLE\n");
-			rx_int_dma = FALSE;
-			return TRUE;
-		} else if (phys_to_virt(0x4A101214) == rn && rt == 0) {
-			printf
-			    ("STH CPSW: PREVENTED CORE RX INTERRUPT DISABLE\n");
-			rx_int_core = FALSE;
-			return TRUE;
-		} else if (phys_to_virt(0x4A101214) == rn && rt == 0xFF) {
-			printf
-			    ("STH CPSW: INTERVEANED CORE RX INTERRUPT ENABLE\n");
-			rx_int_core = TRUE;
-		}
-#endif
-///////////////////
-
 		/*
 		 *  If the accessed word is outside CPPI_RAM, the Head Descriptor
 		 *  Pointer registers, the CPDMA Logic reset register, and the
@@ -391,32 +378,44 @@ BOOL soc_check_cpsw_access(uint32_t accessed_va, uint32_t instruction_va)
 		 *  The undagerous registers are tested first since it is assumed
 		 *  that that is the most common case.
 		 */
-		if (is_cppi_ram_virtual_address(rn))	//CPPI_RAM
+		if (is_cppi_ram_virtual_address(rn)) {					//CPPI_RAM
+//			printf("STH CPSW: cppi_ram_handler!\n");
 			return cppi_ram_handler(virt_to_phys(rn), rt);
-		else if (is_tx0_cp_virtual_address(rn))	//TX0_CP
-			return tx0_cp_handler(rt);
-		else if (is_rx0_cp_virtual_address(rn))	//RX0_CP
-			return rx0_cp_handler(rt);
-		else if (is_tx0_hdp_virtual_address(rn))	//TX0_HDP
-			return tx0_hdp_handler(rt);
-		else if (is_rx0_hdp_virtual_address(rn))	//RX0_HDP
-			return rx0_hdp_handler(rt);
-		else if (is_cpdma_soft_reset_virtual_address(rn))	//CPDMA_SOFT_RESET
+		} else if (is_tx_cp_virtual_address(rn)) {				//TX_CP
+//			printf("STH CPSW: tx_cp_handler!\n");
+			uint32_t channel_id = get_tx_cp_channel_id(rn);
+			return tx_cp_handler(rt, channel_id);
+		} else if (is_rx_cp_virtual_address(rn)) {				//RX_CP
+//			printf("STH CPSW: rx_cp_handler!\n");
+			uint32_t channel_id = get_rx_cp_channel_id(rn);
+			return rx_cp_handler(rt, channel_id);
+		} else if (is_tx_hdp_virtual_address(rn)) {				//TX_HDP
+//			printf("STH CPSW: tx_hdp_handler!\n");
+			uint32_t channel_id = get_tx_hdp_channel_id(rn);
+			return tx_hdp_handler(rt, channel_id);
+		} else if (is_rx_hdp_virtual_address(rn)) {				//RX_HDP
+//			printf("STH CPSW: rx_hdp_handler!\n");
+			uint32_t channel_id = get_rx_hdp_channel_id(rn);
+			return rx_hdp_handler(rt, channel_id);
+		} else if (is_cpdma_soft_reset_virtual_address(rn)) {	//CPDMA_SOFT_RESET
+//			printf("STH CPSW: cpdma_soft_reset_handler!\n");
 			return cpdma_soft_reset_handler(rt);
-		else if (is_dmacontrol_virtual_address(rn))	//DMACONTROL
+		} else if (is_dmacontrol_virtual_address(rn)) {			//DMACONTROL
+//			printf("STH CPSW: dmacontrol_handler!\n");
 			return dmacontrol_handler(rt);
-		else if (is_tx_teardown_virtual_address(rn))	//TX_TEARDOWN
+		} else if (is_tx_teardown_virtual_address(rn)) {		//TX_TEARDOWN
+//			printf("STH CPSW: tx_teardown_handler!\n");
 			return tx_teardown_handler(rt);
-		else if (is_rx_teardown_virtual_address(rn))	//RX_TEARDOWN
+		} else if (is_rx_teardown_virtual_address(rn)) {		//RX_TEARDOWN
+//			printf("STH CPSW: rx_teardown_handler!\n");
 			return rx_teardown_handler(rt);
-		else if (is_rx_buffer_offset_virtual_address(rn))	//RX_BUFFER_OFFSET
+		} else if (is_rx_buffer_offset_virtual_address(rn)) {	//RX_BUFFER_OFFSET
+//			printf("STH CPSW: rx_buffer_offset_handler!\n");
 			return rx_buffer_offset_handler(rt);
-		else if (is_hdp_register_virtual_address(rn))	//Tests T/X[i]_HDP := 0, must be after the T/RX0_HDP test above.
-			return stateram_handler(rt);
-		else if (is_cp_register_virtual_address(rn))	//Tests T/X[i]_CP := 0, must be after the T/RX0_CP test above.
-			return stateram_handler(rt);
-		else		//The rest of the registers.
+		} else {												//The rest of the registers.
+//			printf("STH CPSW: write_nic_register_handler!\n");
 			return write_nic_register_handler(rn, rt);
+		}
 
 		printf("STH CPSW ERROR: NOT REACHABLE CODE!\n");
 		return FALSE;
@@ -432,30 +431,18 @@ BOOL soc_check_cpsw_access(uint32_t accessed_va, uint32_t instruction_va)
 }
 
 /*
- *  Purpose: Letting the guest initialize the TX[i]_HDP, RX[i]_HDP, TX[i]_CP
- *  and RX[i]_CP registers that are not used: 0 < i < 8.
- */
-static BOOL stateram_handler(uint32_t val)
-{
-	if (val != 0 || !initialized)
-		return FALSE;
-	else
-		return TRUE;
-}
-
-/*
  *  @val: The value to write the DMACONTROL register.
  *
  *  Function: Checks that the write to DMACONTROL is secure.
  *
  *  THE RX_OWNERSHIP BIT MUST NOT BE CHANGED SINCE CORRECT UPDATES OF
- *  rx0_active_queue DEPENDS ON IT.
+ *  rx_active_queue[channel_id] DEPEND ON IT.
  *
  *  @return: True if and only if the write was performed.
  */
 static BOOL dmacontrol_handler(uint32_t val)
 {
-	if (!initialized || val != 0)
+	if (!initialized || (val & 0xFFFFFFFE) != 0)
 		return FALSE;
 	else
 		return TRUE;
@@ -515,9 +502,33 @@ static BOOL write_nic_register_handler(uint32_t rn, uint32_t rt)
 	 *  pointed to by rn will not be optimized, and hence the
 	 *  writing will occur.
 	 */
-	*(( /*volatile */ uint32_t *) rn) = rt;
+	*((volatile uint32_t *) rn) = rt;
 
 	return TRUE;
+}
+
+/* Returns true if and only if there is a transmission DMA channel that is
+ * currently being torn down.
+ */
+static BOOL is_tx_tearingdown(void) {
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++)
+		if (tx_tearingdown[channel_id])
+			return TRUE;
+
+	return FALSE;
+}
+
+/* Returns true if and only if there is a receive DMA channel that is currently
+ * being torn down.
+ */
+static BOOL is_rx_tearingdown(void) {
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++)
+		if (rx_tearingdown[channel_id])
+			return TRUE;
+
+	return FALSE;
 }
 
 /*
@@ -531,84 +542,152 @@ static BOOL cpdma_soft_reset_handler(uint32_t val)
 {
 	if ((val & 1) == 0)
 		return TRUE;
-	else if (!initialized || tx0_tearingdown || rx0_tearingdown)
+	else if (!initialized || is_tx_tearingdown() || is_rx_tearingdown())
 		return FALSE;
 	else {
 		initialized = FALSE;
-		tx0_hdp_initialized = FALSE;
-		rx0_hdp_initialized = FALSE;
-		tx0_cp_initialized = FALSE;
-		rx0_cp_initialized = FALSE;
+		uint32_t channel_id;
+		for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++) {
+			tx_hdp_initialized[channel_id] = FALSE;
+			rx_hdp_initialized[channel_id] = FALSE;
+			tx_cp_initialized[channel_id] = FALSE;
+			rx_cp_initialized[channel_id] = FALSE;
+		}
 		CPDMA_SOFT_RESET = 1;	//Sets reset bit.
 		return TRUE;
 	}
 }
 
+/* Returns true if and only if the head descriptor pointer registers of all
+ * transmission DMA channels have been initialized.
+ */
+static BOOL tx_hdp_channels_initialized() {
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++)
+		if (!tx_hdp_initialized[channel_id])
+			return FALSE;
+
+	return TRUE;
+}
+
+/* Returns true if and only if the head descriptor pointer registers of all
+ * reception DMA channels have been initialized.
+ */
+static BOOL rx_hdp_channels_initialized() {
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++)
+		if (!rx_hdp_initialized[channel_id])
+			return FALSE;
+
+	return TRUE;
+}
+
+/* Returns true if and only if the completion pointer registers of all
+ * transmission DMA channels have been initialized.
+ */
+static BOOL tx_cp_channels_initialized() {
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++)
+		if (!tx_cp_initialized[channel_id])
+			return FALSE;
+
+	return TRUE;
+}
+
+/* Returns true if and only if the completion pointer registers of all reception
+ * DMA channels have been initialized.
+ */
+static BOOL rx_cp_channels_initialized() {
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++)
+		if (!rx_cp_initialized[channel_id])
+			return FALSE;
+
+	return TRUE;
+}
+
+/* Returns true if and only if all head descriptor and completion pointer
+ * registers of all transmission and reception DMA channels have been
+ * initialized.
+ */
+static BOOL all_channels_initialized() {
+	return tx_hdp_channels_initialized() && rx_hdp_channels_initialized() && tx_cp_channels_initialized() && rx_cp_channels_initialized();
+}
+
 /*
  *  @bd_ptr: Physical address of the buffer descriptor that shall be written to
- *  TX0_HDP.
+ *  TX[channel_id]_HDP.
  *
- *  Function: Sets TX0_HDP to @bd_ptr if deemed appropriate.
+ *  Function: Sets TX[channel_id]_HDP to @bd_ptr if deemed appropriate.
  *
- *  Returns: True if and only if TX0_HDP is securely set to @bd_ptr.
+ *  Returns: True if and only if TX[channel_id]_HDP is securely set to @bd_ptr.
  */
-static BOOL tx0_hdp_handler(uint32_t bd_ptr)
+static BOOL tx_hdp_handler(uint32_t bd_ptr, uint32_t channel_id)
 {
 	if (!initialized) {	//Performing initialization.
 		if (CPDMA_SOFT_RESET == 1 || bd_ptr != 0)
 			return FALSE;
 		else {
-			TX0_HDP = 0;	//bd_ptr = 0
-			tx0_hdp_initialized = TRUE;
+			TX_HDP(channel_id) = 0;	//bd_ptr = 0
+			tx_hdp_initialized[channel_id] = TRUE;
 
-			if (rx0_hdp_initialized && tx0_cp_initialized && rx0_cp_initialized)
+			if (all_channels_initialized())
 				initialization_performed();
 
 			return TRUE;
 		}
 	} else {		//Initialization is done.
-		if (TX0_HDP != 0 || tx0_tearingdown)
+		if (TX_HDP(channel_id) != 0 || tx_tearingdown[channel_id])
 			return FALSE;
 		else {
+
+if (is_eoq(bd_ptr))
+	printf("EOQ of new TX[%d] BD: %x\n", channel_id, get_next_descriptor_pointer(bd_ptr));
+
+
 			//In this case, the initialization, and transmit teardown NIC processes are idle.
 			//Hence tx0_active_queue, and ACTIVE_CPPI_RAM are updated to zero for the
 			//buffer descriptors in tx0_active_queue.
 			update_active_queue(TRANSMIT);
+//printf("tx_hdp_handler(0x%x, %d): Calls is_queue_secure\n", bd_ptr, channel_id);
 			if (is_queue_secure(bd_ptr, TRANSMIT)) {
-				tx0_active_queue = bd_ptr;
-				decrement_rho_nic_update_alpha_queue(bd_ptr, TRANSMIT, ADD);
-				TX0_HDP = bd_ptr;
+//printf("tx_hdp_handler(0x%x, %d): Returns from is_queue_secure\n", bd_ptr, channel_id);
+				tx_active_queue[channel_id] = bd_ptr;
+				decrement_rho_nic_update_alpha_queue(bd_ptr, ADD);
+				TX_HDP(channel_id) = bd_ptr;
 				return TRUE;
-			} else
+			} else {
+//printf("tx_hdp_handler(0x%x, %d): Returns from ~is_queue_secure\n", bd_ptr, channel_id);
 				return FALSE;
+}
 		}
 	}
 }
 
 /*
  *  @bd_ptr: Physical address of the buffer descriptor that shall be written to
- *  RX0_HDP.
+ *  RX[channel_id]_HDP.
  *
- *  Function: Sets RX0_HDP to @bd_ptr if deemed appropriate.
+ *  Function: Sets RX[channel_id]_HDP to @bd_ptr if deemed appropriate.
  *
- *  Returns: True if and only if RX0_HDP is securely set to @bd_ptr.
+ *  Returns: True if and only if RX[channel_id]_HDP is securely set to @bd_ptr.
  */
-static BOOL rx0_hdp_handler(uint32_t bd_ptr)
+static BOOL rx_hdp_handler(uint32_t bd_ptr, uint32_t channel_id)
 {
 	if (!initialized) {	//Performing initialization.
 		if (CPDMA_SOFT_RESET == 1 || bd_ptr != 0)
 			return FALSE;
 		else {
-			RX0_HDP = 0;	//bd_ptr = 0
-			rx0_hdp_initialized = TRUE;
+			RX_HDP(channel_id) = 0;	//bd_ptr = 0
+			rx_hdp_initialized[channel_id] = TRUE;
 
-			if (tx0_hdp_initialized && tx0_cp_initialized && rx0_cp_initialized)
+			if (all_channels_initialized())
 				initialization_performed();
 
 			return TRUE;
 		}
 	} else {
-		if (RX0_HDP != 0 || rx0_tearingdown)
+		if (RX_HDP(channel_id) != 0 || rx_tearingdown[channel_id])
 			return FALSE;
 		else {
 			//In this case, the initialization, and transmit teardown NIC processes are idle.
@@ -616,9 +695,9 @@ static BOOL rx0_hdp_handler(uint32_t bd_ptr)
 			//buffer descriptors in rx0_active_queue.
 			update_active_queue(RECEIVE);
 			if (is_queue_secure(bd_ptr, RECEIVE)) {
-				rx0_active_queue = bd_ptr;
-				decrement_rho_nic_update_alpha_queue(bd_ptr, RECEIVE, ADD);
-				RX0_HDP = bd_ptr;
+				rx_active_queue[channel_id] = bd_ptr;
+				decrement_rho_nic_update_alpha_queue(bd_ptr, ADD);
+				RX_HDP(channel_id) = bd_ptr;
 				return TRUE;
 			} else
 				return FALSE;
@@ -633,34 +712,34 @@ static BOOL rx0_hdp_handler(uint32_t bd_ptr)
  *
  *  @val: The value to seto TX0_CP to.
  *
- *  Function: Sets TX0_CP to @value if deemed appropriate.
+ *  Function: Sets TX[channel_id]_CP to @value if deemed appropriate.
  *
- *  Returns: True if and only if TX0_CP is securely set to @value.
+ *  Returns: True if and only if TX[channel_id]_CP is securely set to @value.
  */
-static BOOL tx0_cp_handler(uint32_t val)
+static BOOL tx_cp_handler(uint32_t val, uint32_t channel_id)
 {
 	if (!initialized) {
 		if (CPDMA_SOFT_RESET == 1 || val != 0)
 			return FALSE;
 		else {
-			TX0_CP = 0;	//val = 0.
-			tx0_cp_initialized = TRUE;
+			TX_CP(channel_id) = 0;	//val = 0.
+			tx_cp_initialized[channel_id] = TRUE;
 
-			if (tx0_hdp_initialized && rx0_hdp_initialized && rx0_cp_initialized)
+			if (all_channels_initialized())
 				initialization_performed();
 
 			return TRUE;
 		}
 	} else {
-		if (!tx0_tearingdown) {
-			TX0_CP = val;
+		if (!tx_tearingdown[channel_id]) {
+			TX_CP(channel_id) = val;
 			return TRUE;
 		}
 
 		update_active_queue(TRANSMIT);	//If tx0_active_queue is 0, then is the teardown complete.
-		if (tx0_tearingdown && tx0_active_queue == 0 && TX0_CP == TD_INT && TX0_HDP == 0 && val == TD_INT) {
-			TX0_CP = TD_INT;	//val = TD_INT
-			tx0_tearingdown = FALSE;
+		if (tx_tearingdown[channel_id] && tx_active_queue[channel_id] == 0 && TX_CP(channel_id) == TD_INT && TX_HDP(channel_id) == 0 && val == TD_INT) {
+			TX_CP(channel_id) = TD_INT;	//val = TD_INT
+			tx_tearingdown[channel_id] = FALSE;
 			return TRUE;
 		} else
 			return FALSE;
@@ -672,36 +751,36 @@ static BOOL tx0_cp_handler(uint32_t val)
  *  prevent making the NIC go into a state that is not specified by the
  *  specification.
  *
- *  @val: The value to seto RX0_CP to.
+ *  @val: The value to seto RX[channel_id]_CP to.
  *
- *  Function: Sets RX0_CP to @value if deemed appropriate.
+ *  Function: Sets RX[channel_id]_CP to @value if deemed appropriate.
  *
- *  Returns: True if and only if RX0_CP is securely set to @value.
+ *  Returns: True if and only if RX[channel_id]_CP is securely set to @value.
  */
-static BOOL rx0_cp_handler(uint32_t val)
+static BOOL rx_cp_handler(uint32_t val, uint32_t channel_id)
 {
 	if (!initialized) {
 		if (CPDMA_SOFT_RESET == 1 || val != 0)
 			return FALSE;
 		else {
-			RX0_CP = 0;
-			rx0_cp_initialized = TRUE;
+			RX_CP(channel_id) = 0;
+			rx_cp_initialized[channel_id] = TRUE;
 
-			if (tx0_hdp_initialized && rx0_hdp_initialized && tx0_cp_initialized)
+			if (all_channels_initialized())
 				initialization_performed();
 
 			return TRUE;
 		}
 	} else {
-		if (!rx0_tearingdown) {
-			RX0_CP = val;
+		if (!rx_tearingdown[channel_id]) {
+			RX_CP(channel_id) = val;
 			return TRUE;
 		}
 
 		update_active_queue(RECEIVE);
-		if (rx0_tearingdown && rx0_active_queue == 0 && RX0_CP == TD_INT && RX0_HDP == 0 && val == TD_INT) {
-			RX0_CP = TD_INT;
-			rx0_tearingdown = FALSE;
+		if (rx_tearingdown[channel_id] && rx_active_queue[channel_id] == 0 && RX_CP(channel_id) == TD_INT && RX_HDP(channel_id) == 0 && val == TD_INT) {
+			RX_CP(channel_id) = TD_INT;
+			rx_tearingdown[channel_id] = FALSE;
 			return TRUE;
 		} else
 			return FALSE;
@@ -712,20 +791,20 @@ static BOOL rx0_cp_handler(uint32_t val)
  *  Purpose: Check valid behavior of the guest. Only channel zero is allowed to
  *  be used.
  *
- *  @channel: The DMA transmit channel to teardown.
+ *  @channel_id: The DMA transmit channel to teardown.
  *
  *  Function: Initiate the teardown of DMA transmit channel zero.
  *
  *  Returns: True if and only if teardown was initiated for DMA transmit
  *  channel zero.
  */
-static BOOL tx_teardown_handler(uint32_t channel)
+static BOOL tx_teardown_handler(uint32_t channel_id)
 {
-	if (!initialized || tx0_tearingdown || (channel & 0x7) != 0)
+	if (!initialized || tx_tearingdown[channel_id] || (channel_id & 0x7) != 0)
 		return FALSE;
 	else {
-		tx0_tearingdown = TRUE;
-		TX_TEARDOWN = 0;	//Triggering the teardown for channel = 0.
+		tx_tearingdown[channel_id] = TRUE;
+		TX_TEARDOWN = channel_id;	//Triggering the teardown for the given channel.
 		return TRUE;
 	}
 }
@@ -741,15 +820,33 @@ static BOOL tx_teardown_handler(uint32_t channel)
  *  Returns: True if and only if teardown was initiated for DMA receive
  *  channel zero.
  */
-static BOOL rx_teardown_handler(uint32_t channel)
+static BOOL rx_teardown_handler(uint32_t channel_id)
 {
-	if (!initialized || rx0_tearingdown || (channel & 0x7) != 0)
+	if (!initialized || rx_tearingdown[channel_id] || (channel_id & 0x7) != 0)
 		return FALSE;
 	else {
-		rx0_tearingdown = TRUE;
-		RX_TEARDOWN = 0;	//Triggering the teardown for channel = 0.
+		rx_tearingdown[channel_id] = TRUE;
+		RX_TEARDOWN = channel_id;	//Triggering the teardown for the given channel.
 		return TRUE;
 	}
+}
+
+static BOOL is_tx_teardown(void) {
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++)
+		if (tx_tearingdown[channel_id])
+			return TRUE;
+
+	return FALSE;
+}
+
+static BOOL is_rx_teardown(void) {
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++)
+		if (rx_tearingdown[channel_id])
+			return TRUE;
+
+	return FALSE;
 }
 
 /*
@@ -768,8 +865,8 @@ static BOOL rx_teardown_handler(uint32_t channel)
  */
 static BOOL cppi_ram_handler(uint32_t pa, uint32_t val)
 {
-	if (!initialized || tx0_tearingdown || rx0_tearingdown) {
-		printf("INIT = %x | TX_TEARDOWN = %x | RX_TEARDOWN = %x\n", initialized, tx0_tearingdown, rx0_tearingdown);
+	if (!initialized || is_tx_teardown() || is_rx_teardown()) {
+		printf("CPSW ERROR: WRITING CPPI_RAM DURING INITIALIZATION OR TEARDOWN!\n");
 		return FALSE;
 	}
 	//Updates the tx0_active_queue and rx0_active_queue variables. This gives
@@ -782,13 +879,14 @@ static BOOL cppi_ram_handler(uint32_t pa, uint32_t val)
 	//is also word aligned) in the top-level function. If it does not overlap
 	//an active buffer descriptor, then the value can be written at that
 	//location.
-
 	if (!IS_ACTIVE_CPPI_RAM(pa)) {
 		word_at_phys_addr(pa) = val;
 		return TRUE;
 	}
 	//Checks what kind of overlap the CPPI_RAM access made.
-	bd_overlap transmit_overlap = type_of_cppi_ram_access_overlap(pa, tx0_active_queue);
+	bd_overlap overlap;
+	uint32_t channel_id;
+	type_of_cppi_ram_access(pa, TRANSMIT, &overlap, &channel_id);
 
 	//An access cannot overlap both the active transmit and receive queue since
 	//they are word aligned, the access is word aligned, and the transmit and
@@ -802,22 +900,20 @@ static BOOL cppi_ram_handler(uint32_t pa, uint32_t val)
 	//If there was an illegal overlap, then false is returned.
 	//
 	//Otherwise the receive case is checked in a similar manner.
-	if (transmit_overlap == ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP) {
+	if (overlap == ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP) {
 		if (is_queue_secure(val, TRANSMIT)) {
-			decrement_rho_nic_update_alpha_queue(val, TRANSMIT, ADD);
 			word_at_phys_addr(pa) = val;
-			handle_potential_misqueue_condition(TRANSMIT, pa, val);
+			handle_potential_misqueue_condition(TRANSMIT, pa, val, channel_id);
 			return TRUE;
 		}
-	} else if (transmit_overlap == ILLEGAL_OVERLAP) {
+	} else if (overlap == ILLEGAL_OVERLAP) {
 		printf("STH CPSW: ILLEGAL TRANSMISSION OVERLAP!\n");
 		return FALSE;
 	} else {
-		bd_overlap receive_overlap = type_of_cppi_ram_access_overlap(pa, rx0_active_queue);
-		if (receive_overlap == ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP && is_queue_secure(val, RECEIVE)) {
-			decrement_rho_nic_update_alpha_queue(val, RECEIVE, ADD);
+		type_of_cppi_ram_access(pa, RECEIVE, &overlap, &channel_id);
+		if (overlap == ZEROED_NEXT_DESCRIPTOR_POINTER_OVERLAP && is_queue_secure(val, RECEIVE)) {
 			word_at_phys_addr(pa) = val;
-			handle_potential_misqueue_condition(RECEIVE, pa, val);
+			handle_potential_misqueue_condition(RECEIVE, pa, val, channel_id);
 			return TRUE;
 		} else {
 			printf("STH CPSW: ILLEGAL RECEPTION OVERLAP!\n");
@@ -856,14 +952,17 @@ static BOOL rx_buffer_offset_handler(uint32_t val)
 
 /*
  *  Function: Update the array containing information about the NIC usage
- *  status of CPPI_RAM words and the tx0/rx0_active_queue variables.
+ *  status of CPPI_RAM words and the tx/rx_active_queue arrays.
  */
 static void initialization_performed(void)
 {
-	decrement_rho_nic_update_alpha_queue(tx0_active_queue, TRANSMIT, REMOVE);
-	decrement_rho_nic_update_alpha_queue(rx0_active_queue, RECEIVE, REMOVE);
-	tx0_active_queue = 0;
-	rx0_active_queue = 0;
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++) {
+		decrement_rho_nic_update_alpha_queue(tx_active_queue[channel_id], REMOVE);
+		decrement_rho_nic_update_alpha_queue(rx_active_queue[channel_id], REMOVE);
+		tx_active_queue[channel_id] = 0;
+		rx_active_queue[channel_id] = 0;
+	}
 	initialized = TRUE;
 }
 
@@ -885,43 +984,46 @@ static void initialization_performed(void)
  */
 static void update_active_queue(BOOL transmit)
 {
-	uint32_t bd_ptr = transmit ? tx0_active_queue : rx0_active_queue;
-	BOOL tearingdown = transmit ? tx0_tearingdown : rx0_tearingdown;
-	BOOL released = TRUE, no_teardown = TRUE;
+	uint32_t channel_id;
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++) {
+		uint32_t bd_ptr = transmit ? tx_active_queue[channel_id] : rx_active_queue[channel_id];
+		BOOL tearingdown = transmit ? tx_tearingdown[channel_id] : rx_tearingdown[channel_id];
+		BOOL released = TRUE, no_teardown = TRUE;
 
-	//Exists a frame and its SOP buffer descriptor's Ownership bit has been
-	//cleared.
-	while (released && no_teardown && bd_ptr) {
-		if (!is_released(bd_ptr))
-			released = FALSE;
-		//Checks teardown bit. If it is set then the buffer descriptors are
-		//released and alpha must be updated.
-		else if (is_td(bd_ptr) && tearingdown) {
-			decrement_rho_nic_update_alpha_queue(bd_ptr, transmit, REMOVE);
-			no_teardown = FALSE;
-			bd_ptr = 0;
-		} else {
-			//Advances bd_ptr to point to the last buffer descriptor of the
-			//current frame. That is one with EOP set.
-			while (!is_eop(bd_ptr)) {
-				decrement_rho_nic_update_alpha(bd_ptr, transmit, REMOVE);
+		//Exists a frame and its SOP buffer descriptor's Ownership bit has been
+		//cleared.
+		while (released && no_teardown && bd_ptr) {
+			if (!is_released(bd_ptr))
+				released = FALSE;
+			//Checks teardown bit. If it is set then the buffer descriptors are
+			//released and alpha must be updated.
+			else if (is_td(bd_ptr) && tearingdown) {
+				decrement_rho_nic_update_alpha_queue(bd_ptr, REMOVE);
+				no_teardown = FALSE;
+				bd_ptr = 0;
+			} else {
+				//Advances bd_ptr to point to the last buffer descriptor of the
+				//current frame. That is one with EOP set.
+				while (!is_eop(bd_ptr)) {
+					decrement_rho_nic_update_alpha(bd_ptr, REMOVE);
+					bd_ptr = get_next_descriptor_pointer(bd_ptr);
+				}
+
+				//Advances the buffer descriptor pointer to the next frame's SOP
+				//buffer descriptor if there is one.
+				decrement_rho_nic_update_alpha(bd_ptr, REMOVE);
 				bd_ptr = get_next_descriptor_pointer(bd_ptr);
 			}
-
-			//Advances the buffer descriptor pointer to the next frame's SOP
-			//buffer descriptor if there is one.
-			decrement_rho_nic_update_alpha(bd_ptr, transmit, REMOVE);
-			bd_ptr = get_next_descriptor_pointer(bd_ptr);
 		}
-	}
 
-	//Updates the current head pointer to point to the first buffer
-	//descriptor not released by the hardware for the queue.
-//  printf("STH CPSW: update_active_queue, t/rx_active_queue = %x\n", i, bd_ptr);
-	if (transmit)
-		tx0_active_queue = bd_ptr;
-	else
-		rx0_active_queue = bd_ptr;
+		//Updates the current head pointer to point to the first buffer
+		//descriptor not released by the hardware for the queue.
+		//printf("STH CPSW: update_active_queue, t/rx_active_queue = %x\n", i, bd_ptr);
+		if (transmit)
+			tx_active_queue[channel_id] = bd_ptr;
+		else
+			rx_active_queue[channel_id] = bd_ptr;
+	}
 }
 
 /*
@@ -931,74 +1033,83 @@ static void update_active_queue(BOOL transmit)
  *  @last_bd_ptr: Physical address of the last buffer descriptor in the queue
  *	to be extended.
  *
- *  @new_queue: Physical address of the first buffer descriptor in the queue to be appended.
+ *  @new_bd_ptr: Physical address of the first buffer descriptor in the queue to be appended.
+ *
+ *	@channel_id: The ID of the channel to check misqueue condition for.
  *
  *  Function: Handles a misqueue condition if it has occurred.
  */
-static void handle_potential_misqueue_condition(BOOL transmit, uint32_t last_bd_ptr, uint32_t new_queue)
+static void handle_potential_misqueue_condition(BOOL transmit, uint32_t last_bd_ptr, uint32_t new_bd_ptr, uint32_t channel_id)
 {
-	uint32_t bd_ptr = transmit ? tx0_active_queue : rx0_active_queue;
-	uint32_t sop, eop = 0;
+	uint32_t bd_ptr = transmit ? tx_active_queue[channel_id] : rx_active_queue[channel_id];
+	uint32_t sop_bd_ptr = transmit ? tx_active_queue[channel_id] : rx_active_queue[channel_id];
+	uint32_t eop_bd_ptr = 0;
 
 	//If no new queue is to be appended or there is no active queue, then can
 	//no misqueue condition occur and nothing is done.
-	if (new_queue == 0 || bd_ptr == 0)
+	if (new_bd_ptr == 0 || bd_ptr == 0)
 		return;
 
-	//If the buffer descriptor to write is a released SOP with no EOQ bit set,
-	//then has no misqueue condition occurred.
+	//If the written buffer descriptor is a released SOP with no EOQ bit set,
+	//then no misqueue condition has occurred.
 	if ((is_sop(last_bd_ptr) && is_released(last_bd_ptr) && !is_eoq(last_bd_ptr)))
 		return;
-	//If the buffer descriptor to write is a released SOP with the EOQ bit set,
-	//then has a misqueue condition occurred. Therefore is its EOQ bit cleared
-	//to enable the simulation proof and the HDP register written with the new
-	//queue.
-	else if (is_sop(last_bd_ptr) && is_released(last_bd_ptr) && is_eoq(last_bd_ptr)) {
-		word_at_phys_addr(last_bd_ptr + FLAGS) = (word_at_phys_addr(last_bd_ptr + FLAGS)) & (~EOQ);
 
-		if (transmit)
-			TX0_HDP = new_queue;
-		else
-			RX0_HDP = new_queue;
-
-		return;
-	}
 	//Retrieves the SOP and EOP buffer descriptor addresses that belong to the
 	//same frame that last_bd_ptr belong to. This is done by traversing the
 	//transmission or reception buffer descriptor queue until the matching SOP
 	//is found or a non-released SOP is encountered.
-	while (eop != last_bd_ptr)
+	//
+	//last_bd_ptr is not zero since this function is only called in case of
+	//overlap, and eop_bd_ptr is initialized to 0, so there will be at least
+	//one iteration.
+	while (eop_bd_ptr != last_bd_ptr)	
 		//If a non-released SOP is encountered before the relevant SOP is
 		//found, then can no misqueue condition have occurred.
 		if (!is_released(bd_ptr))
 			return;
-	//Otherwise is the current SOP recorded in sop and its matching EOP in
-	//eop. If the EOP matches the buffer descriptor to be written, as
-	//tested in the while-test above for the next iteration, then is the
-	//loop terminated. Then can it be tested whether the matching SOP of
-	//the buffer descriptor that was written is released and whether the
-	//EOQ bit of the written buffer descriptor has a valid meaning and
-	//whether it is set.
+		//Otherwise is the current SOP recorded in sop and its matching EOP in
+		//eop. If the EOP matches the buffer descriptor to be written, as
+		//tested in the while-test above for the next iteration, then is the
+		//loop terminated. Then can it be tested whether the matching SOP of
+		//the buffer descriptor that was written is released and whether the
+		//EOQ bit of the written buffer descriptor has a valid meaning and
+		//whether it is set.
 		else {
-			sop = bd_ptr;
-			while (!is_eop(bd_ptr))
+			sop_bd_ptr = bd_ptr;
+			while (!is_eop(bd_ptr)) {
+				decrement_rho_nic_update_alpha(bd_ptr, REMOVE);	//Inactive BD.
 				bd_ptr = get_next_descriptor_pointer(bd_ptr);
-			eop = bd_ptr;
+			}
+			decrement_rho_nic_update_alpha(bd_ptr, REMOVE);	//Inactive BD.
+			eop_bd_ptr = bd_ptr;
 
 			bd_ptr = get_next_descriptor_pointer(bd_ptr);
+			if (transmit)
+				tx_active_queue[channel_id] = bd_ptr;
+			else
+				rx_active_queue[channel_id] = bd_ptr;
 		}
 
 	//If a misqueue condition has occurred, then is the EOQ bit cleared of the
 	//written buffer descriptor to enable the simulation proof and the HDP
 	//register written with the physical address of the queue that was supposed
 	//to be appended to the original queue.
-	if (is_released(sop) && is_eoq(eop)) {
-		word_at_phys_addr(eop + FLAGS) = (word_at_phys_addr(eop + FLAGS)) & (~EOQ);
+	//sop_bd_ptr is released since otherwise the function would have returned
+	//during the loop.
+	if (is_eoq(last_bd_ptr)) {
+		//Remove EOQ flag to indicate to Linux that not misqueue condition has
+		//occurred, since this function has fixed it.
+		word_at_phys_addr(last_bd_ptr + FLAGS) = (word_at_phys_addr(last_bd_ptr + FLAGS)) & (~EOQ);
 
-		if (transmit)
-			TX0_HDP = new_queue;
-		else
-			RX0_HDP = new_queue;
+		decrement_rho_nic_update_alpha_queue(new_bd_ptr, ADD);
+		if (transmit) {
+			tx_active_queue[channel_id] = new_bd_ptr;
+			TX_HDP(channel_id) = new_bd_ptr;
+		} else {
+			rx_active_queue[channel_id] = new_bd_ptr;
+			RX_HDP(channel_id) = new_bd_ptr;
+		}
 	}
 }
 
@@ -1008,10 +1119,10 @@ static void handle_potential_misqueue_condition(BOOL transmit, uint32_t last_bd_
  *	all buffer descriptors, rho_nic is decremented if @add is false, and alpha
  *	is updated depending on whether the buffer descriptors are added or removed.
  */
-static void decrement_rho_nic_update_alpha_queue(uint32_t bd_ptr, BOOL transmit, BOOL add)
+static void decrement_rho_nic_update_alpha_queue(uint32_t bd_ptr, BOOL add)
 {
 	while (bd_ptr) {
-		decrement_rho_nic_update_alpha(bd_ptr, transmit, add);
+		decrement_rho_nic_update_alpha(bd_ptr, add);
 		bd_ptr = get_next_descriptor_pointer(bd_ptr);
 	}
 }
@@ -1019,9 +1130,6 @@ static void decrement_rho_nic_update_alpha_queue(uint32_t bd_ptr, BOOL transmit,
 /*
  *  @bd_ptr: The physical address of the buffer descriptor that is to be added
  *  or removed according to @add.
- *
- *	@transmit: True if the transmission queue is modified. False if it is the
- *	reception queue is modified.
  *
  *  @add: True if and only if the buffer descriptor at @bd_ptr is added to an
  *  active queue.
@@ -1033,7 +1141,7 @@ static void decrement_rho_nic_update_alpha_queue(uint32_t bd_ptr, BOOL transmit,
  *
  *  return: void.
  */
-static void decrement_rho_nic_update_alpha(uint32_t bd_ptr, BOOL transmit, BOOL add)
+static void decrement_rho_nic_update_alpha(uint32_t bd_ptr, BOOL add)
 {
 	if (add) {
 		SET_ACTIVE_CPPI_RAM(bd_ptr);
@@ -1242,7 +1350,7 @@ static BOOL is_valid_length_in_cppi_ram_alignment_no_active_queue_overlap(uint32
 		//all buffer descriptor pointers are word aligned.
 		if ((0x4A102000 <= bd_ptr) && (bd_ptr < (0x4A104000 - 15)) && is_word_aligned(bd_ptr)) {
 			if (IS_ACTIVE_CPPI_RAM(bd_ptr) || IS_ACTIVE_CPPI_RAM(bd_ptr + 4) || IS_ACTIVE_CPPI_RAM(bd_ptr + 8) || IS_ACTIVE_CPPI_RAM(bd_ptr + 12)) {
-				printf("STH CPSW: New buffer descriptor overlaps active buffer descriptor.\n");
+				printf("STH CPSW: New buffer descriptor at 0x%x overlaps active buffer descriptor\n", bd_ptr);
 				return FALSE;
 			}
 
@@ -1559,6 +1667,21 @@ static BOOL is_secure_linux_memory(BOOL transmit, uint32_t start_bl, uint32_t en
 	return TRUE;
 }
 
+static void type_of_cppi_ram_access(uint32_t accessed_address, BOOL transmit, bd_overlap *bd_overlap_pointer, uint32_t *channel_id_pointer) {
+	uint32_t channel_id;
+	for(channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++) {
+		bd_overlap overlap = type_of_cppi_ram_access_overlap(accessed_address, transmit ? tx_active_queue[channel_id] : rx_active_queue[channel_id]);
+		if (overlap != NO_OVERLAP) {
+			*bd_overlap_pointer = overlap;
+			*channel_id_pointer = channel_id;
+			return;
+		}
+	}
+
+	*bd_overlap_pointer = NO_OVERLAP;
+	return;
+}
+
 /*
  *  Purpose: Determine what sort of access is made to a queue: zeroed next
  *  descriptor pointer, other accesses on the queue, and no access at all.
@@ -1618,7 +1741,7 @@ static bd_overlap type_of_cppi_ram_access_overlap(uint32_t accessed_address, uin
  */
 BOOL soc_cpsw_reset(uint32_t value)
 {
-	unsigned int timeout, i;
+	unsigned int timeout, channel_id;
 
 	//Checks if the SOFT_RESET field of the CPDMA_SOFT_RESET register is to be
 	//set. This is to prevent the code below from performing a reset operation
@@ -1658,26 +1781,31 @@ BOOL soc_cpsw_reset(uint32_t value)
 	 *  Clears the Head Descriptor Pointer and Completion Pointer registers,
 	 *  and sets the hypervisor's view of active queues to no active queues.
 	 */
-	for (i = 0; i < 8; i++) {
-		//TX[i]_HDP := 0
-		//RX[i]_HDP := 0
-		//TX[i]_CP := 0
-		//RX[i]_CP := 0
+	for (channel_id = 0; channel_id < 8; channel_id++) {
+		//TX[channel_id]_HDP := 0
+		//RX[channel_id]_HDP := 0
+		//TX[channel_id]_CP := 0
+		//RX[channel_id]_CP := 0
 		//Hypervisor's transmit active queues are zeroed.
 		//Hypervisor's receive active queues are zeroed.
 //    printf("STH CPSW: TX[%d]_HDP at 0x%x\n", i, 0x4A100A00 + 4*i);
-		word_at_phys_addr(0x4A100A00 + 4 * i) = 0;
+		word_at_phys_addr(0x4A100A00 + 4 * channel_id) = 0;
 //    printf("STH CPSW: RX[%d]_HDP at 0x%x\n", i, 0x4A100A00 + 8*4 + 4*i);
-		word_at_phys_addr(0x4A100A00 + 8 * 4 + 4 * i) = 0;
+		word_at_phys_addr(0x4A100A00 + 8 * 4 + 4 * channel_id) = 0;
 //    printf("STH CPSW: TX[%d]_CP at 0x%x\n", i, 0x4A100A00 + 16*4 + 4*i);
-		word_at_phys_addr(0x4A100A00 + 16 * 4 + 4 * i) = 0;
+		word_at_phys_addr(0x4A100A00 + 16 * 4 + 4 * channel_id) = 0;
 //    printf("STH CPSW: RX[%d]_CP at 0x%x\n", i, 0x4A100A00 + 24*4 + 4*i);
-		word_at_phys_addr(0x4A100A00 + 24 * 4 + 4 * i) = 0;
+		word_at_phys_addr(0x4A100A00 + 24 * 4 + 4 * channel_id) = 0;
 
-//    printf("STH CPSW: TX[%d]_HDP at 0x%x = %x\n", i, 0x4A100A00 + 4*i, word_at_phys_addr(0x4A100A00 + 4*i));
-//    printf("STH CPSW: RX[%d]_HDP at 0x%x = %x\n", i, 0x4A100A00 + 8*4 + 4*i, word_at_phys_addr(0x4A100A00 + 8*4 + 4*i));
-//    printf("STH CPSW: TX[%d]_CP at 0x%x = %x\n", i, 0x4A100A00 + 16*4 + 4*i, word_at_phys_addr(0x4A100A00 + 16*4 + 4*i));
-//    printf("STH CPSW: RX[%d]_CP at 0x%x = %x\n", i, 0x4A100A00 + 24*4 + 4*i, word_at_phys_addr(0x4A100A00 + 24*4 + 4*i));
+		tx_hdp_initialized[channel_id] = TRUE;
+		rx_hdp_initialized[channel_id] = TRUE;
+		tx_cp_initialized[channel_id] = TRUE;
+		rx_cp_initialized[channel_id] = TRUE;
+
+//    printf("STH CPSW: TX[%d]_HDP at 0x%x = %x\n", channel_id, 0x4A100A00 + 4*channel_id, word_at_phys_addr(0x4A100A00 + 4*channel_id));
+//    printf("STH CPSW: RX[%d]_HDP at 0x%x = %x\n", channel_id, 0x4A100A00 + 8*4 + 4*channel_id, word_at_phys_addr(0x4A100A00 + 8*4 + 4*channel_id));
+//    printf("STH CPSW: TX[%d]_CP at 0x%x = %x\n", channel_id, 0x4A100A00 + 16*4 + 4*channel_id, word_at_phys_addr(0x4A100A00 + 16*4 + 4*channel_id));
+//    printf("STH CPSW: RX[%d]_CP at 0x%x = %x\n", channel_id, 0x4A100A00 + 24*4 + 4*channel_id, word_at_phys_addr(0x4A100A00 + 24*4 + 4*channel_id));
 
 //    printf("STH CPSW: #################################\n");
 	}
@@ -1685,20 +1813,15 @@ BOOL soc_cpsw_reset(uint32_t value)
 	RX_BUFFER_OFFSET = 0;
 
 	initialized = TRUE;
-	tx0_hdp_initialized = TRUE;
-	rx0_hdp_initialized = TRUE;
-	tx0_cp_initialized = TRUE;
-	rx0_cp_initialized = TRUE;
 
 	return TRUE;
 }
 
+
 #if defined(PRINT_QUEUE)
 static void print_queue(uint32_t bd_ptr)
 {
-	printf
-	    ("-----DEBUGGING INFORMATION: CURRENT ACTIVE QUEUE-------------------------------------------------\n");
-	printf("TX0_HDP, RX0_HDP = (%x, %x)\n", TX0_HDP, RX0_HDP);
+	printf("-----DEBUGGING INFORMATION: CURRENT ACTIVE QUEUE----------------------------\n");
 	while (bd_ptr) {
 		uint32_t ndp = get_next_descriptor_pointer(bd_ptr);
 		uint32_t bp = get_buffer_pointer(bd_ptr);
@@ -1717,166 +1840,34 @@ static void print_queue(uint32_t bd_ptr)
 		printf("########################################\n");
 		bd_ptr = get_next_descriptor_pointer(bd_ptr);
 	}
-	printf
-	    ("-------------------------------------------------------------------------------------------------\n");
+	printf("--------------------------------------------------\n");
+}
+
+static void print_queues(void) {
+	uint32_t channel_id;
+	for (channel_id = 7; channel_id < N_DMA_CHANNELS; channel_id++) {
+		printf("-------------------------------------------------------------\n");
+		printf("-------------------------------------------------------------\n");
+		printf("-------------------------------------------------------------\n");
+		printf("TX_HDP[%d] = 0x%x----------------------------------\n", channel_id, TX_HDP(channel_id));
+		printf("tx_active_queue[%d] = 0x%x-------------------------\n", channel_id, tx_active_queue[channel_id]);
+		print_queue(tx_active_queue[channel_id]);
+		printf("-------------------------------------------------------------\n");
+		printf("-------------------------------------------------------------\n");
+		printf("-------------------------------------------------------------\n");
+	}
+/*
+	for (channel_id = 0; channel_id < N_DMA_CHANNELS; channel_id++) {
+		printf("-------------------------------------------------------------\n");
+		printf("-------------------------------------------------------------\n");
+		printf("-------------------------------------------------------------\n");
+		printf("RX_HDP[%d] = 0x%x----------------------------------\n", channel_id, RX_HDP(channel_id));
+		printf("rx_active_queue[%d] = 0x%x-------------------------\n", channel_id, rx_active_queue[channel_id]);
+		print_queue(rx_active_queue[channel_id]);
+		printf("-------------------------------------------------------------\n");
+		printf("-------------------------------------------------------------\n");
+		printf("-------------------------------------------------------------\n");
+	}
+*/
 }
 #endif
-
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-/////////New for Linux 5////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-
-#define CPSW_SS_VIRT 0xFA400000
-#define CPSW_SS_SIZE 0x00004000
-#define PRU_ICSS_VIRT (CPSW_SS_VIRT + CPSW_SS_SIZE)
-#define PRU_ICSS_SIZE 0x00027000
-#define TPCC_VIRT (PRU_ICSS_VIRT + PRU_ICSS_SIZE)
-#define TPCC_SIZE 0x00001000
-#define TPTC0_VIRT (TPCC_VIRT + TPCC_SIZE)
-#define TPTC0_SIZE 0x00001000
-#define TPTC1_VIRT (TPTC0_VIRT + TPTC0_SIZE)
-#define TPTC1_SIZE 0x00001000
-#define TPTC2_VIRT (TPTC1_VIRT + TPTC1_SIZE)
-#define TPTC2_SIZE 0x00001000
-
-static BOOL write_register_handler(uint32_t, uint32_t);
-
-#define is_sysconfig_tptc0_register_virtual_address(va) (va == TPTC0_VIRT + 0x10)
-#define is_sysconfig_tptc1_register_virtual_address(va) (va == TPTC1_VIRT + 0x10)
-#define is_sysconfig_tptc2_register_virtual_address(va) (va == TPTC2_VIRT + 0x10)
-
-BOOL soc_check_tptc0_access(uint32_t accessed_va, uint32_t instruction_va) {
-	uint32_t instruction_encoding = *((uint32_t *) instruction_va);
-	uint32_t *context, t, n, imm, rt, rn;
-
-	if (!is_word_aligned(accessed_va)) {
-		printf("HYPERVISOR TPTC0: ACCESSED ADDRESS IS NOT WORD ALIGNED!");
-		return FALSE;
-	}
-
-	switch (0xFFF00000 & instruction_encoding) {
-		//STR  Rt, [Rn, #+imm32] = mem32[Regs[Rn] + imm32] := Regs[Rt]
-	case 0xE5800000:
-
-		t = (0x0000F000 & instruction_encoding) >> 12;
-		n = (0x000F0000 & instruction_encoding) >> 16;
-		imm = 0x00000FFF & instruction_encoding;
-
-		context = curr_vm->current_mode_state->ctx.reg;
-		rt = *(context + t);
-		rn = *(context + n) + imm;
-
-		if (rn != accessed_va) {
-			printf("Hypervisor TPTC0 ERROR: Base register Regs[R%d] = %x distinct "
-			       "from accessed address accessed_va = %x\n", n, rn, accessed_va);
-			return FALSE;
-		}
-
-		if (is_sysconfig_tptc0_register_virtual_address(rn))
-			return write_nic_register_handler(rn, rt);
-
-		printf("TPTC0 ERROR: NOT REACHABLE CODE!\n");
-		return FALSE;
-		break;
-	default:
-		printf("TPTC0 ERROR: UNKNOWN INSTRUCTION TYPE WHEN ACCESSING TPTC0 REGISTER!\n");
-		return FALSE;
-		break;
-	}
-
-	printf("TPTC0 ERROR: UNREACHABLE POINT WAS REACHED IN HYPERVISOR TPTC0 DRIVER!\n");
-	return FALSE;
-}
-
-BOOL soc_check_tptc1_access(uint32_t accessed_va, uint32_t instruction_va) {
-	uint32_t instruction_encoding = *((uint32_t *) instruction_va);
-	uint32_t *context, t, n, imm, rt, rn;
-
-	if (!is_word_aligned(accessed_va)) {
-		printf("HYPERVISOR TPTC1: ACCESSED ADDRESS IS NOT WORD ALIGNED!");
-		return FALSE;
-	}
-
-	switch (0xFFF00000 & instruction_encoding) {
-		//STR  Rt, [Rn, #+imm32] = mem32[Regs[Rn] + imm32] := Regs[Rt]
-	case 0xE5800000:
-
-		t = (0x0000F000 & instruction_encoding) >> 12;
-		n = (0x000F0000 & instruction_encoding) >> 16;
-		imm = 0x00000FFF & instruction_encoding;
-
-		context = curr_vm->current_mode_state->ctx.reg;
-		rt = *(context + t);
-		rn = *(context + n) + imm;
-
-		if (rn != accessed_va) {
-			printf("Hypervisor TPTC1 ERROR: Base register Regs[R%d] = %x distinct "
-			       "from accessed address accessed_va = %x\n", n, rn, accessed_va);
-			return FALSE;
-		}
-
-		if (is_sysconfig_tptc1_register_virtual_address(rn))
-			return write_nic_register_handler(rn, rt);
-
-		printf("TPTC1 ERROR: NOT REACHABLE CODE!\n");
-		return FALSE;
-		break;
-	default:
-		printf("TPTC1 ERROR: UNKNOWN INSTRUCTION TYPE WHEN ACCESSING TPTC1 REGISTER!\n");
-		return FALSE;
-		break;
-	}
-
-	printf("TPTC1 ERROR: UNREACHABLE POINT WAS REACHED IN HYPERVISOR TPTC1 DRIVER!\n");
-	return FALSE;
-}
-
-BOOL soc_check_tptc2_access(uint32_t accessed_va, uint32_t instruction_va) {
-	uint32_t instruction_encoding = *((uint32_t *) instruction_va);
-	uint32_t *context, t, n, imm, rt, rn;
-
-	if (!is_word_aligned(accessed_va)) {
-		printf("HYPERVISOR TPTC2: ACCESSED ADDRESS IS NOT WORD ALIGNED!");
-		return FALSE;
-	}
-
-	switch (0xFFF00000 & instruction_encoding) {
-		//STR  Rt, [Rn, #+imm32] = mem32[Regs[Rn] + imm32] := Regs[Rt]
-	case 0xE5800000:
-		t = (0x0000F000 & instruction_encoding) >> 12;
-		n = (0x000F0000 & instruction_encoding) >> 16;
-		imm = 0x00000FFF & instruction_encoding;
-
-		context = curr_vm->current_mode_state->ctx.reg;
-		rt = *(context + t);
-		rn = *(context + n) + imm;
-
-		if (rn != accessed_va) {
-			printf("Hypervisor TPTC2 ERROR: Base register Regs[R%d] = %x distinct "
-			       "from accessed address accessed_va = %x\n", n, rn, accessed_va);
-			return FALSE;
-		}
-
-		if (is_sysconfig_tptc2_register_virtual_address(rn))
-			return write_nic_register_handler(rn, rt);
-
-		printf("TPTC2 ERROR: NOT REACHABLE CODE!\n");
-		return FALSE;
-		break;
-	default:
-		printf("TPTC2 ERROR: UNKNOWN INSTRUCTION TYPE WHEN ACCESSING TPTC2 REGISTER!\n");
-		return FALSE;
-		break;
-	}
-
-	printf("TPTC2 ERROR: UNREACHABLE POINT WAS REACHED IN HYPERVISOR TPTC2 DRIVER!\n");
-	return FALSE;
-}
-
-static BOOL write_register_handler(uint32_t rn, uint32_t rt)
-{
-	*(( /*volatile */ uint32_t *) rn) = rt;
-	return TRUE;
-}

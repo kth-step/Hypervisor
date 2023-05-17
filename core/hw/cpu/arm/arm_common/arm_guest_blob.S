@@ -83,23 +83,23 @@ arm_move_guest_blob:
 	//__data_end__ is va = 0xf0012eac, adding HAL_OFFSET gives pa (mmu off) = 0x80012EAC
 	//giving first physical address after hypervisor data, 
     ldr r0, =__data_end__ + HAL_OFFSET	//r0 = 0x80012EAC = physical address after hypervisor = first address of guest_data.S
-    ldr r2, [r0], #4					//r0 updated to address of  second word of guest_data.S storing number of guests.
+    ldr r2, [r0], #4					//r0 updated to address of second word of guest_data.S storing number of guests.
     ldr r3, =GUESTS_MAGIC 
     cmp r3, r2
     bne fail
 
-    /* get guest count an veryfy */
-    ldr r2, [r0], #4		//r0 updated to address of third word of guest_data.S storing __guests_data_end - __guests_table_start
-    cmp r2, #0 
-    ble fail
+    /* get guest count and verify */
+	//r2 = number of guests. r0 = address of third word of guest_data.S storing __guests_data_end - __guests_table_start
+    ldr r2, [r0], #4
+    cmp r2, #1				//There should be at least two guests, otherwise we fail:
+    ble fail				//Goto fail if r2 <= 1.
 
     /* r0=binary end, r1=binary start, r2=binary count, r3=pmem end */        
-	//r0 = address of third word of guest_data.S. LSL #4 shifts r2 left 4 bits: 16 bytes.
-	//r2 = number of guests * 16 (which covers 4 32-bit words (offset, fwsize, psize and vadr).
-    add r1, r0, r2, LSL # 4		//r1 = address of VADR in guest_data.S.	
-    ldr r3, [r0]				//r3 = size of guest 1 plus its four fields (offset, fwsize, psize, vadr) in bytes = 0x005DD2F8.
-								//r3 = 0x005DD2F8 = 0x005DD300 - 0x00000008 = __guests_data_end - __guests_table_start
-    add r0, r3					//r0 = 0x80012EAC + 0x8 + 0x005DD2F8 = 0x805F01AC = address of first byte after guest.
+	//r0 = address of third word of guest_data.S.
+	//r2 = number of guests * 16 (which covers 4 32-bit words (offset, fwsize, psize and vadr). LSL #4 shifts r2 left 4 bits: 16 bytes.
+    add r1, r0, r2, LSL # 4		//r1 = address of VADR of last guest in guest_data.S.	
+    ldr r3, [r0]				//r3 = sizes of all guests plus their four fields (offset, fwsize, psize, vadr) in bytes.
+    add r0, r3					//r0 = r0 + r3 = address of first byte after last guest.
     ldr r3, =(HAL_PHYS_START+HAL_PHYS_SIZE)	//r3 = 0x88000000 = 0x80000000 + 0x08000000 = End physical address of RAM.
 
     /* save guest count and p start*/     
@@ -109,35 +109,31 @@ arm_move_guest_blob:
 											//r10 now points to first field (pstart) of guest_binary of first guest.
 foreach_guest:
     /* get size & padr. make sure size is 4 alligned */
-	//r1 points to first byte after current guest's four fields (see guest_data.S).
+	//r1 points to vadr of VARD (fourth word) of current guest's four fields (see guest_data.S).
     ldr r4, [r1], #-4      @@ VADR			//r4 = virtual address = 0xC0000000, and afterwards decrement r1 by 4.
     ldr r5, [r1], #-4      @@ PSIZE			//r5 = physical memory size = 0x07000000, and afterwards decrement r1 by 4.
     ldr r6, [r1], #-4      @@ FWSIZE		//r6 = raw binary guest byte size = 0x005DD2E4, and afterwards decrement r1 by 4.
-											//r6 = 0x005DD2E4 = 0x005DD300 - 0x0000001C = __guests_data_end - __guests_data_start 
     ldr r7, [r1], #-4	   @@ OFFSET		//r7 = offset = 0x00010000, and afterwards decrement r1 by 4.
 
     /* calc pstart, align to MB */
-    sub r3, r3, r5	//r3 = 0x81000000 = 0x88000000 - 0x07000000 =
-					//guest physical memory start address = physical end memory address - size of guest physical memory.
-    mov r3, r3, LSR #20						//Clear lower 20 bits.
-    mov r3, r3, LSL #20						//r3 = 0x8100_0000
+    sub r3, r3, r5							//r3 = Current physical end address - size of the physical memory of the current guest.
+    mov r3, r3, LSR #20						//Clear lower 20 bits by shifting right 20 bits,
+    mov r3, r3, LSL #20						//and then shifting left 20 bits.
+											//r3 = MB aligned physical address of start of current guest.
 
     /* update guest db */
-	//r10 points to first field (pstart) of guest_binary of first guest.
-	//Store physical start address, virtual start address, physical memory size,
-	//guest size, offset, to the fields pstart, vstart, psize, fwsize and
-	//offset.
+	//r10 points to first field (pstart) of guest_binary of the current guest.
+	//Store physical start address (r3), virtual start address (r4), physical memory size (r5),
+	//guest size (r6), offset (r7), to the fields pstart, vstart, psize, fwsize and offset.
     stmia r10!, {r3-r7}
+	//r10 now points to the first field (pstart) of the next guest_binary.
 
     /* copy guest fw to start of the physical memory of this guest */
-	//r4=r0= r0 - r6 = physical address of first byte after guest - byte size of guest = physical address of first byte of guest.
-    sub r0, r6  @@ start of this fw			//r0 = 0x80012EC8 = 0x805F01AC - 0x005DD2E4
-    mov r4, r0  @@ copy it!					//r4 = 0x80012EC8 = physical address of first byte of guest.
-    add r5, r3, r7  @@ pmem start + offset	//r5 = 0x81010000 = 0x81000000 + 0x00010000
-											//guest physical memory start address +                    offset.
-    add r6, r6, r5  @@ pmem end				//r6 = 0x815ED2E4 = 0x005DD2E4 + 0x81010000 = 
-											//guest physical memory start address + guest byte count + offset.
-    add r6, r7		@@ pmem + offset		//r6 = 0x815FD2E4 = 0x815ED2E4 + 0x00010000
+    sub r0, r6  @@ start of this fw			//r0 = r0 - r6 = address of first byte after raw binary guest size - its raw binary guest size.
+    mov r4, r0  @@ copy it!					//r4 = physical address of first byte of current guest.
+    add r5, r3, r7  @@ pmem start + offset	//r5=r3+r7 = physical start address + offset = physical start address of current guest.
+    add r6, r6, r5  @@ pmem end				//r6 = r6 + r5 = raw binary guest size = physical end address of current guest.
+//    add r6, r7		@@ pmem + offset		//r6 = r6 + r7 = 
 											//r6=r6+r7= guest physical memory start address + guest byte count + offset + offset.
 ///////
 /*

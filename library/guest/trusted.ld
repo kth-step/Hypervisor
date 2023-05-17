@@ -2,14 +2,14 @@ __page_size__ = 0x1000; /*4KB page size*/
 
 MEMORY
 {
-    RAM : org = 0xf0500000, l = 127M
+    RAM : org = 0xf0f00000, l = 127M
 }
 
 ENTRY(_start)
 
 SECTIONS
 {
-    . = 0xf0500000;
+    . = 0xf0f00000;
 
 	.startup : {
 		__startup_start__ = .;

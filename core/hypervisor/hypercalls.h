@@ -24,8 +24,8 @@ void hypercall_restore_regs(uint32_t * regs);
 #include "hyp_cache.h"
 #include "hyp_mmu.h"
 
-void hypercall_rpc(uint32_t rpc_op, void *arg);
-void hypercall_end_rpc();
+void hypercall_rpc(/*uint32_t rpc_op*/);
+void hypercall_end_rpc(uint32_t result);
 /***************************/
 
 /**************
@@ -96,5 +96,9 @@ void hypercall_end_rpc();
 #define HYPERCALL_QUERY_BFT		1041
 #define HYPERCALL_LINUX_INIT_END		1042
 
+//Hypercall for writing buffer descriptors to NIC.
+#define HYPERCALL_CPSW_WRITE_BD 1045
+
 #define HYPERCALL_UPDATE_PMD_SINGLE		1073
+#define HYPERCALL_CCTV_PHOTO			1081
 #endif				/* HYPERCALLS_H_ */

@@ -1,232 +1,152 @@
-/*
- * trustedservice.c
- *
- *  Created on: 30 mar 2011
- *      Author: Master
- */
-#include "trusted_service.h"
-//#include "dmacRegisters.h"
+#include "hypercalls.h"	//For ISSUE_HYPERCALL_REG1 and HYPERCALL_END_RPC
+#include <types.h>		//For uint32_t
+
+#include <printing.h>	//For printing.
+
+//For AES.
+#define CBC 1
+#define CTR 1
+#define ECB 1
+#include "aes.h"
+
+//For SPI an I2C.
+#include <types.h>
+#include <lib.h>
+#include "BBBCAM.h"
+#include "uboot_i2c.h"
+#include "uboot_spi.h"
 #include "hypercalls.h"
 
-#include "rsa.h"
-#include "aescbc.h"
-#include "aes/sha2.h"
-#include "mpi/mprsa.h"
-#include "mpi/mwc.h"
+#define OV2640_CHIPID_HIGH 	0x0A
+#define OV2640_CHIPID_LOW 	0x0B
 
-#include <memlib.h>
-
-//TODO remove buffer and use only decrypted for immediate storage? Check string lengths in program.
-//TODO Use memset to reset sensitive memory
-FLASH_DATA static unsigned char encrypted[50000 + 16];	//data in flash memory is encrypted (16 is size of IV added to message)
-
-static char decrypted[50000];
-static unsigned char buffer[50000 + 16];	//buffer to hold the transfered data from flash
-static char contract[50000];
-
-static unsigned char encryptedAESKey[128];	//key is encrypted with RSA
-static unsigned char decryptedAESKey[128];	//key is encrypted with RSA
-static unsigned int nbytes;
-
-// 1024-bit RSA keys in HEX
-static char *g_modulus =
-    "f0f4fa85b4ad3f6d9171995085b31640c4c8ed28e5c9eb5106f62acea46ee83c"
-    "0c575f03ab918d9aee62fdd5fc7b5a350d4775618f646583ef6a0c50985123ac"
-    "4271ae3cdaba97f5d6527217971f2cc0bdbbfa2886afedfe783e1b170ca5e279"
-    "e6fd07e9efffd99c1f4f35c30644f86227cfc32a5253a89ebfb22862f1085b35";
-
-static char *g_d =
-    "e2d4cc0e18834b859af8c4ea6fa2a29d406322177112bfaa9c921ac4433980f8"
-    "1e6a15b0ffcf5aedf1e250b12428ff479803a035c26631c69d18491589fe4043"
-    "f2cf8d591c93256dda125bb1466a2199fab20081b6806ddda740b73e35e73c63"
-    "e794ba34197aa423064286feb2e019b4521a05405b27b2f232619a00bedeac95";
-
-static char *g_e = "10001";
-
-/////////////////////   MACROS   ///////////////////
-
-#define LOGT(_FMT, ...)  printf( "TEST DMA - TASK: " _FMT,  ## __VA_ARGS__)
-////////////////////////////////////////////////////
-
-static void useDMA();
-void trustedRPCHandler(unsigned callNum, void *params);
-static void finishRPC();
-//XXX put back static
-void initFlashData();
-
-static count = 0;
-
-static void getContract(TrustedContractArgs * args)
+void camera_setup(void) 
 {
-	int rsaErr = 0, aesErr = 0;
-	//hello(REP_TRUSTED_NAME);
-	printf("In trusted mode getContract()");
+	uint8_t vid,pid;
+	uint8_t temp;
 
-	//X1XXuseDMA(); //DMA the encrypted data into trusted space
-	rsaErr = rsaDecrypt(encryptedAESKey, g_d, g_modulus, decryptedAESKey);
-	if (rsaErr != 0) {
-		printf("RSA encryption failed.\n");
-		//*args->success = 0;
+	ArduCAM(OV2640);
+	printf("ArduCAM Start!\n");
+
+	// Check the ArduCAM SPI bus
+	write_reg(ARDUCHIP_TEST1, 0x55);
+	temp = read_reg(ARDUCHIP_TEST1);
+	if(temp != 0x55) {
+		printf("SPI interface Error!\n");
+		while(1);
 	} else {
-		aesErr =
-		    aesDecrypt(decryptedAESKey, encrypted, decrypted, nbytes);
+		printf("SPI bus works well!\n");
 	}
 
-	if (aesErr != 0) {
-		printf("AES encryption failed.\n");
-		//*args->success = 0;
-	} else if (aesErr == 0 && rsaErr == 0) {
-		//*(args)->success = 1;
-		memcpy(contract, decrypted, nbytes);
-	}
+	//Change MCU mode
+	write_reg(ARDUCHIP_MODE, 0x00);
 
+	//Check the I2C bus and camera module type
+	rdSensorReg8_8(OV2640_CHIPID_HIGH, &vid);
+	printf("vid is : %x\n",vid);
+	rdSensorReg8_8(OV2640_CHIPID_LOW, &pid);
+	printf("pid is : %x\n",pid);
+	if((vid != 0x26) || (pid != 0x42)) {
+		printf("Can't find OV2640 module!\n");
+		while (1);
+	} else
+		printf("OV2640 detected\n");
+
+	set_format(BMP);
+
+	InitCAM();
 }
 
-static char data[50000] =
-    "Until modern times cryptography referred almost exclusively to encryption, which is the process of converting ordinary information (called plaintext) into unintelligible gibberish (called ciphertext).[7] Decryption is the reverse, in other words, moving from the unintelligible ciphertext back to plaintext. A cipher (or cypher) is a pair of algorithms that create the encryption and the reversing decryption. The detailed operation of a cipher is controlled both by the algorithm and in each instance by a key. This is a secret (ideally known only to the communicants), usually a short string of characters, which is needed to decrypt the ciphertext. A cryptosystem is the ordered list of elements of finite possible plaintexts, finite possible cyphertexts, finite possible keys, and the encryption and decryption algorithms which correspond to each key. Keys are important, as ciphers without variable keys can be trivially broken with only the knowledge of the cipher used and are therefore useless (or even counter-productive) for most purposes. Historically, ciphers were often used directly for encryption or decryption without additional procedures such as authentication or integrity checks.\n";
-void read()
-{
-	printf("%s\n", contract);
+#define X	320
+#define Y	240
+#define BMP_HEADER_SIZE 66
+#define BUFFER_SIZE (2*X*Y + BMP_HEADER_SIZE)
+uint8_t buffer[BUFFER_SIZE];
+
+const uint8_t bmp_header[BMP_HEADER_SIZE] = {
+	0x42, 0x4D, 0x36, 0x58, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00, 0x28, 0x00,
+	0x00, 0x00, 0x40, 0x01, 0x00, 0x00, 0xF0, 0x00, 0x00, 0x00, 0x01, 0x00, 0x10, 0x00, 0x03, 0x00,
+	0x00, 0x00, 0x00, 0x58, 0x02, 0x00, 0xC4, 0x0E, 0x00, 0x00, 0xC4, 0x0E, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x00, 0x00, 0xE0, 0x07, 0x00, 0x00, 0x1F, 0x00,
+	0x00, 0x00
+};
+
+void camera_rgb(void) {
+	BOOL isSavedFlag = FALSE;
+	camera_setup();
+	printf("Setup done!\n");
+
+	uint8_t VH, VL;
+
+	while(1) { 
+		write_reg(ARDUCHIP_MODE, 0x00); //Resolution for BMP: 320*240
+	
+		//Flush the FIFO
+		flush_fifo();
+	
+		//Clear the capture done flag
+		clear_fifo_flag();
+          
+		//Start capture
+		capture();
+
+		while (isSavedFlag == FALSE) {
+        	wrSensorReg8_8(0xff, 0x00);
+			if(read_reg(ARDUCHIP_TRIG) & CAP_DONE_MASK) {
+				int k, x, y;
+				for (k = 0; k < BMP_HEADER_SIZE; k++)
+					buffer[k] = bmp_header[k];
+
+				//Read first dummy byte
+				read_fifo();
+
+				//print 256 pixels RGB888 value
+				for(x = 0; x < X; x++)
+					for(y = 0; y < Y; y++) {
+						VH = read_fifo();
+						VL = read_fifo();
+						buffer[k++] = VL;
+						buffer[k++] = VH;
+//						printf("buffer[%d] = %x%x ", k/2, VH, VL);
+//						if (k % 10 == 0)
+//							printf("\n");
+
+						//Use VH and VL for 1 pixel to count RGB888 value
+						//blue = (((VH & 0x1F) * 527) + 23) >> 6;
+						//green = (((((VH & 0xF0) >> 5 | ((VL & 0x0F) << 3)) & 0x3F) * 259) + 33) >> 6;
+						//red = ((((VL >> 3) & 0x1F) * 527) + 23) >> 6;
+						//k++;
+					}
+				printf("picture done\n");
+
+				//Clear the capture done flag
+				clear_fifo_flag();
+				//Clear the start capture flag
+				set_format(BMP);
+				InitCAM();
+				isSavedFlag = TRUE;
+			}
+		}
+
+		isSavedFlag = FALSE;
+	    break;
+    }
 }
 
-void initFlashData(int *success)
-{
-	int aesErr = 0;		//error handling
-	int rsaErr = 0;
-
-//  hello(REP_TRUSTED_NAME);
-	printf("In trusted mode initFlashData\n");
-//  TRUSTED_DATA static char data[50000] = "Messenger: Choose your next words carefully, Leonidas. They may be your last as king.\nKing Leonidas: [to himself: thinking] \"Earth and water\"?\n[Leonidas unsheathes and points his sword at the Messenger's throat]\nMessenger: Madman! You're a madman!\nKing Leonidas: Earth and water? You'll find plenty of both down there.\nMessenger: No man, Persian or Greek, no man threatens a messenger!\nKing Leonidas: You bring the crowns and heads of conquered kings to my city steps. You insult my queen. You threaten my people with slavery and death! Oh, I've chosen my words carefully, Persian. Perhaps you should have done the same!\nMessenger: This is blasphemy! This is madness!\nKing Leonidas: Madness...?\n[shouting]\nKing Leonidas: THIS IS SPARTA!\n[Kicks the messenger down the well]\n";
-
-//  32 bytes HEX key digits used as key to AES-128
-//  TRUSTED_DATA static char sessionKey[33] = "0123456789abcdeffedcba9876543210"; AES key
-	char sessionKey[32];
-	generateAESKey(sessionKey);	//generates a random 16 byte AES key (AES-128)
-
-	nbytes = strlen(data);	//setting the global variable, used in aesDecrypt
-
-	printf
-	    ("\nEncrypting message with random generated AES-128 one time session key:\n%s",
-	     sessionKey);
-	aesErr = aesEncrypt(sessionKey, data, encrypted);
-	memcpy(contract, encrypted, nbytes);
-#if 1
-	if (aesErr != 0) {
-		printf("AES encryption failed.\n");
-//    *success = 0;
-	} else {
-		printf("\nTry to print encrypted data! \n %s \n\n", encrypted);
-		printf("\n Encrypting AES session key with RSA\n");
-		rsaErr =
-		    rsaEncrypt(sessionKey, g_e, g_modulus, encryptedAESKey);
-	}
-	if (rsaErr != 0) {
-		printf("RSA encryption failed.\n");
-		//*success = 0;
-	} else if (aesErr == 0 && rsaErr == 0) {
-		//  *success = 1;
-	}
-#endif
-
+void encrypt(void) {
+    uint8_t key[16] = { (uint8_t) 0x2b, (uint8_t) 0x7e, (uint8_t) 0x15, (uint8_t) 0x16,
+						(uint8_t) 0x28, (uint8_t) 0xae, (uint8_t) 0xd2, (uint8_t) 0xa6,
+						(uint8_t) 0xab, (uint8_t) 0xf7, (uint8_t) 0x15, (uint8_t) 0x88,
+						(uint8_t) 0x09, (uint8_t) 0xcf, (uint8_t) 0x4f, (uint8_t) 0x3c};
+    uint8_t iv[16]  = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
+    struct AES_ctx ctx;
+    AES_init_ctx_iv(&ctx, key, iv);
+    AES_CBC_encrypt_buffer(&ctx, buffer, BUFFER_SIZE);
 }
 
-static void calculateSHA(char *message, unsigned char *hval)
-{
-	sha256_ctx sha_ctx[1];
-
-	sha256_begin(sha_ctx);
-	sha256_hash(message, strlen(decrypted), sha_ctx);
-	sha256_end(hval, sha_ctx);
-}
-
-static void verifyContract(TrustedSignArgs * args)
-{
-	//hello(REP_TRUSTED_NAME);
-	printf("In trusted mode verifyContract()");
-
-	char *ptx;
-	int olen;
-
-	unsigned char *g_e = "10001";	//public key is always 0x10001, will not effect security
-
-	mp_int modulus, e;
-	mp_err err;
-	mp_init(&modulus);
-	mp_init(&e);
-
-	mp_read_radix(&modulus, (args->modulus), 16);
-	mp_read_radix(&e, g_e, 16);
-
-	err =
-	    mp_pkcs1v15_verify(args->signature, 128, &e, &modulus, &ptx, &olen);
-	if (err != 0) {
-		printf("Verify contract failed\n");
-	} else {
-		printf("\nThis is the hash value we got from sender\n");
-		pr_hex(ptx, SHA256_DIGEST_SIZE, 1);	//print hashvalue that we got from signature //crashes here sometimes
-
-		args->contract[30] = 'g';	//sabotage message
-		printf("\nThis is our own calculated hash value!\n");
-		unsigned char hval[SHA256_DIGEST_SIZE];
-		calculateSHA(args->contract, hval);	//input contact, output hvalue
-
-		printf("\nSHA-256 TRUSTED DIGEST: \n");
-		pr_hex(hval, SHA256_DIGEST_SIZE, 1);
-
-		if (!strncmp(hval, ptx, 32)) {
-			printf("Message signature is valid!\n");
-		} else
-			printf
-			    ("Message signature is wrong. Signature failed\n");
-		printf("Size of message:%d\n", nbytes);
-
-		mp_clear(&e);
-		mp_clear(&modulus);
-
-	}
-
-}
-
-// void trusted_rpc_handler(unsigned callNum, void *params)
-void handler_rpc(unsigned callNum, void *params)
-{
-	switch (callNum) {
-	case 0:
-		printf("Initializing Trusted Service\n");
-		_main((uint32_t) params);
-		break;
-	case 1:
-		initFlashData(params);
-		break;
-	case 2:
-		verifyContract(params);
-		break;
-	case 3:
-		getContract(params);
-		break;
-	case 4:
-		read();
-		break;
-	default:
-		printf("Unknown trusted operation: %d\n", callNum);
-	}
-	finish_rpc();
-}
-
-void finish_rpc()
-{
-	ISSUE_HYPERCALL(HYPERCALL_END_RPC);
-}
-
-void _main(int seed)
-{
-	int success;
-	printf("Seed value: %x", seed);
-	srand_mwc(seed);
-	/*Initialize the heap */
-	init_heap();
-	if (count == 0) {
-		memcpy(contract, data, nbytes);
-		count++;
-	}
+void handler_rpc(void) {
+	camera_rgb();
+	encrypt();
+	printf("Encryption done!\n");
+	ISSUE_HYPERCALL_REG2(HYPERCALL_END_RPC, 0, buffer);
 }

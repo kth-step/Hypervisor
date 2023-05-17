@@ -22,6 +22,7 @@ enum hyp_cache_op {
 	INV_D_CACHE_REGION = 11,
 	CLEAN_D_CACHE_REGION = 12,
 	COHERENT_RANGE = 13,
+	CLEAN_ENDS_INVALIDATE = 14,
 };
 
 void hypercall_dcache_clean_area(addr_t va, uint32_t size);

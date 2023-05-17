@@ -1,6 +1,6 @@
 
     .global _start
-    .extern _main
+//    .extern _main
     .extern lib_init
     .extern lib_atexit    
     .extern handler_rpc
@@ -47,7 +47,7 @@ bss_loop:
 	ldr sp, =__stack_top__;
 	//add r13, r13, r1
 
-    bl _main
+//    bl _main
 
     /* all done */
     b . /* TODO: a real exit */        

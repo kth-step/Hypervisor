@@ -85,6 +85,56 @@ void hypercall_clean_or_invalidate_dcache(void) {
 	mem_flush_dcache();
 }
 
+
+void hypercall_clean_ends_invalidate_dma_dcache(uint32_t start_va, uint32_t end_va) {
+	uint32_t ctr;
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache1: start_va = 0x%x, end_va = 0x%x\n", start_va, end_va);
+	//COP_SYSTEM = p15
+	//COP_ID_CACHE_CONTROL_ARMv7_CLIDR = "c0, c0, 1"
+	//COP_READ2(cop, op1, func, reg) =
+	//asm volatile("mrc " cop "," op1 ", %0, " func : "=r" (reg))
+	//COP_READ2(COP_SYSTEM, "0", COP_ID_CACHE_CONTROL_ARMv7_CLIDR, ctr) =
+	//asm volatile("mrc p15, 0, %0, c0, c0, 1" : "=r" (ctr))
+	COP_READ2(COP_SYSTEM, "0", COP_ID_CACHE_CONTROL_ARMv7_CLIDR, ctr);
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache2: start_va = 0x%x, end_va = 0x%x\n", start_va, end_va);
+	uint32_t cache_line_size_pow2 = (ctr >> 16) & 0xF;	//ctr[3:0] = CTR.DminLine = CTR[19:16] = Log₂(Number of 4-byte words in smallest cache).
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache3: cache_line_size_pow2 = 0x%x\n", cache_line_size_pow2);
+	uint32_t cache_line_size_byte = 4 << cache_line_size_pow2;
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache4: cache_line_size_byte = 0x%x\n", cache_line_size_byte);
+
+	uint32_t cache_line_mask = cache_line_size_byte - 1;
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache5: cache_line_mask = 0x%x\n", cache_line_mask);
+	uint32_t current_va;
+	if (start_va & cache_line_mask) {						//Start address not cache line aligned.
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache6: start_va & cache_line_mask = 0x%x\n", start_va & cache_line_mask);
+		current_va = start_va & ~cache_line_mask;			//Cache aligns start_va.
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache7: current_va = 0x%x\n", current_va);
+		COP_WRITE(COP_SYSTEM, COP_DCACHE_CLEAN_INVALIDATE_MVA, current_va); //DCCIMVAC, Clean and invalidate data* cache line by MVA to PoC[page 1471].
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache8: Cleaned and invalidated current_va = 0x%x\n", current_va);
+		current_va += cache_line_size_byte;
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache9: Update current_va = 0x%x\n", current_va);
+	} else {												//Start address cache line aligned.
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache10: Updates current_va\n");
+		current_va = start_va;
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache11: Updated current_va = 0x%x\n", current_va);
+	}
+
+	if (end_va & cache_line_mask) {							//End address not cache line aligned.
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache12: end_va & cache_line_mask = 0x%x\n", end_va & cache_line_mask);
+		uint32_t cache_aligned_end_va = end_va & ~cache_line_mask;		//Cache aligns end_va.
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache13: cache_aligned_end_va = 0x%x\n", cache_aligned_end_va);
+		COP_WRITE(COP_SYSTEM, COP_DCACHE_CLEAN_INVALIDATE_MVA, cache_aligned_end_va); //DCCIMVAC, Clean and invalidate data* cache line by MVA to PoC[page 1471].
+//printf("Hypervisor hypercall_clean_ends_invalidate_dma_dcache14: Cleaned anv invalidated cache_aligned_end_va = 0x%x\n", cache_aligned_end_va);
+	}
+
+	while (current_va < end_va) {
+		COP_WRITE(COP_SYSTEM, COP_DCIMVAC, current_va); 	//DCCIMVAC, Clean and invalidate data* cache line by MVA to PoC[page 1471].
+		current_va += cache_line_size_byte;
+	}
+
+	__asm__ __volatile__ ("dsb st" : : : "memory");
+}
+
 void hypercall_cache_op(enum hyp_cache_op op, addr_t va, uint32_t size_or_end)
 {
 	switch (op) {
@@ -129,6 +179,9 @@ void hypercall_cache_op(enum hyp_cache_op op, addr_t va, uint32_t size_or_end)
 		return;
 	case COHERENT_RANGE:
 		coherent_range((uint32_t) va, size_or_end);
+		return;
+	case CLEAN_ENDS_INVALIDATE:
+		hypercall_clean_ends_invalidate_dma_dcache((uint32_t) va, size_or_end);
 		return;
 	default:
 		printf("Invalid cache operation\n");

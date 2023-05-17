@@ -121,8 +121,7 @@ void memory_init()
 	// We clear the memory that contains the L2s that can be created in the 32KB of slpt_va
 	memset(slpt_va, 0, 0x8000);
 
-	memory_layout_entry *list =
-	    (memory_layout_entry *) (&memory_padr_layout);
+	memory_layout_entry *list = (memory_layout_entry *) (&memory_padr_layout);
 
 	for (;;) {
 		if (!list)
@@ -132,12 +131,9 @@ void memory_init()
 		case MLT_IO_RO_REG:
 		case MLT_IO_HYP_REG:
 			/*All IO get coarse pages */
-			pt_create_coarse(flpt_va,
-					 IO_VA_ADDRESS(PAGE_TO_ADDR
-						       (list->page_start)),
+			pt_create_coarse(flpt_va, IO_VA_ADDRESS(PAGE_TO_ADDR(list->page_start)),
 					 PAGE_TO_ADDR(list->page_start),
-					 (list->page_count -
-					  list->page_start) << PAGE_BITS,
+					 (list->page_count - list->page_start) << PAGE_BITS,
 					 list->type);
 			break;
 		case MLT_USER_RAM:
@@ -147,10 +143,8 @@ void memory_init()
 		case MLT_TRUSTED_RAM:
 			/* own memory */
 			j = (list->page_start) >> 8;	/*Get L1 Page index */
-			for (; j < ((list->page_count) >> 8); j++) {
-				pt_create_section(flpt_va,
-						  (j << 20) - HAL_OFFSET,
-						  j << 20, list->type);
+			for (; j < ((list->page_count) >> 8); j++) {	//ADDR_TO_PAGE in board_mem.c  have already done >> 12, so 8 more gives MB.
+				pt_create_section(flpt_va, (j << 20) - HAL_OFFSET, j << 20, list->type);
 			}
 			break;
 		case MLT_NONE:
@@ -162,8 +156,7 @@ void memory_init()
 	}
 
 	/*map 0xffff0000 to Vector table, interrupt have been relocated to this address */
-	pt_map(0xFFFF0000, (uint32_t) GET_PHYS(&_interrupt_vector_table),
-	       0x1000, MLT_USER_ROM);
+	pt_map(0xFFFF0000, (uint32_t) GET_PHYS(&_interrupt_vector_table), 0x1000, MLT_USER_ROM);
 	memory_commit();
 	mem_cache_set_enable(TRUE);
 	mem_mmu_set_domain(0x55555555);	//Start with access to all domains
@@ -236,27 +229,16 @@ void guests_init()
 	//    dump_mmu(flpt_va); // DEBUG
 
 	/* show guest information */
-	printf("We have %d guests in physical memory area start = %x and end = %x\n",
-	       guests_db.count, guests_db.pstart, guests_db.pend);
-
+	printf("Number of guests: %d\n", guests_db.count);
+	printf("Guests are located in memory starting at physical address 0x%x\n", guests_db.pstart);
+	printf("Guests are located in memory ending at physical address 0x%x\n", guests_db.pend);
 	for (i = 0; i < guests_db.count; i++) {
-		printf("Guest_%d: PA=%x+%x VA=%x FWSIZE=%x OFFSET=%x\n", i,
-			// initial physical address of the guest
-			guests_db.guests[i].pstart,
-			// size in bytes of the guest
-			guests_db.guests[i].psize,
-			// initial virtual address of the 1-to-1 mapping
-			guests_db.guests[i].vstart,
-			// size in byte of the binary that has been copied
-			guests_db.guests[i].fwsize,
-			guests_db.guests[i].offset);
+		printf("guests_db.guests[%d].pstart = 0x%x\n", i, guests_db.guests[i].pstart);
+		printf("guests_db.guests[%d].vstart = 0x%x\n", i, guests_db.guests[i].vstart);
+		printf("guests_db.guests[%d].psize = 0x%x\n", i, guests_db.guests[i].psize);
+		printf("guests_db.guests[%d].fwsize = %d\n", i, guests_db.guests[i].fwsize);
+		printf("guests_db.guests[%d].offset = 0x%x\n", i, guests_db.guests[i].offset);
 	}
-/////////////////////////////
-	printf("initial address where guest is stored at pstart: %x\n", guests_db.guests[0].pstart);
-	printf("initial address where guest is copied at vstart: %x\n", guests_db.guests[0].vstart);
-	printf("final address where guest is copied to at psize: %x\n", guests_db.guests[0].psize);
-	printf("amount of bytes to copy at fwsize: %x\n", guests_db.guests[0].fwsize);
-///////////////////////////////////////////
 
 #ifdef LINUX
 	//Get linux configuration structure: core/hypervisor/guest_config/linux_config.c:linux_config:
@@ -359,6 +341,8 @@ curr_vm->guest_info.page_offset = 0xC0000000;///////////////////////////////////
 
 //	printf("HV pagetable after guests initialization:\n");	// DEBUG
 	//    dump_mmu(flpt_va); // DEBUG
+
+
 
 	// We pin the L2s that can be created in the 32KB are of slpt_va
 	dmmu_entry_t *bft = (dmmu_entry_t *) DMMU_BFT_BASE_VA;
@@ -490,8 +474,8 @@ curr_vm->guest_info.page_offset = 0xC0000000;///////////////////////////////////
 			//Guest execution mode, including the domain access control bits
 			//that are set when entering the mode.
 			curr_vm->mode_states[i].mode_config = (curr_vm->config->guest_modes[i]);
-			//curr_vm->mode_states[i].rpc_for = MODE_NONE;
-			//curr_vm->mode_states[i].rpc_to  = MODE_NONE;
+			curr_vm->mode_states[i].rpc_for = MODE_NONE;
+			curr_vm->mode_states[i].rpc_to  = MODE_NONE;
 		}
 		curr_vm->current_guest_mode = MODE_NONE;
 		curr_vm->interrupted_mode = MODE_NONE;

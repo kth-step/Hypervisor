@@ -12,16 +12,12 @@ void start()
 	uint32_t r6 = curr_vm->mode_states[HC_GM_KERNEL].ctx.reg[6];
 	curr_vm->current_mode_state->ctx.psr = 0xD3;	//Emulated SVC mode interrupts off
 
-	addr_t start =
-	    curr_vm->config->firmware->vstart +
-	    curr_vm->config->guest_entry_offset;
+	addr_t start = curr_vm->config->firmware->vstart + curr_vm->config->guest_entry_offset;
 #ifdef LINUX
 	//Offset = 0x0001_0000 must be added since that offset is used to move the
 	//guest by arm_guest_blob.S to 0x8100_0000 + 0x0001_0000, and pstart is also
 	//set by arm_guest_blob.S.
-	start =
-	    curr_vm->config->firmware->pstart +
-	    curr_vm->config->guest_entry_offset;
+	start = curr_vm->config->firmware->pstart + curr_vm->config->guest_entry_offset;
 #endif
 
 #if !defined(LINUX)

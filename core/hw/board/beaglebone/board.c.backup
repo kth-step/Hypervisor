@@ -120,7 +120,7 @@ extern uint32_t *flpt_va;
 
 #define L4_34XX_SIZE			SZ_4M
 #define L4_34XX_BASE			0x48000000
-#define OMAP2_L4_IO_OFFSET		0xB2000000
+#define OMAP2_L4_IO_OFFSET		0xb2000000
 #define L4_34XX_PHYS			L4_34XX_BASE
 #define L4_34XX_VIRT			(L4_34XX_PHYS + OMAP2_L4_IO_OFFSET)
 
@@ -136,152 +136,7 @@ extern uint32_t *flpt_va;
 #define SZ_4K					0x00001000
 #define PAGE_SIZE				SZ_4K
 
-
-
-#define UART1_OFFSET		0x00022000
-#define UART1_PHYS			(L4_34XX_BASE + UART1_OFFSET)
-#define UART1_SIZE			PAGE_SIZE
-#define UART1_VIRT			(UART1_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define UART2_OFFSET		0x00024000
-#define UART2_PHYS			(L4_34XX_BASE + UART2_OFFSET)
-#define UART2_SIZE			PAGE_SIZE
-#define UART2_VIRT			(UART2_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define I2C1_OFFSET			0x0002A000
-#define I2C1_PHYS			(L4_34XX_BASE + I2C1_OFFSET)
-#define I2C1_SIZE			PAGE_SIZE
-#define I2C1_VIRT			(I2C1_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define McSPI0_OFFSET		0x00030000
-#define McSPI0_PHYS			(L4_34XX_BASE + McSPI0_OFFSET)
-#define McSPI0_SIZE			PAGE_SIZE
-#define McSPI0_VIRT			(McSPI0_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define McASP0_OFFSET		0x00038000
-#define McASP0_PHYS			(L4_34XX_BASE + McASP0_OFFSET)
-#define McASP0_SIZE			(2*PAGE_SIZE)
-#define McASP0_VIRT			(McASP0_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define McASP1_OFFSET		0x0003C000
-#define McASP1_PHYS			(L4_34XX_BASE + McASP1_OFFSET)
-#define McASP1_SIZE			(2*PAGE_SIZE)
-#define McASP1_VIRT			(McASP1_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define DMTIMER2_OFFSET		0x00040000
-#define DMTIMER2_PHYS		(L4_34XX_BASE + DMTIMER2_OFFSET)
-#define DMTIMER2_SIZE		PAGE_SIZE
-#define DMTIMER2_VIRT		(DMTIMER2_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define DMTIMER3_OFFSET		0x00042000
-#define DMTIMER3_PHYS		(L4_34XX_BASE + DMTIMER3_OFFSET)
-#define DMTIMER3_SIZE		PAGE_SIZE
-#define DMTIMER3_VIRT		(DMTIMER3_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define DMTIMER4_OFFSET		0x00044000
-#define DMTIMER4_PHYS		(L4_34XX_BASE + DMTIMER4_OFFSET)
-#define DMTIMER4_SIZE		PAGE_SIZE
-#define DMTIMER4_VIRT		(DMTIMER4_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define DMTIMER5_OFFSET		0x00046000
-#define DMTIMER5_PHYS		(L4_34XX_BASE + DMTIMER5_OFFSET)
-#define DMTIMER5_SIZE		PAGE_SIZE
-#define DMTIMER5_VIRT		(DMTIMER5_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define DMTIMER6_OFFSET		0x00048000
-#define DMTIMER6_PHYS		(L4_34XX_BASE + DMTIMER6_OFFSET)
-#define DMTIMER6_SIZE		PAGE_SIZE
-#define DMTIMER6_VIRT		(DMTIMER6_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define DMTIMER7_OFFSET		0x0004A000
-#define DMTIMER7_PHYS		(L4_34XX_BASE + DMTIMER7_OFFSET)
-#define DMTIMER7_SIZE		PAGE_SIZE
-#define DMTIMER7_VIRT		(DMTIMER7_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define GPIO1_OFFSET		0x0004C000
-#define GPIO1_PHYS			(L4_34XX_BASE + GPIO1_OFFSET)
-#define GPIO1_SIZE			PAGE_SIZE
-#define GPIO1_VIRT			(GPIO1_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define MMCHS0_OFFSET		0x00060000
-#define MMCHS0_PHYS			(L4_34XX_BASE + MMCHS0_OFFSET)
-#define MMCHS0_SIZE			PAGE_SIZE
-#define MMCHS0_VIRT			(MMCHS0_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define ELM_OFFSET			0x00080000
-#define ELM_PHYS			(L4_34XX_BASE + ELM_OFFSET)
-#define ELM_SIZE			(16*PAGE_SIZE)
-#define ELM_VIRT			(ELM_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define Mailbox0_OFFSET		0x000C8000
-#define Mailbox0_PHYS		(L4_34XX_BASE + Mailbox0_OFFSET)
-#define Mailbox0_SIZE		PAGE_SIZE
-#define Mailbox0_VIRT		(Mailbox0_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define Spinlock_OFFSET		0x000CA000
-#define Spinlock_PHYS		(L4_34XX_BASE + Spinlock_OFFSET)
-#define Spinlock_SIZE		PAGE_SIZE
-#define Spinlock_VIRT		(Spinlock_PHYS + OMAP2_L4_IO_OFFSET)
-
-
-
-#define OCP_Watchpoint_OFFSET	0x0018C000
-#define OCP_Watchpoint_PHYS		(L4_34XX_BASE + OCP_Watchpoint_OFFSET)
-#define OCP_Watchpoint_SIZE		PAGE_SIZE
-#define OCP_Watchpoint_VIRT		(OCP_Watchpoint_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define I2C2_OFFSET			0x0019C000
-#define I2C2_PHYS			(L4_34XX_BASE + I2C2_OFFSET)
-#define I2C2_SIZE			PAGE_SIZE
-#define I2C2_VIRT			(I2C2_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define McSPI1_OFFSET		0x001A0000
-#define McSPI1_PHYS			(L4_34XX_BASE + McSPI1_OFFSET)
-#define McSPI1_SIZE			PAGE_SIZE
-#define McSPI1_VIRT			(McSPI1_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define UART3_OFFSET		0x001A6000
-#define UART3_PHYS			(L4_34XX_BASE + UART3_OFFSET)
-#define UART3_SIZE			PAGE_SIZE
-#define UART3_VIRT			(UART3_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define UART4_OFFSET		0x001A8000
-#define UART4_PHYS			(L4_34XX_BASE + UART4_OFFSET)
-#define UART4_SIZE			PAGE_SIZE
-#define UART4_VIRT			(UART4_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define UART5_OFFSET		0x001AA000
-#define UART5_PHYS			(L4_34XX_BASE + UART5_OFFSET)
-#define UART5_SIZE			PAGE_SIZE
-#define UART5_VIRT			(UART5_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define GPIO2_OFFSET		0x001AC000
-#define GPIO2_PHYS			(L4_34XX_BASE + GPIO2_OFFSET)
-#define GPIO2_SIZE			PAGE_SIZE
-#define GPIO2_VIRT			(GPIO2_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define GPIO3_OFFSET		0x001AE000
-#define GPIO3_PHYS			(L4_34XX_BASE + GPIO3_OFFSET)
-#define GPIO3_SIZE			PAGE_SIZE
-#define GPIO3_VIRT			(GPIO3_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define DCAN0_OFFSET		0x001CC000
-#define DCAN0_PHYS			(L4_34XX_BASE + DCAN0_OFFSET)
-#define DCAN0_SIZE			(2*PAGE_SIZE)
-#define DCAN0_VIRT			(DCAN0_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define DCAN1_OFFSET		0x001D0000
-#define DCAN1_PHYS			(L4_34XX_BASE + DCAN1_OFFSET)
-#define DCAN1_SIZE			(2*PAGE_SIZE)
-#define DCAN1_VIRT			(DCAN1_PHYS + OMAP2_L4_IO_OFFSET)
-
-#define MMC1_OFFSET			0x001D8000
-#define MMC1_PHYS			(L4_34XX_BASE + MMC1_OFFSET)
-#define MMC1_SIZE			(2*PAGE_SIZE)
-#define MMC1_VIRT			(MMC1_PHYS + OMAP2_L4_IO_OFFSET)
-
-//@size size must be in multiple of 4kBs when given to pt_create_coarse.
-void pt2_map(uint32_t va, uint32_t pa, uint32_t size, uint32_t ap) {
+void pt2_map(uint32_t pa, uint32_t va, uint32_t size, uint32_t ap) {
 	uint32_t table2_pa = pt_create_coarse((addr_t *) flpt_va, (addr_t) va, (addr_t) pa, size, ap);
 	if (table2_pa == 0) {
 		printf("Hypervisor cannot map %x to %x\n", va, pa);
@@ -291,83 +146,34 @@ void pt2_map(uint32_t va, uint32_t pa, uint32_t size, uint32_t ap) {
 
 void board_init()	//Invoked by core/hypervisor/init.c:start_
 {
-	//All of these pages are mapped as accessible only to the hypervisor since
-	//the domain is set in the first-level page table entry, and the SPI must be
-	//protected from Linux, due to the camera allocated to the trusted guest.
-	//Maps first MB of L4_34XX (L4_PER in TRM).
-	//UART1	0x4802_2000 0x4802_2FFF 4KB UART1 Registers
-	pt2_map(UART1_VIRT, UART1_PHYS, UART1_SIZE, MLT_IO_HYP_REG);
-	//UART2	0x4802_4000 0x4802_4FFF 4KB UART2 Registers
-	pt2_map(UART2_VIRT, UART2_PHYS, UART2_SIZE, MLT_IO_HYP_REG);
-	//I2C1	0x4802_A000 0x4802_AFFF 4KB I2C1 Registers
-	pt2_map(I2C1_VIRT, I2C1_PHYS, I2C1_SIZE, MLT_IO_HYP_REG);
-	//McSPI0	0x4803_0000 0x4803_0FFF 4KB McSPI0 Registers
-	pt2_map(McSPI0_VIRT, McSPI0_PHYS, McSPI0_SIZE, MLT_IO_HYP_REG);	//For trusted guest using the camera.
-	//McASP0	CFG 0x4803_8000 0x4803_9FFF 8KB McASP0 CFG Registers
-	pt2_map(McASP0_VIRT, McASP0_PHYS, McASP0_SIZE, MLT_IO_HYP_REG);
-	//McASP1	CFG 0x4803_C000 0x4803_DFFF 8KB McASP1 CFG Registers
-	pt2_map(McASP1_VIRT, McASP1_PHYS, McASP1_SIZE, MLT_IO_HYP_REG);
-	//DMTIMER2 0x4804_0000 0x4804_0FFF 4KB DMTimer2 Registers
-	pt2_map(DMTIMER2_VIRT, DMTIMER2_PHYS, DMTIMER2_SIZE, MLT_IO_HYP_REG);
-	//DMTIMER3 0x4804_2000 0x4804_2FFF 4KB DMTimer3 Registers
-	pt2_map(DMTIMER3_VIRT, DMTIMER3_PHYS, DMTIMER3_SIZE, MLT_IO_HYP_REG);
-	//DMTIMER4 0x4804_4000 0x4804_4FFF 4KB DMTimer4 Registers
-	pt2_map(DMTIMER4_VIRT, DMTIMER4_PHYS, DMTIMER4_SIZE, MLT_IO_HYP_REG);
-	//DMTIMER5 0x4804_6000 0x4804_6FFF 4KB DMTimer5 Registers
-	pt2_map(DMTIMER5_VIRT, DMTIMER5_PHYS, DMTIMER5_SIZE, MLT_IO_HYP_REG);
-	//DMTIMER6 0x4804_8000 0x4804_8FFF 4KB DMTimer6 Registers
-	pt2_map(DMTIMER6_VIRT, DMTIMER6_PHYS, DMTIMER6_SIZE, MLT_IO_HYP_REG);
-	//DMTIMER7 0x4804_A000 0x4804_AFFF 4KB DMTimer7 Registers
-	pt2_map(DMTIMER7_VIRT, DMTIMER7_PHYS, DMTIMER7_SIZE, MLT_IO_HYP_REG);
-	//GPIO1 0x4804_C000 0x4804_CFFF 4KB GPIO1 Registers
-	pt2_map(GPIO1_VIRT, GPIO1_PHYS, GPIO1_SIZE, MLT_IO_HYP_REG);
-	//MMCHS0 0x4806_0000 0x4806_0FFF 4KB MMCHS0 Registers
-	pt2_map(MMCHS0_VIRT, MMCHS0_PHYS, MMCHS0_SIZE, MLT_IO_HYP_REG);
-	//ELM 0x4808_0000 0x4808_FFFF 64KB ELM Registers
-	pt2_map(ELM_VIRT, ELM_PHYS, ELM_SIZE, MLT_IO_HYP_REG);
-	//Mailbox 0 0x480C_8000 0x480C_8FFF 4KB Mailbox Registers
-	pt2_map(Mailbox0_VIRT, Mailbox0_PHYS, Mailbox0_SIZE, MLT_IO_HYP_REG);
-	//Spinlock 0x480C_A000 0x480C_AFFF 4KB Spinlock Registers
-	pt2_map(Spinlock_VIRT, Spinlock_PHYS, Spinlock_SIZE, MLT_IO_HYP_REG);
-
-	//All of these pages are mapped as accessible only to the hypervisor since
-	//the domain is set in the first-level page table entry, and the SPI must be
-	//protected from Linux, due to the camera allocated to the trusted guest.
-	//Maps second MB of L4_34XX (L4_PER in TRM).
-	//OCP Watchpoint 0x4818_C000 0x4818_CFFF 4KB OCP Watchpoint Registers
-	pt2_map(OCP_Watchpoint_VIRT, OCP_Watchpoint_PHYS, OCP_Watchpoint_SIZE, MLT_IO_HYP_REG);
-	//I2C2 0x4819_C000 0x4819_CFFF 4KB I2C2 Registers
-	pt2_map(I2C2_VIRT, I2C2_PHYS, SECTION_SIZE, MLT_IO_HYP_REG);	//For trusted guest using camera.
-	//McSPI1 0x481A_0000 0x481A_0FFF 4KB McSPI1 Registers
-	pt2_map(McSPI1_VIRT, McSPI1_PHYS, McSPI1_SIZE, MLT_IO_HYP_REG);
-	//UART3 0x481A_6000 0x481A_6FFF 4KB UART3 Registers
-	pt2_map(UART3_VIRT, UART3_PHYS, UART3_SIZE, MLT_IO_HYP_REG);
-	//UART4 0x481A_8000 0x481A_8FFF 4KB UART4 Registers
-	pt2_map(UART4_VIRT, UART4_PHYS, UART4_SIZE, MLT_IO_HYP_REG);
-	//UART5 0x481A_A000 0x481A_AFFF 4KB UART5 Registers
-	pt2_map(UART5_VIRT, UART5_PHYS, UART5_SIZE, MLT_IO_HYP_REG);
-	//GPIO2 0x481A_C000 0x481A_CFFF 4KB GPIO2 Registers
-	pt2_map(GPIO2_VIRT, GPIO2_PHYS, GPIO2_SIZE, MLT_IO_HYP_REG);
-	//GPIO3 0x481A_E000 0x481A_EFFF 4KB GPIO3 Registers
-	pt2_map(GPIO3_VIRT, GPIO3_PHYS, GPIO3_SIZE, MLT_IO_HYP_REG);
-	//DCAN0 0x481C_C000 0x481C_DFFF 8KB DCAN0 Registers
-	pt2_map(DCAN0_VIRT, DCAN0_PHYS, DCAN0_SIZE, MLT_IO_HYP_REG);
-	//DCAN1 0x481D_0000 0x481D_1FFF 8KB DCAN1 Registers
-	pt2_map(DCAN1_VIRT, DCAN1_PHYS, DCAN1_SIZE, MLT_IO_HYP_REG);
-	//MMC1 0x481D_8000 0x481D_8FFF 4KB MMC1 Registers
-	pt2_map(MMC1_VIRT, MMC1_PHYS, MMC1_SIZE, MLT_IO_HYP_REG);
-
-	//Maps third MB of L4_34XX (L4_PER in TRM).
-	pt2_map(L4_34XX_VIRT + 2*SECTION_SIZE, L4_34XX_PHYS + 2*SECTION_SIZE, SECTION_SIZE, MLT_IO_RW_REG);
-	//Maps fourth MB of L4_34XX (L4_PER in TRM).
-	pt2_map(L4_34XX_VIRT + 3*SECTION_SIZE, L4_34XX_PHYS + 3*SECTION_SIZE, SECTION_SIZE, MLT_IO_RW_REG);
-
-
+	//Maps L4_34XX.
+	uint32_t section, offset;
+	uint32_t start_pa = L4_34XX_PHYS;
+	uint32_t end_pa = L4_34XX_PHYS + L4_34XX_SIZE;
+	uint32_t start_va = L4_34XX_VIRT;
+	uint32_t length = end_pa - start_pa;
+	uint32_t number_of_sections = length / SECTION_SIZE;
+	for (section = 0, offset = 0; section < number_of_sections; section++, offset += SECTION_SIZE) {
+		uint32_t table2_pa = pt_create_coarse((addr_t *) flpt_va, start_va + offset, start_pa + offset, SECTION_SIZE, MLT_IO_RW_REG);
+		if (table2_pa == 0) {
+			printf("Hypervisor cannot map %x to %x\n", start_va, start_pa);
+			while (1);
+		}
+	}
 
 	//Maps the first MB of L4_WK_AM33XX.
-	pt2_map(L4_WK_AM33XX_VIRT, L4_WK_AM33XX_PHYS, SECTION_SIZE, MLT_IO_RW_REG);
+	uint32_t table2_pa = pt_create_coarse((addr_t *) flpt_va, L4_WK_AM33XX_VIRT, L4_WK_AM33XX_PHYS, SECTION_SIZE, MLT_IO_RW_REG);
+	if (table2_pa == 0) {
+		printf("Hypervisor cannot map %x to %x\n", start_va, start_pa);
+		while (1);
+	}
+
 	//Maps the second MB of L4_WK_AM33XX.
-	pt2_map(L4_WK_AM33XX_VIRT + SECTION_SIZE, L4_WK_AM33XX_PHYS + SECTION_SIZE, SECTION_SIZE, MLT_IO_RW_REG);
+	table2_pa = pt_create_coarse((addr_t *) flpt_va, L4_WK_AM33XX_VIRT + SECTION_SIZE, L4_WK_AM33XX_PHYS + SECTION_SIZE, SECTION_SIZE, MLT_IO_RW_REG);
+	if (table2_pa == 0) {
+		printf("Hypervisor cannot map %x to %x\n", start_va, start_pa);
+		while (1);
+	}
 
 //Maps the third MB of L4_WK_AM33XX.
 //Maps 4kB pages instead of 1MB sections to be able to trap writes to the control module at 0x44E1_0000.
@@ -436,22 +242,26 @@ void board_init()	//Invoked by core/hypervisor/init.c:start_
 #define RTCSS_PHYS			0x44E3E000
 #define RTCSS_SIZE			PAGE_SIZE
 #define RTCSS_VIRT			(RTCSS_PHYS + AM33XX_L4_WK_IO_OFFSET)
-	pt2_map(CM_PER_VIRT,		CM_PER_PHYS,		CM_PER_SIZE,		MLT_IO_RW_REG);
-	pt2_map(DM_TIMER0_VIRT,		DM_TIMER0_PHYS,		DM_TIMER0_SIZE,		MLT_IO_RW_REG);
-	pt2_map(GPIO0_VIRT,			GPIO0_PHYS,			GPIO0_SIZE,			MLT_IO_RW_REG);
-	pt2_map(UART0_VIRT,			UART0_PHYS,			UART0_SIZE,			MLT_IO_RW_REG);
-	pt2_map(I2C0_VIRT,			I2C0_PHYS,			I2C0_SIZE,			MLT_IO_RW_REG);
-	pt2_map(ADC_TSC_VIRT,		ADC_TSC_PHYS,		ADC_TSC_SIZE,		MLT_IO_RW_REG);
-	pt2_map(CM_VIRT,			CM_PHYS,			CM_SIZE,			MLT_IO_RO_REG);	//No writes from unprivileged mode: Trap.
-	pt2_map(DDR_VIRT,			DDR_PHYS,			DDR_SIZE,			MLT_IO_RW_REG);
-	pt2_map(DMTIMER_1MS_VIRT,	DMTIMER_1MS_PHYS,	DMTIMER_1MS_SIZE,	MLT_IO_RW_REG);
-	pt2_map(WDT1_VIRT,			WDT1_PHYS,			WDT1_SIZE,			MLT_IO_RW_REG);
-	pt2_map(SmartReflex0_VIRT,	SmartReflex0_PHYS,	SmartReflex0_SIZE,	MLT_IO_RW_REG);
-	pt2_map(SmartReflex1_VIRT,	SmartReflex1_PHYS,	SmartReflex1_SIZE,	MLT_IO_RW_REG);
-	pt2_map(RTCSS_VIRT,			RTCSS_PHYS,			RTCSS_SIZE,			MLT_IO_RW_REG);
+	pt2_map(CM_PER_PHYS,		CM_PER_VIRT,		CM_PER_SIZE,		MLT_IO_RW_REG);
+	pt2_map(DM_TIMER0_PHYS,		DM_TIMER0_VIRT,		DM_TIMER0_SIZE,		MLT_IO_RW_REG);
+	pt2_map(GPIO0_PHYS,			GPIO0_VIRT,			GPIO0_SIZE,			MLT_IO_RW_REG);
+	pt2_map(UART0_PHYS,			UART0_VIRT,			UART0_SIZE,			MLT_IO_RW_REG);
+	pt2_map(I2C0_PHYS,			I2C0_VIRT,			I2C0_SIZE,			MLT_IO_RW_REG);
+	pt2_map(ADC_TSC_PHYS,		ADC_TSC_VIRT,		ADC_TSC_SIZE,		MLT_IO_RW_REG);
+	pt2_map(CM_PHYS,			CM_VIRT,			CM_SIZE,			MLT_IO_RO_REG);	//No writes from unprivileged mode: Trap.
+	pt2_map(DDR_PHYS,			DDR_VIRT,			DDR_SIZE,			MLT_IO_RW_REG);
+	pt2_map(DMTIMER_1MS_PHYS,	DMTIMER_1MS_VIRT,	DMTIMER_1MS_SIZE,	MLT_IO_RW_REG);
+	pt2_map(WDT1_PHYS,			WDT1_VIRT,			WDT1_SIZE,			MLT_IO_RW_REG);
+	pt2_map(SmartReflex0_PHYS,	SmartReflex0_VIRT,	SmartReflex0_SIZE,	MLT_IO_RW_REG);
+	pt2_map(SmartReflex1_PHYS,	SmartReflex1_VIRT,	SmartReflex1_SIZE,	MLT_IO_RW_REG);
+	pt2_map(RTCSS_PHYS,			RTCSS_VIRT,			RTCSS_SIZE,			MLT_IO_RW_REG);
 
 	//Maps the fourth MB of L4_WK_AM33XX.
-	pt2_map(L4_WK_AM33XX_VIRT + 3*SECTION_SIZE, L4_WK_AM33XX_PHYS + 3*SECTION_SIZE, SECTION_SIZE, MLT_IO_RW_REG);
+	table2_pa = pt_create_coarse((addr_t *) flpt_va, L4_WK_AM33XX_VIRT + 3*SECTION_SIZE, L4_WK_AM33XX_PHYS + 3*SECTION_SIZE, SECTION_SIZE, MLT_IO_RW_REG);
+	if (table2_pa == 0) {
+		printf("Hypervisor cannot map %x to %x\n", start_va, start_pa);
+		while (1);
+	}
 
 /*	pt_create_coarse(flpt_va, L3_34XX_VIRT			, __phys_to_pfn(L3_34XX_PHYS)			, L3_34XX_SIZE			, MLT_IO_RW_REG);
 	pt_create_coarse(flpt_va, L4_34XX_VIRT			, __phys_to_pfn(L4_34XX_PHYS)			, L4_34XX_SIZE			, MLT_IO_RW_REG);
@@ -543,35 +353,38 @@ void board_init()	//Invoked by core/hypervisor/init.c:start_
 	//within 1 MB. Hence, pt_create_coarse, which can manage a region spanning
 	//at most 1 MB starting from a MB aligned address, can be used for these
 	//mappings.
-	pt2_map(CPSW_SS_VIRT + 0x0000, CPSW_SS_PHYS, 0x1000, MLT_IO_RO_REG);	/* CPSW_SS except MDIO, CPSW_WR, CPPI_RAM 4KB */
-	pt2_map(CPSW_SS_VIRT + 0x1000, CPSW_SS_PHYS + 0x1000, 0x1000, MLT_IO_RW_REG);	/* MDIO, CPSW_WR which is 4KB. */
-	pt2_map(CPSW_SS_VIRT + 0x2000, CPSW_SS_PHYS + 0x2000, 0x2000, MLT_IO_RO_REG);	/* CPPI_RAM 8KB */
-	pt2_map(PRU_ICSS_VIRT, PRU_ICSS_PHYS, PRU_ICSS_SIZE, MLT_IO_RW_REG);	/* PRU_ICSS, 156kB. */
-	pt2_map(TPCC_VIRT, TPCC_PHYS, TPCC_SIZE, MLT_IO_RO_REG);	/* TPCC, 4kB. */
-	pt2_map(TPTC0_VIRT, TPTC0_PHYS, TPTC0_SIZE, MLT_IO_RO_REG);	/* TPTC0, 4kB. */
-	pt2_map(TPTC1_VIRT, TPTC1_PHYS, TPTC1_SIZE, MLT_IO_RO_REG);	/* TPTC2, 4kB. */
-	pt2_map(TPTC2_VIRT, TPTC2_PHYS, TPTC2_SIZE, MLT_IO_RO_REG);	/* TPTC3, 4kB. */
-	pt2_map(MMCHS2_VIRT, MMCHS2_PHYS, MMCHS2_SIZE, MLT_IO_RW_REG);	/* MMCHS2, 4kB. */
+	pt_create_coarse((addr_t *) flpt_va, CPSW_SS_VIRT + 0x0000, CPSW_SS_PHYS, 0x1000, MLT_IO_RO_REG);	/* CPSW_SS except MDIO, CPSW_WR, CPPI_RAM 4KB */
+	pt_create_coarse((addr_t *) flpt_va, CPSW_SS_VIRT + 0x1000, CPSW_SS_PHYS + 0x1000, 0x1000, MLT_IO_RW_REG);	/* MDIO, CPSW_WR which is 4KB. */
+	pt_create_coarse((addr_t *) flpt_va, CPSW_SS_VIRT + 0x2000, CPSW_SS_PHYS + 0x2000, 0x2000, MLT_IO_RO_REG);	/* CPPI_RAM 8KB */
+	pt_create_coarse((addr_t *) flpt_va, PRU_ICSS_VIRT, PRU_ICSS_PHYS, PRU_ICSS_SIZE, MLT_IO_RW_REG);	/* PRU_ICSS, 156kB. */
+	pt_create_coarse((addr_t *) flpt_va, TPCC_VIRT, TPCC_PHYS, TPCC_SIZE, MLT_IO_RO_REG);	/* TPCC, 4kB. */
+	pt_create_coarse((addr_t *) flpt_va, TPTC0_VIRT, TPTC0_PHYS, TPTC0_SIZE, MLT_IO_RO_REG);	/* TPTC0, 4kB. */
+	pt_create_coarse((addr_t *) flpt_va, TPTC1_VIRT, TPTC1_PHYS, TPTC1_SIZE, MLT_IO_RO_REG);	/* TPTC2, 4kB. */
+	pt_create_coarse((addr_t *) flpt_va, TPTC2_VIRT, TPTC2_PHYS, TPTC2_SIZE, MLT_IO_RO_REG);	/* TPTC3, 4kB. */
+	pt_create_coarse((addr_t *) flpt_va, MMCHS2_VIRT, MMCHS2_PHYS, MMCHS2_SIZE, MLT_IO_RW_REG);	/* MMCHS2, 4kB. */
 
 
 
 
 
-//	pt2_map(USBSS_VIRT			, USBSS_PHYS			, USBSS_SIZE, MLT_IO_RO_REG);	/* USBSS, 32kB. */
-	pt2_map(USBSS_VIRT			, USBSS_PHYS			, 0x2000, MLT_IO_RW_REG);	/* USBSS, 8kB. */
-//	pt2_map(USBSS_VIRT + 0x2000, USBSS_PHYS + 0x2000	, 0x1000, MLT_IO_RW_REG);	/* USB CPPI DMA CONTROLLER, 4kB. */
-//	pt2_map(USBSS_VIRT + 0x3000, USBSS_PHYS + 0x3000	, 0x1000, MLT_IO_RW_REG);	/* USB CPPI DMA Scheduler, 4kB. */
-//	pt2_map(USBSS_VIRT + 0x4000, USBSS_PHYS + 0x4000	, 0x4000, MLT_IO_RO_REG);	/* USB CPPI QUEUE MANAGER, 12kB. */
+	pt_create_coarse((addr_t *) flpt_va, USBSS_VIRT			, USBSS_PHYS			, USBSS_SIZE, MLT_IO_RW_REG);	/* USBSS, 32kB. */
+//	pt_create_coarse((addr_t *) flpt_va, USBSS_VIRT			, USBSS_PHYS			, USBSS_SIZE, MLT_IO_RO_REG);	/* USBSS, 32kB. */
+
+//	pt_create_coarse((addr_t *) flpt_va, USBSS_VIRT			, USBSS_PHYS			, 0x2000, MLT_IO_RW_REG);	/* USBSS, 8kB. */
+//	pt_create_coarse((addr_t *) flpt_va, USBSS_VIRT + 0x2000, USBSS_PHYS + 0x2000	, 0x1000, MLT_IO_RW_REG);	/* USB CPPI DMA CONTROLLER, 4kB. */
+//	pt_create_coarse((addr_t *) flpt_va, USBSS_VIRT + 0x3000, USBSS_PHYS + 0x3000	, 0x1000, MLT_IO_RW_REG);	/* USBSS, 4kB. */
+//	pt_create_coarse((addr_t *) flpt_va, USBSS_VIRT + 0x4000, USBSS_PHYS + 0x4000	, 0x3000, MLT_IO_RW_REG);	/* USB CPPI QUEUE MANAGER, 12kB. */
+//	pt_create_coarse((addr_t *) flpt_va, USBSS_VIRT + 0x7000, USBSS_PHYS + 0x7000	, 0x1000, MLT_IO_RW_REG);	/* USB CPPI QUEUE MANAGER STATUS, 1kB. */
 
 
 
 
-	pt2_map(L3OCMC0_VIRT, L3OCMC0_PHYS, L3OCMC0_SIZE, MLT_USER_RAM);	/* L3 OCMC0, 64kB. */
-	pt2_map(EMIF0_VIRT, EMIF0_PHYS, EMIF0_SIZE, MLT_IO_RW_REG);	/* EMIF0, 4kB. */
-	pt2_map(GPMC_VIRT, GPMC_PHYS, GPMC_SIZE, MLT_IO_RW_REG);	/* GPMC, 4kB. */
-	pt2_map(SHAM_VIRT, SHAM_PHYS, SHAM_SIZE, MLT_IO_RW_REG);	/* SHAM, 4kB. */
-	pt2_map(AES_VIRT, AES_PHYS, AES_SIZE, MLT_IO_RW_REG);	/* AES, 4kB. */
-	pt2_map(SGX530_VIRT, SGX530_PHYS, SGX530_SIZE, MLT_IO_RW_REG);	/* SGX530, 64kB. */
+	pt_create_coarse((addr_t *) flpt_va, L3OCMC0_VIRT, L3OCMC0_PHYS, L3OCMC0_SIZE, MLT_USER_RAM);	/* L3 OCMC0, 64kB. */
+	pt_create_coarse((addr_t *) flpt_va, EMIF0_VIRT, EMIF0_PHYS, EMIF0_SIZE, MLT_IO_RW_REG);	/* EMIF0, 4kB. */
+	pt_create_coarse((addr_t *) flpt_va, GPMC_VIRT, GPMC_PHYS, GPMC_SIZE, MLT_IO_RW_REG);	/* GPMC, 4kB. */
+	pt_create_coarse((addr_t *) flpt_va, SHAM_VIRT, SHAM_PHYS, SHAM_SIZE, MLT_IO_RW_REG);	/* SHAM, 4kB. */
+	pt_create_coarse((addr_t *) flpt_va, AES_VIRT, AES_PHYS, AES_SIZE, MLT_IO_RW_REG);	/* AES, 4kB. */
+	pt_create_coarse((addr_t *) flpt_va, SGX530_VIRT, SGX530_PHYS, SGX530_SIZE, MLT_IO_RW_REG);	/* SGX530, 64kB. */
 
 	/*Flush the addresses as we are going to use it soon */
 	mem_mmu_tlb_invalidate_all(TRUE, TRUE);

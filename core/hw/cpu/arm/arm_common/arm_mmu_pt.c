@@ -147,14 +147,21 @@ uint32_t pt_create_coarse(addr_t * pt, addr_t va, addr_t pa, uint32_t size, uint
 	case MLT_USER_ROM:
 		domain = HC_DOM_DEFAULT;
 		ap = MMU_AP_USER_RO;
+		break;
+	default:
+		printf("hypervisor/core/hw/cpu/arm/arm_common/pt_create_coarse: Unknown memory type.\n");
+//		while (1);
 	}
 	uint32_t *table2, table2_pa;
 
 	if (type_old == MMU_L1_TYPE_FAULT) {
 		/* allocate a new sub-page */
 		table2_pa = pt_get_empty_l2();
-		if (!table2_pa)
+		if (!table2_pa) {
+			printf("hypervisor/core/hw/cpu/arm/arm_common/pt_create_coarse: Cannot allocate new l2 page table.\n");
+//			while (1);
 			return 0;
+		}
 		table1[index] = ((uint32_t) (table2_pa) | (domain << MMU_L1_DOMAIN_SHIFT) | MMU_L1_TYPE_COARSE);
 	} else {
 		/* There is already a mapping to the first level descriptor */

@@ -49,11 +49,23 @@ BOOL virtual_address_mapped(uint32_t va, virtual_machine * curr_vm) {
 	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, guest_pt_pa);
 	uint32_t guest_pt_va = mmu_guest_pa_to_va(guest_pt_pa, curr_vm->config);
 	uint32_t index = VA_TO_L1_IDX(va);
-	if (*((uint32_t *)(guest_pt_va + index)) != 0x0) {
-		printf("Hypervisor virtual_address_mapped: Virtual address 0x%x is mapped: 0x%x\n", va, *((uint32_t *)(guest_pt_va + index)));
+	if (*((uint32_t *)(guest_pt_va + index*4)) != 0x0) {
+		printf("Hypervisor virtual_address_mapped: Virtual address 0x%x is mapped: 0x%x\n", va, *((uint32_t *)(guest_pt_va + index*4)));
+		uint32_t l1_entry = *((uint32_t *)(guest_pt_va + index*4));
+		uint32_t l2_idx = (va << 12) >> 24;
+		uint32_t l2d_va = (l1_entry & 0xFFFFFC00) - 0x81000000 + 0xC0000000;
+		uint32_t l2d = *((uint32_t *) l2d_va);
+
+		if (l2d != 0x0) {
+			printf("L2 descriptor at 0x%x mapped = 0x%x.\n", l2d_va, l2d);
+		} else {
+			printf("L2 descriptor unmapped.\n");
+			while (1);
+		}
+
 		return TRUE;
 	} else {
-		printf("Hypervisor virtual_address_mapped: Virtual address 0x%x is not mapped: 0x%x\n", va, *((uint32_t *)(guest_pt_va + index)));
+		printf("Hypervisor virtual_address_mapped: Virtual address 0x%x is not mapped by entry 0x%x at 0x%x with index 0x%x\n", va, *((uint32_t *)(guest_pt_va + index*4)), guest_pt_va + index*4, index);
 		return FALSE;
 	}
 }

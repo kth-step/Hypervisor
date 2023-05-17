@@ -15,7 +15,7 @@
 struct guest_binary {	//Initialized by arm_guest_blob.S by reading guest_data.S
 	addr_t pstart;		//Physical start address of guest = 0x8100_0000 for Linux.
 	addr_t vstart;		//Virtual start address of guest = 0xC000_0000 for Linux.
-	size_t psize;		//Physical memory size allocated to guest = 0x0800_0000 = 128MB for Linux.
+	size_t psize;		//Physical memory size allocated to guest = 0x0700_0000 = 112MB for Linux.
 	size_t fwsize;		//Byte size of guest image, few MBs for Linux.
 	size_t offset;		//0x0001_0000 = 64kB. Not used for Linux.
 };

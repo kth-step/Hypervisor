@@ -3,6 +3,7 @@
 #if defined(LINUX) && defined(CPSW)
 #include <soc_cpsw.h>
 #endif
+#include <tptc.h>
 #include "dmmu.h"
 
 extern virtual_machine *curr_vm;
@@ -10,10 +11,9 @@ extern virtual_machine *curr_vm;
 #define USE_DMMU
 
 // Disabling aggressive flushing
-#define AGGRESSIVE_FLUSHING_HANDLERS
+//#define AGGRESSIVE_FLUSHING_HANDLERS
 
-//Hypercall for writing buffer descriptors to NIC.
-#define HYPERCALL_CPSW_WRITE_BD 1045
+static uint8_t *kernel_buf;
 
 void clean_and_invalidate_cache()
 {
@@ -36,10 +36,10 @@ void swi_handler(uint32_t param0, uint32_t param1, uint32_t param2,
 	if (curr_vm->current_guest_mode == HC_GM_TASK) {
 		if (hypercall_number == 1020) {
 			//ALLOWED RPC OPERATION
-			hypercall_rpc(param0, (uint32_t *) param1);
+			hypercall_rpc(/*param0*/);
 			return;
 		} else if (hypercall_number == 1021) {
-			hypercall_end_rpc();
+			hypercall_end_rpc(0);
 			return;
 		}
 	}
@@ -186,6 +186,7 @@ while (1);
 			hypercall_dyn_set_pmd(param0, param1);
 //			printf("HYPERCALL_SET_PMD2 = %x %x!\n", param0, param1);
 			//clean_and_invalidate_cache();
+
 			return;
 
 		case HYPERCALL_UPDATE_PMD_SINGLE:
@@ -222,16 +223,25 @@ while (1);
 		}
 
     /****************************/
-		 /*RPC*/ case HYPERCALL_RPC:
-			hypercall_rpc(param0, (uint32_t *) param1);
+		 case HYPERCALL_RPC: {
+			hypercall_rpc();
 			return;
-		case HYPERCALL_END_RPC:
-			hypercall_end_rpc();
+		} case HYPERCALL_END_RPC: {
+			uint32_t result = curr_vm->current_mode_state->ctx.reg[0];
+			uint8_t *cctv_guest_buf = (uint8_t *) curr_vm->current_mode_state->ctx.reg[1];
+			uint32_t i;
+#define X	320
+#define Y	240
+#define BMP_HEADER_SIZE 66
+#define BUFFER_SIZE (2*X*Y + BMP_HEADER_SIZE)
+			for (i = 0; i < BUFFER_SIZE; i++)
+				kernel_buf[i] = cctv_guest_buf[i];
+
+			hypercall_end_rpc(result);
+//			printf("HYPERCALL_END_RPC: result = 0x%x cctv_guest_buf = 0x%x\n", result, cctv_guest_buf);
 			return;
-			//  /*VFP Test**********************/
-			//case HYPERCALL_VFP:
-			//  hypercall_vfp_op(param0, param1, param2);
-			//  return;
+		}
+
 		case HYPERCALL_LINUX_INIT_END:	//NOT USED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 			hypercall_linux_init_end();
 			return;
@@ -253,41 +263,11 @@ while (1);
 		case HYPERCALL_QUERY_BFT:
 			res = dmmu_query_bft(param0);
 			curr_vm->current_mode_state->ctx.reg[0] = res;
-			return;			
-
-		case HYPERCALL_CPSW_WRITE_BD: {
-			printf("HYPERVISOR PRINTF: p0 = 0x%x p1 = 0x%x p2 = 0x%x pc = 0x%x lr = 0x%x\n", param0, param1, param2, curr_vm->current_mode_state->ctx.pc, curr_vm->current_mode_state->ctx.lr);
-
-//			unsigned int *__atags_pointer = (unsigned int *)param0;
-//			printf("HYPERVISOR PRINTF: *__atags_pointer = %x\n", *__atags_pointer);
-//			unsigned int *__atags_pointer_va = (unsigned int *)(param0 + 0x3F000000);
-//			printf("HYPERVISOR PRINTF: *__atags_pointer_va = %x\n", *__atags_pointer_va);
-
-
-
-/*			unsigned int *atags_vaddr = (unsigned int *)param1;
-			unsigned int atags_word0 = *atags_vaddr;
-			unsigned int atags_word1 = *(atags_vaddr + 1);
-
-
-			printf("HYPERVISOR PRINTF: atags_word0 = %x, atags_word1 = %x\n", atags_word0, atags_word1);
-*/
-/*while (1);
-
-			uint32_t desc = (param0 >> 16) + 0xFA402000;
-			uint32_t len = param0 & 0x0000FFFF;
-			uint32_t buffer = param1;
-			uint32_t token = param2;
-
-			BOOL ret = soc_check_bd_write(desc, len, buffer, token);
-
-			if (!ret)
-				printf("HYPERVISOR_CPSW_WRITE_BD ERROR WRITE BD: desc = %x, len = %x, buffer = %x, token = %x\n", desc, len, buffer, token);
-*/
-//BOOL ret = 0;
-//			curr_vm->current_mode_state->ctx.reg[0] = ret;
 			return;
-			}
+
+		case 1045:
+			printf("HYPERVISOR PRINTF\n");
+			return;
 
 		case 1046: {		//Read CPU ID
 			unsigned int cpuid_reg = (unsigned int) param0;
@@ -466,7 +446,6 @@ while (1);
 				printf("Hypercall 6: Second initial boot virtual Linux section map end pa = %x\n", param2);
 				linux_boot_second_virtual_map(param0, param1, param2);
 			}
-
 			return;
 		}
 
@@ -556,7 +535,8 @@ while (1);
 				printf("New entry: 0x%x\n", new_l2e);
 				while (1);
 			}
-
+			printf("Hypervisor 1062 checks DMA re-mapping.\n");
+			while (1);
 			return;
 		}
 
@@ -697,6 +677,10 @@ while (1);
 			uint32_t vstart = curr_vm->config->firmware->vstart;
 			uint32_t pstart = curr_vm->config->firmware->pstart;
 			uint32_t psize = curr_vm->config->firmware->psize;
+			if (start_va >= end_va) {
+				printf("Hypervisor: Linux kernel is creating 1-1 mapping but start address (0x%x) greater than or equal to end address (0x%x).\n", start_va, end_va);
+				while (1);
+			}
 			if (start_va < vstart || start_va >= vstart + psize) {
 				printf("Hypervisor: Linux kernel is creating 1-1 mapping but invalid start address to map: 0x%x.\n", start_va);
 				while (1);
@@ -721,8 +705,8 @@ while (1);
 				printf("Hypervisor: Linux kernel is creating 1-1 mapping but the start address is not MB aligned: start_va = 0x%x\n", start_va);
 				while (1);
 			}
-			if (start_va + 0x00200000 != end_va) {
-				printf("Hypervisor: Linux kernel is creating 1-1 mapping but range is not two MB: start_va = 0x%x, start_pa =\n");
+			if (start_va + 0x00100000 != end_va && start_va + 0x00200000 != end_va) {
+				printf("Hypervisor: Linux kernel is creating 1-1 mapping but range is neither one or two MBs: start_va = 0x%x, end_va = 0x%x\n", start_va, end_va);
 				while (1);
 			}
 
@@ -735,14 +719,13 @@ while (1);
 				while (1);
 			}
 			uint32_t pfn = linux_prot_pte >> 12;
-			#define PAGE_SIZE (1 << 12)
 			uint32_t va = start_va;
 			do {
 				uint32_t lpte = (pfn << 12) | prot;
 				uint32_t hptei = get_pte_hw_i(lpte, 0);
 				uint32_t hptec = get_pte_hw_c(lpte, 0);
 				if (hptei != hptec) {
-					printf("Hypervisor: Linux kernel is creating 1-1 mapping but incorrect computation of hardware page table entry: inline assembly = 0x%x, c = 0x%x.\n", hptei, hptec);
+					printf("Hypervisor: Linux kernel is creating 1-1 mapping but incorrect computation of hardware page table entry: inline assembly = 0x%x, c implementation = 0x%x.\n", hptei, hptec);
 					while (1);
 				}
 				uint32_t hpte = hptei;
@@ -782,18 +765,20 @@ while (1);
 				while (1);
 			}
 
-			err = dmmu_l1_pt_map(start_va + 0x00100000, l2_pa2, page_attrs);
-			if (err == ERR_MMU_PT_NOT_UNMAPPED) {
-				err = dmmu_unmap_L1_pageTable_entry(start_va + 0x00100000);
+			if (start_va + 0x00200000 == end_va) {	//Map second MB.
+				err = dmmu_l1_pt_map(start_va + 0x00100000, l2_pa2, page_attrs);
+				if (err == ERR_MMU_PT_NOT_UNMAPPED) {
+					err = dmmu_unmap_L1_pageTable_entry(start_va + 0x00100000);
+					if (err) {
+						printf("Hypervisor: Linux kernel is creating 1-1 mapping but could not unmap L1 entry: l2_pa2 = 0x%x, err = %d\n", l2_pa2, err);
+						while (1);
+					}
+					err = dmmu_l1_pt_map(start_va + 0x00100000, l2_pa2, page_attrs);
+				}
 				if (err) {
-					printf("Hypervisor: Linux kernel is creating 1-1 mapping but could not unmap L1 entry: l2_pa2 = 0x%x, err = %d\n", l2_pa2, err);
+					printf("Hypervisor: Linux kernel is creating 1-1 mapping but could not set L1 entry: l2_pa2 = 0x%x, err = %d\n", l2_pa2, err);
 					while (1);
 				}
-				err = dmmu_l1_pt_map(start_va + 0x00100000, l2_pa2, page_attrs);
-			}
-			if (err) {
-				printf("Hypervisor: Linux kernel is creating 1-1 mapping but could not set L1 entry: l2_pa2 = 0x%x, err = %d\n", l2_pa2, err);
-				while (1);
 			}
 
 			dsb();
@@ -802,7 +787,6 @@ while (1);
 			mem_cache_invalidate(TRUE, TRUE, TRUE);	//instr, data, writeback
 
 //			printf("Hypervisor: Linux kernel is creating 1-1 mapping return!\n");
-
 			return;
 		}
 
@@ -813,31 +797,26 @@ while (1);
 			return;
 		}
 
-		case 1080: {
-			uint32_t l2e_va = param0;
-			uint32_t lpte = param1;
-			uint32_t hpte = param2;
-			printf("Testing PTE: l2e_va = 0x%x.\n", l2e_va);
-			printf("Testing PTE: lpte = 0x%x.\n", lpte);
-			printf("Testing PTE: hpte = 0x%x.\n", hpte);
+		case 1079: {	//Hypercall invoked from assembly code in linux for DMA.
+			hypercall_cache_op(CLEAN_ENDS_INVALIDATE, param0, param1);
 			return;
-//			while (1);
 		}
 
-//asm volatile ("mov R0, %0	\n\t"
-//			  "SWI 1097"
-//			  :: "r" (drv->name) : "memory", "r0");
-/*		case 1097: {
-			char *string_pointer = (char *) param0;
-			printf("HYPERVISOR ASCII:\n");
-			uint32_t i;
-			for (i = 0; string_pointer[i] != '0'; i++) {
-				printf("%c", string_pointer[i]);
+		case HYPERCALL_CCTV_PHOTO: {
+			uint32_t buf_pa = param0;
+			kernel_buf = (uint8_t *) mmu_guest_pa_to_va(buf_pa, curr_vm->config);
+//			printf("HYPERCALL_CCTV_PHOTO: argument = 0x%x\n", kernel_buf);
+
+			uint32_t pstart = curr_vm->config->firmware->pstart;
+			uint32_t psize = curr_vm->config->firmware->psize;
+
+			if (buf_pa < pstart || buf_pa > buf_pa + BUFFER_SIZE || buf_pa + BUFFER_SIZE >= pstart + psize) {
+				printf("HYPERCALL_RPC: Kernel buffer outside Linux memory: buf = 0x%x, param0 = 0x%x\n", buf_pa, param0);
+				while (1);
 			}
-			printf("\n");
+			hypercall_rpc();
 			return;
 		}
-*/
 
 		case 1099: {	//Invoked when Linux kernel makes a panic.
 			printf("LINUX PANIC!\n");
@@ -862,9 +841,8 @@ while (1);
 
 //addr = IFAR
 //status = IFSR
-//address of faulting instruction
-return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
-				    uint32_t unused)
+//unused = address of faulting instruction
+return_value prefetch_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 {
 #if 1
 	if (addr >= 0xc0000000) {
@@ -907,52 +885,14 @@ return_value prefetch_abort_handler(uint32_t addr, uint32_t status,
 	return RV_OK;
 }
 
+extern uint32_t *flpt_va; //For debugging trusted guest writing SPI.
+
 //addr = DFAR: contains VA of accessed word.
 //status = DFSR: contains information about fault.
 //unused: contains VA of faulting instruction.
 return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 {
 	uint32_t interrupted_mode = curr_vm->current_guest_mode;
-
-//	printf("Hypervisor data_abort_handler: DFAR = 0x%x, DFSR = 0x%x, VA of faulting instruction = 0x%x\n", addr, status, unused);
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/*
-	uint32_t l1_pa;
-	COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pa);
-	uint32_t l1_va = mmu_guest_pa_to_va(l1_pa, curr_vm->config);
-    uint32_t l1i = addr >> 20;
-	uint32_t l1e_va = l1_va + l1i*4;
-	uint32_t l1e = *((uint32_t *) l1e_va);
-	uint32_t linux_l1_va = l1_pa - curr_vm->config->firmware->pstart + curr_vm->config->firmware->vstart;
-	uint32_t linux_l1e_va = linux_l1_va + l1i*4;
-	uint32_t linux_l1e = *((uint32_t *) linux_l1e_va);
-	printf("Hypervisor data_abort_handler: "
-			"l1_pa = 0x%x, l1_va = 0x%x, linux_l1_va = 0x%x, l1e_va = 0x%x, linux_l1e_va = 0x%x, l1i = 0x%x, l1e = 0x%x, linux_l1e = 0x%x\n",
-			 l1_pa, l1_va, linux_l1_va, l1e_va, linux_l1e_va, l1i, l1e, linux_l1e);
-	uint32_t l2_pa = l1e & 0xFFFFFC00;
-	uint32_t l2_va = mmu_guest_pa_to_va(l2_pa, curr_vm->config);
-	uint32_t l2i = (0x000FF000 & addr) >> 12;
-	uint32_t l2e_va = l2_va + l2i*4;
-	uint32_t l2e = *((uint32_t *) l2e_va);
-	printf("Hypervisor data_abort_handler: l1e_va = 0x%x, l1e = 0x%x, l2_pa = 0x%x, l2i = 0x%x, l2e = 0x%x\n", l1e_va, l1e, l2_pa, l2i, l2e);
-*/
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-	BOOL emulated = FALSE;
-	if (interrupted_mode == HC_GM_KERNEL && addr < HAL_VIRT_START) {
-//		printf("Dabort: Tries to emulate access to 0x%x when executing instruction at 0x%x.\n", addr, unused);
-		emulated = emulate_write(addr, unused);
-	}
-
-	if (emulated) {
-//		printf("Dabort: Emulated access to 0x%x now made writable when executing instruction at 0x%x.\n", addr, unused);
-		return RV_OK;	//Do not propagate error to Linux, but let Linux reexecute the instruction and continue to execute as if the exception had not happen.
-//		while (1);
-	}// else
-//		printf("Dabort: Not emulated access to 0x%x when executing instruction at 0x%x.\n", addr, unused);
-////////
-//  printf("Hypervisor, data abort handler: VA of addressed word:%x Information about data abort:%x, VA of faulting instruction: %x\n", addr, status, unused);
-////////
 
 ////////
 #define CPSW_SS_VIRT 0xFA400000
@@ -1043,40 +983,305 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 	}
 #endif
 
+#define AM33XX_L4_WK_IO_OFFSET	0xb5000000
+#define CM_PHYS					0x44E10000
+#define CM_SIZE					0x2000
+#define CM_VIRT					(CM_PHYS + AM33XX_L4_WK_IO_OFFSET)
+#define CM_OFFSET(va)			(va - CM_VIRT)
+	//Trap and emulate writes to the control module, since they can only be written in privileged mode.
+	if (interrupted_mode == HC_GM_KERNEL && CM_VIRT <= addr && addr < CM_VIRT + CM_SIZE) {
+//		printf("CONTROL MODULE TRAP: Write to location at va = %x, pa = 0x%x, pc = 0x%x.\n", addr, addr - AM33XX_L4_WK_IO_OFFSET, curr_vm->current_mode_state->ctx.pc);
+		if (addr == CM_OFFSET(0x620))
+			printf("CONTROL MODULE TRAP: Write to USB_CTRL0\n");
+		else if (addr == CM_OFFSET(0x624))
+			printf("CONTROL MODULE TRAP: Write to USB_STS0\n");
+		else if (addr == CM_OFFSET(0x628))
+			printf("CONTROL MODULE TRAP: Write to USB_CTRL1\n");
+		else if (addr == CM_OFFSET(0x62C))
+			printf("CONTROL MODULE TRAP: Write to USB_STS1\n");
+		else if (addr == CM_OFFSET(0x648))
+			printf("CONTROL MODULE TRAP: Write to USB_WKUP_CTRL\n");
+		else if (addr == CM_OFFSET(0xA1C))
+			printf("CONTROL MODULE TRAP: Write to CONF_USB0_DRVVBUS\n");
+		else if (addr == CM_OFFSET(0xA34))
+			printf("CONTROL MODULE TRAP: Write to CONF_USB1_DRVVBUS\n");
 
+		uint32_t instruction_encoding = *((uint32_t *) curr_vm->current_mode_state->ctx.pc);
+		uint32_t *context, t, n, imm, rt, rn;
 
-	if (CPSW_SS_VIRT <= addr && addr < CPSW_SS_VIRT + CPSW_SS_SIZE) {
-		printf("Hypervisor CPSW\n");
-	} else if (PRU_ICSS_VIRT <= addr && addr < PRU_ICSS_VIRT + PRU_ICSS_SIZE) {
-		printf("Hypervisor PRU_ICSS\n");
-	} else if (TPCC_VIRT <= addr && addr < TPCC_VIRT + TPCC_SIZE) {
-		printf("Hypervisor TPCC\n");
-	} else if (TPTC0_VIRT <= addr && addr < TPTC0_VIRT + TPTC0_SIZE) {
-		printf("Hypervisor TPTC0\n");
-	} else if (TPTC1_VIRT <= addr && addr < TPTC1_VIRT + TPTC1_SIZE) {
-		printf("Hypervisor TPTC1\n");
-	} else if (TPTC2_VIRT <= addr && addr < TPTC2_VIRT + TPTC2_SIZE) {
-		printf("Hypervisor TPTC2\n");
-	} else if (MMCHS2_VIRT <= addr && addr < MMCHS2_VIRT + MMCHS2_SIZE) {
-		printf("Hypervisor MMCHS2\n");
-	} else if (USBSS_VIRT <= addr && addr < USBSS_VIRT + USBSS_SIZE) {
-		printf("Hypervisor USBSS\n");
-	} else if (L3OCMC0_VIRT <= addr && addr < L3OCMC0_VIRT + L3OCMC0_SIZE) {
-		printf("Hypervisor L3OCMC0\n");
-	} else if (EMIF0_VIRT <= addr && addr < EMIF0_VIRT + EMIF0_SIZE) {
-		printf("Hypervisor EMIF0\n");
-	} else if (GPMC_VIRT <= addr && addr < GPMC_VIRT + GPMC_SIZE) {
-		printf("Hypervisor GPMC\n");
-	} else if (SHAM_VIRT <= addr && addr < SHAM_VIRT + SHAM_SIZE) {
-		printf("Hypervisor SHAM\n");
-	} else if (AES_VIRT <= addr && addr < AES_VIRT + AES_SIZE) {
-		printf("Hypervisor AES\n");
-	} else if (SGX530_VIRT <= addr && addr < SGX530_VIRT + SGX530_SIZE) {
-		printf("Hypervisor SGX530\n");
+		//Checks the type of instruction that was executed and takes appropriate
+		//actions.
+		//STR  Rt, [Rn, #+imm32] = mem32[Regs[Rn] + imm32] := Regs[Rt]
+		if ((0xFFF00000 & instruction_encoding) == 0xE5800000) {
+			//Retrieves the source register indexes and the store address
+			//offset.
+			t = (0x0000F000 & instruction_encoding) >> 12;
+			n = (0x000F0000 & instruction_encoding) >> 16;
+			imm = 0x00000FFF & instruction_encoding;
+
+			//Retrieves the contents of the registers that are used when
+			//the instruction is to be re-executed. The address base register
+			//is set to its original value added with the address offset.
+			context = curr_vm->current_mode_state->ctx.reg;
+			rt = *(context + t);
+			rn = *(context + n) + imm;
+
+			//If the memory location to store a value to differs from what was
+			//reported by the MMU, then there is some bug.
+			if (rn != addr) {
+				printf("CONTROL MODULE TRAP: Base register Regs[R%d] = %x distinct from written location at %x\n", n, rn, addr);
+				while (1);
+			} else {	//Re-execute write.
+				*((volatile uint32_t *) rn) = rt;
+				//Increment program counter to point to instruction following the
+				//failing one.
+				curr_vm->current_mode_state->ctx.pc += 4;
+				return RV_OK;
+			}
+		} else {
+			printf("CONTROL MODULE TRAP ERROR: UNKNOWN INSTRUCTION (0x%x at 0x%x) WRITING CONTROL MODULE REGISTER: 0x%x\n", instruction_encoding, unused, addr);
+			while (1);
+		}
 	}
 
+#define L4_34XX_BASE		0x48000000
+#define OMAP2_L4_IO_OFFSET	0xB2000000
+#define L4_PER_VIRT			(L4_34XX_BASE + OMAP2_L4_IO_OFFSET)
+#define McSPI0_OFFSET		0x00030000
+#define McSPI0_PHYS			(L4_34XX_BASE + McSPI0_OFFSET)
+#define McSPI0_SIZE			PAGE_SIZE
+#define McSPI0_VIRT			(McSPI0_PHYS + OMAP2_L4_IO_OFFSET)
+#define McSPI0_MCSPI_REVISION	(McSPI0_VIRT + 0x000)
+#define McSPI0_MCSPI_SYSCONFIG	(McSPI0_VIRT + 0x110)
+#define McSPI0_MCSPI_SYSSTATUS	(McSPI0_VIRT + 0x114)
+#define I2C2_OFFSET			0x0019C000
+#define I2C2_PHYS			(L4_34XX_BASE + I2C2_OFFSET)
+#define I2C2_SIZE			PAGE_SIZE
+#define I2C2_VIRT			(I2C2_PHYS + OMAP2_L4_IO_OFFSET)
+	//First 2 MB of L4_PER are inaccessible.
+	if (interrupted_mode == HC_GM_KERNEL && L4_PER_VIRT <= addr && addr < L4_PER_VIRT + 2*SECTION_SIZE) {
+		if (McSPI0_VIRT <= addr && addr < McSPI0_VIRT + McSPI0_SIZE) {
+			uint32_t instruction_encoding = *((uint32_t *) curr_vm->current_mode_state->ctx.pc);
+			uint32_t *context, t, n, rt, rn;
+			if ((addr == McSPI0_MCSPI_REVISION || addr == McSPI0_MCSPI_SYSCONFIG || addr == McSPI0_MCSPI_SYSSTATUS) &&
+				((instruction_encoding & 0xFFF00FFF) == 0xE5900000)) {
+//printf("Hypervisor1: Linux accessed unallowed McSPI0 register at 0x%x with instruction at 0x%x\n", addr - McSPI0_VIRT + McSPI0_PHYS, unused);
+				t = (0x0000F000 & instruction_encoding) >> 12;
+				n = (0x000F0000 & instruction_encoding) >> 16;
+				context = curr_vm->current_mode_state->ctx.reg;
+				rn = *(context + n);							//Register with address.
+				*(context + t) = *((volatile uint32_t *) rn);	//Register with result.
+				curr_vm->current_mode_state->ctx.pc += 4;
+				return RV_OK;
+			} else if ((addr == McSPI0_MCSPI_REVISION || addr == McSPI0_MCSPI_SYSCONFIG || addr == McSPI0_MCSPI_SYSSTATUS) &&
+				((instruction_encoding & 0xFFF00FFF) == 0xE5800000)) {
+//printf("Hypervisor2: Linux accessed unallowed McSPI0 register at 0x%x with instruction at 0x%x\n", addr - McSPI0_VIRT + McSPI0_PHYS, unused);
+				t = (0x0000F000 & instruction_encoding) >> 12;
+				n = (0x000F0000 & instruction_encoding) >> 16;
+				context = curr_vm->current_mode_state->ctx.reg;
+				rt = *(context + t);							//Register with data.
+				rn = *(context + n);							//Register with address.
+				*((volatile uint32_t *) rn) = rt;
+				curr_vm->current_mode_state->ctx.pc += 4;
+				return RV_OK;
+			} else {
+				printf("Hypervisor3: Linux accessed unallowed McSPI0 register at 0x%x with instruction at 0x%x\n", addr - McSPI0_VIRT + McSPI0_PHYS, unused);
+				while (1);
+			}
+		} else if (I2C2_VIRT <= addr && addr < I2C2_VIRT + I2C2_SIZE) {
+#define I2C_REVNB_LO_OFFSET	0x0
+#define I2C_REVNB_LO_VIRT	(I2C2_VIRT + I2C_REVNB_LO_OFFSET)
+#define I2C_REVNB_HI_OFFSET	0x4
+#define I2C_REVNB_HI_VIRT	(I2C2_VIRT + I2C_REVNB_HI_OFFSET)
+#define I2C_SYSC_OFFSET		0x10
+#define I2C_SYSC_VIRT		(I2C2_VIRT + I2C_SYSC_OFFSET)
+#define I2C_IRQSTATUS_OFFSET	0x28
+#define I2C_IRQSTATUS_VIRT	(I2C2_VIRT + I2C_IRQSTATUS_OFFSET)
+#define I2C_IRQENABLE_SET_OFFSET	0x2C
+#define I2C_IRQENABLE_SET_VIRT		(I2C2_VIRT + I2C_IRQENABLE_SET_OFFSET)
+#define I2C_IRQENABLE_CLR_OFFSET	0x30
+#define I2C_IRQENABLE_CLR_VIRT		(I2C2_VIRT + I2C_IRQENABLE_CLR_OFFSET)
+#define I2C_WE_OFFSET		0x34
+#define I2C_WE_VIRT			(I2C2_VIRT + I2C_WE_OFFSET)
+#define I2C_CON_OFFSET		0xA4
+#define I2C_CON_VIRT		(I2C2_VIRT + I2C_CON_OFFSET)
+#define I2C_SYSS_OFFSET		0x90
+#define I2C_SYSS_VIRT		(I2C2_VIRT + I2C_SYSS_OFFSET)
+#define I2C_BUFSTAT_OFFSET	0xC0
+#define I2C_BUFSTAT_VIRT	(I2C2_VIRT + I2C_BUFSTAT_OFFSET)
+#define I2C_PSC_OFFSET		0xB0
+#define I2C_PSC_VIRT		(I2C2_VIRT + I2C_PSC_OFFSET)
+#define I2C_SCLL_OFFSET		0xB4
+#define I2C_SCLL_VIRT		(I2C2_VIRT + I2C_SCLL_OFFSET)
+#define I2C_SCLH_OFFSET		0xB8
+#define I2C_SCLH_VIRT		(I2C2_VIRT + I2C_SCLH_OFFSET)
+			uint32_t instruction_encoding = *((uint32_t *) curr_vm->current_mode_state->ctx.pc);
+			uint32_t *context, t, n, rt, rn;
+
+			if ((addr == I2C_REVNB_LO_VIRT || addr == I2C_REVNB_HI_VIRT || addr == I2C_SYSC_VIRT || addr == I2C_CON_VIRT ||
+				 addr == I2C_SYSS_VIRT || addr == I2C_BUFSTAT_VIRT || addr == I2C_IRQENABLE_SET_VIRT ||
+				 addr == I2C_IRQSTATUS_VIRT) &&
+				(0xFFF00FFF & instruction_encoding) == 0xE1D000B0) {
+				t = (0x0000F000 & instruction_encoding) >> 12;	//Destination register.
+				n = (0x000F0000 & instruction_encoding) >> 16;
+				context = curr_vm->current_mode_state->ctx.reg;
+				rn = *(context + n);				//Source register.
+				asm volatile("ldrh %0, [%1]" : "=r"(rt) : "r"(rn));
+				*(context + t) = rt;				//Destination register.
+				curr_vm->current_mode_state->ctx.pc += 4;
+				return RV_OK;
+			} else if ((addr == I2C_SYSC_VIRT || addr == I2C_CON_VIRT || addr == I2C_PSC_VIRT || addr == I2C_SCLL_VIRT ||
+						addr == I2C_SCLH_VIRT || addr == I2C_WE_VIRT || addr == I2C_IRQENABLE_SET_VIRT ||
+						addr == I2C_IRQENABLE_CLR_VIRT || addr == I2C_IRQSTATUS_VIRT) &&
+				(0xFFF00FFF & instruction_encoding) == 0xE1C000B0) {
+				t = (0x0000F000 & instruction_encoding) >> 12;	//Destination register.
+				n = (0x000F0000 & instruction_encoding) >> 16;
+				context = curr_vm->current_mode_state->ctx.reg;
+				rt = *(context + t);
+				rn = *(context + n);
+//				printf("Hypervisor4: Linux strh 0x%x at I2C_SYSC at 0x%x\n", rt, rn);
+//				while (1);
+				asm volatile("strh %0, [%1]" : : "r"(rt), "r"(rn));
+				curr_vm->current_mode_state->ctx.pc += 4;
+				return RV_OK;			
+			} else {
+				printf("Hypervisor4: Linux accessed unallowed I2C2 register at 0x%x with instruction at 0x%x (0x%x)\n", addr - I2C2_VIRT + I2C2_PHYS, unused, instruction_encoding);
+				while (1);
+			}
+		} else {
+			uint32_t instruction_encoding = *((uint32_t *) curr_vm->current_mode_state->ctx.pc);
+			uint32_t *context, t, n, imm, rt, rn;
+
+			if ((0xFFF00000 & instruction_encoding) == 0xE5800000) {
+				t = (0x0000F000 & instruction_encoding) >> 12;
+				n = (0x000F0000 & instruction_encoding) >> 16;
+				imm = 0x00000FFF & instruction_encoding;
+				context = curr_vm->current_mode_state->ctx.reg;
+				rt = *(context + t);
+				rn = *(context + n) + imm;
+				*((volatile uint32_t *) rn) = rt;
+				curr_vm->current_mode_state->ctx.pc += 4;
+				return RV_OK;
+			} else if ((0xFFF00000 & instruction_encoding) == 0xE5900000) {
+				t = (0x0000F000 & instruction_encoding) >> 12;	//Destination register.
+				n = (0x000F0000 & instruction_encoding) >> 16;
+				imm = 0x00000FFF & instruction_encoding;
+				context = curr_vm->current_mode_state->ctx.reg;
+				rn = *(context + n);				//Register with address.
+				rt = *((volatile uint32_t *) (((uint32_t) rn) + imm));	//Register to store load result.
+				*(context + t) = rt;				//Store result so that return handler loads register with correct value.
+				curr_vm->current_mode_state->ctx.pc += 4;
+				return RV_OK;
+			} else if ((0xFFF00FFF & instruction_encoding) == 0xE1D000B0) {
+				t = (0x0000F000 & instruction_encoding) >> 12;	//Destination register.
+				n = (0x000F0000 & instruction_encoding) >> 16;
+				context = curr_vm->current_mode_state->ctx.reg;
+				rn = *(context + n);				//Source register.
+				asm volatile("ldrh %0, [%1]" : "=r"(rt) : "r"(rn));
+				*(context + t) = rt;				//Destination register.
+				curr_vm->current_mode_state->ctx.pc += 4;
+				return RV_OK;
+			} else if ((0xFFF00FFF & instruction_encoding) == 0xE1C000B0) {
+				t = (0x0000F000 & instruction_encoding) >> 12;	//Destination register.
+				n = (0x000F0000 & instruction_encoding) >> 16;
+				context = curr_vm->current_mode_state->ctx.reg;
+				rt = *(context + t);
+				rn = *(context + n);
+				asm volatile("strh %0, [%1]" : : "r"(rt), "r"(rn));
+				curr_vm->current_mode_state->ctx.pc += 4;
+				return RV_OK;
+			} else {
+				printf("L4_PER TRAP: Unknown instruction 0x%x at 0x%x with status = 0x%x\n", instruction_encoding, unused, status);
+				while (1);
+			}
+		}
+	} else if (interrupted_mode == HC_GM_TRUSTED && McSPI0_VIRT <= addr && addr < McSPI0_VIRT + McSPI0_SIZE) {
+		uint32_t dacr;
+		COP_READ(COP_SYSTEM, COP_SYSTEM_DOMAIN, dacr);
+		uint32_t *table1 = flpt_va;
+		uint32_t index = MMU_L1_INDEX(McSPI0_VIRT);
+		uint32_t val = table1[index];
+//		printf("L4_PER TRAP: Trusted guest attempts to access SPI register at 0x%x with instruction at 0x%x with DACR = 0x%x, val = 0x%x, status = 0x%x\n", addr - McSPI0_VIRT + McSPI0_PHYS, unused, dacr, val, status);
+
+		//Trusted guest attempts to write camera.
+		uint32_t instruction_encoding = *((uint32_t *) curr_vm->current_mode_state->ctx.pc);
+		uint32_t *context, t, n, rt, rn;
+		if ((instruction_encoding & 0xFFF00FFF) == 0xE5800000) {//e58nt000 	str	rt, [rn]
+			t = (0x0000F000 & instruction_encoding) >> 12;
+			n = (0x000F0000 & instruction_encoding) >> 16;
+			context = curr_vm->current_mode_state->ctx.reg;
+			rt = *(context + t);							//Register with data.
+			rn = *(context + n);							//Register with address.
+			*((volatile uint32_t *) rn) = rt;
+			curr_vm->current_mode_state->ctx.pc += 4;
+			return RV_OK;
+		} else if ((instruction_encoding & 0xFFF00FFF) == 0xE5900000) {	//ldr rt, [rn]
+			t = (0x0000F000 & instruction_encoding) >> 12;
+			n = (0x000F0000 & instruction_encoding) >> 16;
+			context = curr_vm->current_mode_state->ctx.reg;
+			rn = *(context + n);							//Register with address.
+			*(context + t) = *((volatile uint32_t *) rn);	//Register with result.
+			curr_vm->current_mode_state->ctx.pc += 4;
+			return RV_OK;
+		} else {
+			printf("L4_PER TRAP: Trusted guest attempted to access unsupported SPI register access (0x%x) at 0x%x with instruction at 0x%x\n", instruction_encoding, addr - McSPI0_VIRT + McSPI0_PHYS, unused);
+			while (1);
+		}
+	} else if (interrupted_mode == HC_GM_TRUSTED && I2C2_VIRT <= addr && addr < I2C2_VIRT + I2C2_SIZE) {
+		//Trusted guest attempts to write (initialize due to I2C?) camera.
+		uint32_t instruction_encoding = *((uint32_t *) curr_vm->current_mode_state->ctx.pc);
+		uint32_t *context, t, n, rt, rn;
+
+		if ((instruction_encoding & 0xFFF00FFF) == 0xE5800000) {//e58nt000 	str	rt, [rn]
+			t = (0x0000F000 & instruction_encoding) >> 12;
+			n = (0x000F0000 & instruction_encoding) >> 16;
+			context = curr_vm->current_mode_state->ctx.reg;
+			rt = *(context + t);							//Register with data.
+			rn = *(context + n);							//Register with address.
+			*((volatile uint32_t *) rn) = rt;
+			curr_vm->current_mode_state->ctx.pc += 4;
+			return RV_OK;
+		} else if ((instruction_encoding & 0xFFF00FFF) == 0xE5900000) {	//ldr rt, [rn]
+			t = (0x0000F000 & instruction_encoding) >> 12;
+			n = (0x000F0000 & instruction_encoding) >> 16;
+			context = curr_vm->current_mode_state->ctx.reg;
+			rn = *(context + n);							//Register with address.
+			*(context + t) = *((volatile uint32_t *) rn);	//Register with result.
+			curr_vm->current_mode_state->ctx.pc += 4;
+			return RV_OK;
+		} else {
+			printf("L4_PER TRAP: Trusted guest attempted to access unsupported I2C register access (0x%x) at 0x%x with instruction at 0x%x\n", instruction_encoding, addr - I2C2_VIRT + I2C2_PHYS, unused);
+			while (1);
+		}
+	} else if (interrupted_mode == HC_GM_TRUSTED) {
+		printf("Hypervisor: Trusted guest caused unknown data abort when accessing register 0x%x with instruction at 0x%x\n", addr, unused);
+		while (1);
+	}
+
+	BOOL emulated = FALSE;
+	if (interrupted_mode == HC_GM_KERNEL && addr < HAL_VIRT_START) {
+//		printf("Dabort: Tries to emulate access to 0x%x when executing instruction at 0x%x.\n", addr, unused);
+		emulated = emulate_write(addr, unused);
+	}
+
+	if (emulated) {
+//		printf("Dabort: Emulated access to 0x%x now made writable when executing instruction at 0x%x.\n", addr, unused);
+		return RV_OK;	//Do not propagate error to Linux, but let Linux reexecute the instruction and continue to execute as if the exception had not happen.
+//		while (1);
+	}
+
+
+
+
+
+
+
+
+
+
+
 	if (addr >= 0xC0000000) {
-		printf("Dabort: 0x%x Status: 0x%x, u = 0x%x \n", addr, status, unused);
+		printf("DAFR: 0x%x DFSR: 0x%x, VA OF INST = 0x%x with code 0x%x\n", addr, status, unused, *((uint32_t *) (unused)));
 		printf("Accessing MB %d/0x%x\n", addr >> 20, addr >> 20);
 		uint32_t l1_pt_pa;
 		COP_READ(COP_SYSTEM, COP_SYSTEM_TRANSLATION_TABLE0, l1_pt_pa);
@@ -1164,15 +1369,9 @@ return_value data_abort_handler(uint32_t addr, uint32_t status, uint32_t unused)
 #ifndef LINUX_5_15_13
 return_value irq_handler(uint32_t irq, uint32_t r1, uint32_t r2)
 {
-//HÄR mars 21:
-//sök på CONFIG_SICS_HYPERVISOR
-//kolla drivers/irqchip/irq-omap-intc.c
-//kolla arch/arm/kernel/entry-armv.S
-
-
 //	printf("IRQ handler called %d, interrupt handler: 0x%x\n", irq, );
 	if (curr_vm->current_mode_state->ctx.psr & 0x80) {	/*Interrupts are off, return */
-		printf("AVBROTT: FREEZE!\n");
+		printf("Interrupt: FREEZE!\n");
 		for (;;) ;
 //              mask_interrupt(irq, 1); //Mask interrupt and mark pending
 		return RV_OK;
@@ -1198,8 +1397,7 @@ return_value irq_handler(uint32_t irq, uint32_t r1, uint32_t r2)
 		   curr_vm->mode_states[HC_GM_KERNEL].ctx.sp);
 #endif
 	curr_vm->interrupted_mode = interrupted_mode;
-//här är fel.
-//dacr måste vara på stacken också???
+
 	curr_vm->current_mode_state->ctx.reg[0] = irq;
 	curr_vm->current_mode_state->ctx.reg[1] = curr_vm->mode_states[HC_GM_KERNEL].ctx.sp;
 	curr_vm->mode_states[HC_GM_KERNEL].ctx.reg[5] = (uint32_t) curr_vm->mode_states[HC_GM_KERNEL].ctx.psr;	/*spsr in r5 for linux kernel vector */
@@ -1220,73 +1418,14 @@ return_value irq_handler(uint32_t irq, uint32_t r1, uint32_t r2)
 	return RV_OK;
 }
 #else
-#if 0
-return_value irq_handler_svc(void) {
-	uint32_t interrupted_mode = curr_vm->current_guest_mode;
-	//Set guest in kernel mode (should already be in kernel mode since this
-	//handler is invoked when that is the case.
-	change_guest_mode(HC_GM_KERNEL);
-
-	uint32_t *context = curr_vm->mode_states[interrupted_mode].ctx.reg;
-
-	//SVC_REGS_SIZE = 19. Makes room for everything except r0.
-	uint32_t *sp = (uint32_t *) (curr_vm->mode_states[HC_GM_KERNEL].ctx.sp - (19*4 + 0 - 4));
-	//After making room for r0, and SP[2] == 0, then SP[2] == 1 and not a
-	//multiple of 8. Therefore sp is subtracted by 4.
-	if (sp & 0x4 == 0)												//2.
-		sp = sp - 4;												//3.
-
-	//Stores r1-r12. sp starts at r1 and context at r0.
-	for (i = 1; i <= 12; i++)										//4.
-		*(sp + (i - 1)*4) = *(context + i*4);						//4.
-
-	uint32_t r3 = *context;											//5. r3 := r0 before exception.
-	uint32_t r4 = (uint32_t) curr_vm->mode_states[interrupted_mode].ctx.pc;	//5. r4 := lr = corrected and preferred return address.
-	uint32_t r5 = (uint32_t) curr_vm->mode_states[HC_GM_KERNEL].ctx.psr;	//5. r5 := SPSR = kernel CPSR before exception.
-	uint32_t *r7 = sp + 13*4 - 4;									//6.
-	uint32_t r6 = -1;												//7.
-	uint32_t r2 = sp + 19*4 + 0 - 4;								//8.
-	if ((sp + 4) & 0x4 == 0)										//2.
-		r2 = r2 + 4;												//9.
-
-	*(sp - 4) = r3;													//10.
-	sp = sp - 4;													//10.
-
-	r3 = (uint32_t) curr_vm->mode_states[HC_GM_KERNEL].ctx.lr;		//11.
-
-	*r7 = r2;														//12.
-	r7 = r7 + 4;													//12.
-	*r7 = r3;														//12.
-	r7 = r7 + 4;													//12.
-	*r7 = r4;														//12.
-	r7 = r7 + 4;													//12.
-	*r7 = r5;														//12.
-	r7 = r7 + 4;													//12.
-	*r7 = r6;														//12.
-	r7 = r7 + 4;													//12.
-
-	curr_vm->mode_states[HC_GM_KERNEL].ctx.sp = sp;					//10.
-
-
-//här är fel.
-//dacr måste vara på stacken också???
-	curr_vm->current_mode_state->ctx.reg[1] = curr_vm->mode_states[HC_GM_KERNEL].ctx.sp;
-	curr_vm->mode_states[HC_GM_KERNEL].ctx.reg[5] = (uint32_t) curr_vm->mode_states[HC_GM_KERNEL].ctx.psr;	/*spsr in r5 for linux kernel vector */
-
-	uint32_t *irq_handler = (uint32_t *) (curr_vm->exception_vector[V_IRQ]);
-	curr_vm->current_mode_state->ctx.pc = *irq_handler;
-	curr_vm->current_mode_state->ctx.psr |= IRQ_MASK;
-	curr_vm->current_mode_state->ctx.sp = curr_vm->mode_states[HC_GM_KERNEL].ctx.sp;
-
-	return RV_OK;
-}
-#endif
 return_value irq_handler(uint32_t irq, uint32_t r1, uint32_t r2)
 {
-//if (irq == 44 || irq == 45 || irq == 46 || irq == 72 || irq == 73 || irq == 74)
-//	printf("IRQ handler called %d, interrupt handler: 0x%x\n", irq);
+//if (irq == 17 || irq == 18 || irq == 19 || irq == 34 || irq == 78 || irq == 40 || irq == 41 || irq == 42 || irq == 43)
+//	printf("Hypervisor: IRQ handler called %d\n", irq);
+//if (irq == 17) printf("IRQ handler called %d\n", irq);
+
 	if (curr_vm->current_mode_state->ctx.psr & 0x80) {	/*Interrupts are off, return */
-		printf("AVBROTT: FREEZE!\n");
+		printf("INTERRUPT: FREEZE!\n");
 		for (;;) ;
 //              mask_interrupt(irq, 1); //Mask interrupt and mark pending
 		return RV_OK;

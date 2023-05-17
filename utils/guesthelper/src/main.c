@@ -66,6 +66,7 @@ void parse_guests(int cnt, char **data)
 		    !parse_hex(oadr, &guests[guest_cnt].offset))
 			exit(20);
 		guests[guest_cnt].filename = file;
+
 		guest_cnt++;
 
 		if (guest_cnt >= MAX_GUESTS) {
